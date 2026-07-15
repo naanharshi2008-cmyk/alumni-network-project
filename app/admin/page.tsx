@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { supabase } from '../../lib/supabaseClient';
 
 type AlumniRow = {
@@ -26,12 +27,34 @@ type AlumniRow = {
 };
 
 export default function AdminPage() {
+  const router = useRouter();
   const [pending, setPending] = useState<AlumniRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [checkingAuth, setCheckingAuth] = useState(true);
   const [actionError, setActionError] = useState('');
 
+  // Gate the whole page behind a logged-in Supabase session.
+  // If nobody is logged in, bounce straight to /login and never
+  // touch the pending-submissions data.
   useEffect(() => {
-    loadPending();
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) {
+        router.replace('/login');
+        return;
+      }
+      setCheckingAuth(false);
+      loadPending();
+    });
+
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!session) {
+        router.replace('/login');
+      }
+    });
+
+    return () => {
+      listener.subscription.unsubscribe();
+    };
   }, []);
 
   async function loadPending() {
@@ -77,141 +100,109 @@ export default function AdminPage() {
     }
   }
 
-  const gradient = 'linear-gradient(135deg, #34d399, #22d3ee, #a78bfa)';
+  async function handleLogout() {
+    await supabase.auth.signOut();
+    router.replace('/login');
+  }
 
-  const pageStyle: React.CSSProperties = {
-    minHeight: '100vh',
-    background: '#0b0b0f',
-    color: '#f4f4f5',
-    fontFamily: 'system-ui, -apple-system, sans-serif',
-  };
-
-  const wrapStyle: React.CSSProperties = {
-    maxWidth: '900px',
-    margin: '0 auto',
-    padding: '48px 20px',
-  };
-
-  const cardStyle: React.CSSProperties = {
-    background: '#15151b',
-    border: '1px solid #26262e',
-    borderRadius: '16px',
-    padding: '24px',
-    marginBottom: '18px',
-  };
-
-  const pillButton = (bg: string): React.CSSProperties => ({
-    background: bg,
-    color: 'white',
-    border: 'none',
-    padding: '10px 22px',
-    borderRadius: '999px',
-    cursor: 'pointer',
-    fontWeight: 600,
-    fontSize: '14px',
-  });
+  if (checkingAuth) {
+    return (
+      <div className="container">
+        <p className="subtitle">Checking login...</p>
+      </div>
+    );
+  }
 
   if (loading) {
     return (
-      <div style={pageStyle}>
-        <div style={wrapStyle}>
-          <p style={{ color: '#9ca3af' }}>Loading pending submissions...</p>
-        </div>
+      <div className="container">
+        <p className="subtitle">Loading pending submissions...</p>
       </div>
     );
   }
 
   return (
-    <div style={pageStyle}>
-      <div style={wrapStyle}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '4px' }}>
-          <div
-            style={{
-              width: '36px',
-              height: '36px',
-              borderRadius: '10px',
-              background: gradient,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '18px',
-            }}
-          >
-            🎓
-          </div>
-          <h1 style={{ margin: 0, fontSize: '28px' }}>Admin — Pending Approvals</h1>
+    <div className="container">
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 4 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span className="nav__logo">🎓</span>
+          <h1 style={{ margin: 0 }}>Admin — Pending Approvals</h1>
         </div>
-        <p style={{ color: '#9ca3af', marginTop: '4px', marginBottom: '28px' }}>
-          {pending.length} submission{pending.length !== 1 ? 's' : ''} waiting for review.
-        </p>
+        <button type="button" onClick={handleLogout} className="btn btn--neutral">
+          <span className="btn__inner">Log Out</span>
+        </button>
+      </div>
+      <p className="subtitle" style={{ marginBottom: 28 }}>
+        {pending.length} submission{pending.length !== 1 ? 's' : ''} waiting for review.
+      </p>
 
-        {actionError && (
-          <div style={{ background: '#3a1414', color: '#ff8080', padding: '14px', borderRadius: '12px', marginBottom: '16px' }}>
-            {actionError}
-          </div>
-        )}
+      {actionError && (
+        <div style={{
+          background: 'var(--danger-bg)',
+          border: '1px solid var(--danger-border)',
+          color: 'var(--danger-ink)',
+          padding: '14px 16px',
+          borderRadius: 'var(--r-sm)',
+          marginBottom: 18,
+        }}>
+          {actionError}
+        </div>
+      )}
 
-        {pending.length === 0 && (
-          <div style={{ ...cardStyle, textAlign: 'center', color: '#9ca3af' }}>
-            <p style={{ fontSize: '28px', margin: '0 0 8px' }}>🎉</p>
-            <p style={{ margin: 0 }}>No pending submissions right now.</p>
-          </div>
-        )}
+      {pending.length === 0 && (
+        <div className="card empty">
+          <span className="empty__emoji">🎉</span>
+          <p style={{ margin: 0 }}>No pending submissions right now.</p>
+        </div>
+      )}
 
+      <div className="stagger">
         {pending.map((person) => (
-          <div key={person.id} style={cardStyle}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div key={person.id} className="card" style={{ marginBottom: 18 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 14 }}>
               <div>
-                <h3 style={{ margin: '0 0 4px 0', fontSize: '18px' }}>{person.full_name}</h3>
-                <p style={{ margin: 0, color: '#9ca3af', fontSize: '14px' }}>
+                <h3 style={{ margin: '0 0 4px 0', fontSize: '1.1rem' }}>{person.full_name}</h3>
+                <p className="subtitle" style={{ margin: 0, fontSize: '0.86rem' }}>
                   Admission No: {person.admission_number} &nbsp;|&nbsp; Class of {person.class_of} &nbsp;|&nbsp; {person.stream}
                 </p>
               </div>
-              {person.photo_url ? (
-                <img
-                  src={person.photo_url}
-                  alt={person.full_name}
-                  style={{ width: '56px', height: '56px', borderRadius: '50%', objectFit: 'cover', border: '2px solid #26262e' }}
-                />
-              ) : (
-                <div
-                  style={{
-                    width: '56px',
-                    height: '56px',
-                    borderRadius: '50%',
-                    background: gradient,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: '20px',
-                    fontWeight: 700,
-                  }}
-                >
-                  {person.full_name?.charAt(0)}
-                </div>
-              )}
+              <div className="avatar">
+                {person.photo_url ? (
+                  <img src={person.photo_url} alt={person.full_name} />
+                ) : (
+                  person.full_name?.charAt(0)
+                )}
+              </div>
             </div>
 
-            <div style={{ marginTop: '14px', fontSize: '14px', lineHeight: '1.7', color: '#d4d4d8' }}>
-              <p style={{ margin: '4px 0' }}><strong style={{ color: '#f4f4f5' }}>Degree:</strong> {person.degree || '—'} &nbsp; <strong style={{ color: '#f4f4f5' }}>Branch:</strong> {person.branch || '—'} &nbsp; <strong style={{ color: '#f4f4f5' }}>Field:</strong> {person.field || '—'}</p>
-              <p style={{ margin: '4px 0' }}><strong style={{ color: '#f4f4f5' }}>Admission Route:</strong> {person.admission_route} {person.admission_rank ? `(Rank: ${person.admission_rank})` : ''}</p>
-              <p style={{ margin: '4px 0' }}><strong style={{ color: '#f4f4f5' }}>Current Status:</strong> {person.current_status} — {person.designation || '—'} at {person.currently_at || '—'}</p>
+            <div className="a-card__rows" style={{ marginTop: 14 }}>
+              <p className="a-row" style={{ margin: '4px 0' }}>
+                <strong>Degree:</strong>&nbsp;{person.degree || '—'} &nbsp; <strong>Branch:</strong>&nbsp;{person.branch || '—'} &nbsp; <strong>Field:</strong>&nbsp;{person.field || '—'}
+              </p>
+              <p className="a-row" style={{ margin: '4px 0' }}>
+                <strong>Admission Route:</strong>&nbsp;{person.admission_route} {person.admission_rank ? `(Rank: ${person.admission_rank})` : ''}
+              </p>
+              <p className="a-row" style={{ margin: '4px 0' }}>
+                <strong>Current Status:</strong>&nbsp;{person.current_status} — {person.designation || '—'} at {person.currently_at || '—'}
+              </p>
               {person.linkedin_url && (
-                <p style={{ margin: '4px 0' }}><strong style={{ color: '#f4f4f5' }}>LinkedIn:</strong> <a href={person.linkedin_url} target="_blank" rel="noopener noreferrer" style={{ color: '#22d3ee' }}>{person.linkedin_url}</a></p>
+                <p className="a-row" style={{ margin: '4px 0' }}>
+                  <strong>LinkedIn:</strong>&nbsp;<a href={person.linkedin_url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--gold)' }}>{person.linkedin_url}</a>
+                </p>
               )}
-              {person.message_1 && <p style={{ margin: '4px 0' }}><strong style={{ color: '#f4f4f5' }}>Msg 1:</strong> {person.message_1}</p>}
-              {person.message_2 && <p style={{ margin: '4px 0' }}><strong style={{ color: '#f4f4f5' }}>Msg 2:</strong> {person.message_2}</p>}
-              <p style={{ color: '#6b7280', fontSize: '12px', marginTop: '8px' }}>
+              {person.message_1 && <p className="a-row" style={{ margin: '4px 0' }}><strong>Msg 1:</strong>&nbsp;{person.message_1}</p>}
+              {person.message_2 && <p className="a-row" style={{ margin: '4px 0' }}><strong>Msg 2:</strong>&nbsp;{person.message_2}</p>}
+              <p style={{ color: 'var(--text-faint)', fontSize: '0.78rem', marginTop: 8 }}>
                 Private — Email: {person.personal_email || '—'} | Phone: {person.phone_number || '—'}
               </p>
             </div>
 
-            <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
-              <button type="button" onClick={() => handleApprove(person.id)} style={pillButton('#16a34a')}>
-                Approve
+            <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+              <button type="button" onClick={() => handleApprove(person.id)} className="btn btn--primary">
+                <span className="btn__inner">Approve</span>
               </button>
-              <button type="button" onClick={() => handleReject(person.id)} style={pillButton('#dc2626')}>
-                Reject
+              <button type="button" onClick={() => handleReject(person.id)} className="btn btn--neutral">
+                <span className="btn__inner">Reject</span>
               </button>
             </div>
           </div>
