@@ -54,6 +54,7 @@ const initialForm: FormState = {
   consent_given: false,
 };
 
+const CURRENT_YEAR = new Date().getFullYear();
 const STEPS = ['You', 'Studies', 'Now', 'Advice'];
 const STREAMS = ['Bio-Maths', 'CS-Maths', 'Commerce', 'Other'];
 const ROUTES = ['JEE Main', 'JEE Advanced', 'NEET', 'CUET', 'Board Marks', 'Sports Quota', 'Other'];
@@ -108,8 +109,8 @@ export default function RegisterPage() {
       if (form.full_name.trim().length < 2) return 'Full name looks too short.';
       if (!form.admission_number.trim()) return 'Admission number is required.';
       const yr = parseInt(form.class_of, 10);
-      if (!form.class_of || Number.isNaN(yr) || yr < 1960 || yr > 2025)
-        return 'Enter a valid graduating year, 2025 or earlier.';
+if (!form.class_of || Number.isNaN(yr) || yr < 1960 || yr > CURRENT_YEAR)
+  return `Enter a valid graduating year, ${CURRENT_YEAR} or earlier.`;
     }
     if (s === 1) {
       if (!form.college_name.trim()) return 'Tell us which college or university you attended.';
