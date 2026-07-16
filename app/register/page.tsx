@@ -313,7 +313,7 @@ function StepYou({ form, update }: StepProps) {
 
       <div className="two-col">
         <FloatingField label="Admission number" value={form.admission_number} onChange={(v) => update('admission_number', v)} />
-        <FloatingField label="Graduating year (Class of)" type="number" max={2025} value={form.class_of} onChange={(v) => update('class_of', v)} />
+        <FloatingField label="Graduating year (Class of)" type="number" max={CURRENT_YEAR} value={form.class_of} onChange={(v) => update('class_of', v)} />
       </div>
 
       <div className="field">
