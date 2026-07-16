@@ -339,8 +339,14 @@ textarea { min-height: 84px; resize: vertical; }
   color: var(--gold);
   transform: translateY(-15px) scale(0.76);
 }
-.f-field .hint { margin-left: 0; display: block; margin-top: 6px; }
-.f-field:has(.hint) input { padding-bottom: 28px; }
+.f-field .hint {
+  position: absolute;
+  top: 100%;
+  left: 15px;
+  margin-top: 4px;
+  display: block;
+}
+.f-field:has(.hint) { margin-bottom: 34px; }
 /* Once the label has floated up, the typed value sits where the hint used to
    render - keep the hint for the empty/placeholder state only, or its second
    line prints straight over the input text. */
