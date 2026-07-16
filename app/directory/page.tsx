@@ -13,13 +13,29 @@ import {
 } from '../../lib/types';
 
 const SELECT =
-  'full_name, class_of, stream, degree, branch, field, current_status, currently_at, designation, show_photo, photo_url, linkedin_url, colleges(name)';
+  'full_name, class_of, stream, degree, branch, field, current_status, currently_at, designation, show_photo, photo_url, linkedin_url, message_1, message_2, colleges(name)';
 
 export default function DirectoryPage() {
   const [rows, setRows] = useState<Alumnus[] | null>(null);
   const [error, setError] = useState('');
   const [query, setQuery] = useState('');
   const [active, setActive] = useState<CategoryKey | 'all'>('all');
+  const [expanded, setExpanded] = useState<{ a: Alumnus; accent: string; label: string; emoji: string } | null>(null);
+
+  // Lock page scroll while the profile modal is open, and let Escape close it.
+  useEffect(() => {
+    if (!expanded) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setExpanded(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [expanded]);
 
   useEffect(() => {
     if (!isSupabaseConfigured) {
@@ -140,16 +156,37 @@ export default function DirectoryPage() {
           {/* key remounts the grid on filter change so the entrance animation replays */}
           <div className="grid stagger" key={`${active}|${query}`}>
             {filtered.map(({ a, cat }, i) => (
-              <Card key={`${a.full_name}-${i}`} a={a} accent={cat.accent} label={cat.label} emoji={cat.emoji} />
+              <Card
+                key={`${a.full_name}-${i}`}
+                a={a}
+                accent={cat.accent}
+                label={cat.label}
+                emoji={cat.emoji}
+                onExpand={() => setExpanded({ a, accent: cat.accent, label: cat.label, emoji: cat.emoji })}
+              />
             ))}
           </div>
         </>
       )}
+
+      {expanded && <ProfileModal {...expanded} onClose={() => setExpanded(null)} />}
     </main>
   );
 }
 
-function Card({ a, accent, label, emoji }: { a: Alumnus; accent: string; label: string; emoji: string }) {
+function Card({
+  a,
+  accent,
+  label,
+  emoji,
+  onExpand,
+}: {
+  a: Alumnus;
+  accent: string;
+  label: string;
+  emoji: string;
+  onExpand: () => void;
+}) {
   const college = collegeNameOf(a);
   const dept = [a.degree, a.branch].filter(Boolean).join(' · ');
   const now = [a.currently_at, a.designation].filter(Boolean).join(' · ');
@@ -188,7 +225,98 @@ function Card({ a, accent, label, emoji }: { a: Alumnus; accent: string; label: 
           </a>
         )}
       </div>
+
+      <button type="button" className="btn btn--plain btn--plain-neutral" style={{ width: '100%', marginTop: 14 }} onClick={onExpand}>
+        View more
+      </button>
     </article>
+  );
+}
+
+function ProfileModal({
+  a,
+  accent,
+  label,
+  emoji,
+  onClose,
+}: {
+  a: Alumnus;
+  accent: string;
+  label: string;
+  emoji: string;
+  onClose: () => void;
+}) {
+  const college = collegeNameOf(a);
+  const dept = [a.degree, a.branch].filter(Boolean).join(' · ');
+  const now = [a.currently_at, a.designation].filter(Boolean).join(' · ');
+  const showImg = a.show_photo && a.photo_url;
+
+  return (
+    <div
+      className="a-modal-overlay"
+      onClick={(e) => {
+        // Only close when the backdrop itself is clicked, not the card inside it.
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="a-modal" style={{ '--cat': accent } as React.CSSProperties} role="dialog" aria-modal="true">
+        <button type="button" className="a-modal__close" onClick={onClose} aria-label="Close">
+          ✕
+        </button>
+
+        <div className="a-modal__head">
+          <div className="avatar a-modal__avatar">
+            {showImg ? <img src={a.photo_url!} alt={a.full_name} /> : initialsOf(a.full_name)}
+          </div>
+          <div>
+            <h3 className="a-modal__name">{a.full_name}</h3>
+            <div className="a-modal__year">
+              Class of {a.class_of ?? '–'}{a.stream ? ` · ${a.stream}` : ''}
+            </div>
+          </div>
+        </div>
+
+        <span className="badge" style={{ marginTop: 10, display: 'inline-flex' }}>
+          <span>{emoji}</span> {label}
+        </span>
+
+        <div className="a-modal__section">
+          <h4>Education</h4>
+          <div className="a-card__rows">
+            <Row icon="🏫" label="School">{SCHOOL_NAME}</Row>
+            {college && <Row icon="🏛️" label="College">{college}</Row>}
+            {dept && <Row icon="🎓" label="Studied">{dept}</Row>}
+          </div>
+        </div>
+
+        <div className="a-modal__section">
+          <h4>Right now</h4>
+          <div className="a-card__rows">
+            <Row icon="📌" label="Status">{a.current_status ?? 'Alumnus'}</Row>
+            {now && <Row icon="💼" label="At">{now}</Row>}
+            {a.linkedin_url && (
+              <div className="a-row">
+                <span className="a-row__icon" aria-hidden>🔗</span>
+                <span>
+                  <span className="a-row__label">LinkedIn: </span>
+                  <a className="a-link" href={a.linkedin_url} target="_blank" rel="noopener noreferrer">
+                    View profile ↗
+                  </a>
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {(a.message_1 || a.message_2) && (
+          <div className="a-modal__section">
+            <h4>Advice for juniors</h4>
+            {a.message_1 && <p className="a-modal__quote">{a.message_1}</p>}
+            {a.message_2 && <p className="a-modal__quote">{a.message_2}</p>}
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
