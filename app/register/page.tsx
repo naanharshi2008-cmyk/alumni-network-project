@@ -533,9 +533,9 @@ function FloatingField({
         step={step}
       />
       <label htmlFor={id}>
-        {label}
-        {hint && <span className="hint">{hint}</span>}
-      </label>
+  {label}
+</label>
+{hint && <span className="hint">{hint}</span>}
     </div>
   );
 }
