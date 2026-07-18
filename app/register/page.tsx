@@ -25,9 +25,11 @@ interface FormState {
   linkedin_url: string;
   college_name: string;
   degree: string;
+  degree_other: string;
   branch: string;
   field: string;
-  admission_mode: 'Entrance Exam' | 'Board Marks' | 'Direct / Other';
+  admission_mode: 'Entrance Exam' | 'Board Marks' | 'Other';
+  admission_mode_other: string;
   admission_route: string;
   admission_route_other: string;
   admission_rank: string;
@@ -62,9 +64,11 @@ const initialForm: FormState = {
   linkedin_url: '',
   college_name: '',
   degree: '',
+  degree_other: '',
   branch: '',
   field: 'Engineering',
   admission_mode: 'Entrance Exam',
+  admission_mode_other: '',
   admission_route: 'JEE Main',
   admission_route_other: '',
   admission_rank: '',
@@ -88,7 +92,7 @@ const ROUTES = [
   'COMEDK', 'KCET', 'MHT-CET', 'WBJEE', 'KEAM', 'CLAT', 'Other'
 ];
 const SCHOOL_BOARDS = ['State Board', 'CBSE', 'ICSE', 'Other'];
-const STATUSES = ['Studying UG', 'Studying PG', 'Working', 'Entrepreneur', 'Preparing', 'On Break', 'Other'];
+const STATUSES = ['Studying UG', 'Studying PG', 'Higher Studies', 'Working', 'Entrepreneur', 'Preparing', 'On Break', 'Other'];
 const DEGREES = ['BTech', 'BE', 'BSc', 'MBBS', 'BCom', 'BA', 'BArch', 'LLB', 'BBA', 'BCA'];
 const COUNTRY_CODES = ['+91', '+1', '+44', '+61', '+971', '+65', '+49', '+33', '+81', '+86'];
 const SCHOOLS = ['Veveaham Hr. Sec. School', 'Veveaham Prime Academy'];
@@ -286,12 +290,15 @@ export default function RegisterPage() {
       // Map values
       const finalStream = form.stream === 'Other' && form.stream_other.trim() ? form.stream_other.trim() : form.stream;
       const finalSchoolBoard = form.school_board === 'Other' && form.school_board_other.trim() ? form.school_board_other.trim() : form.school_board;
-      
+      const finalDegree = form.degree === 'Other' && form.degree_other.trim() ? form.degree_other.trim() : form.degree;
+
       let finalRoute = 'Direct';
       if (form.admission_mode === 'Entrance Exam') {
         finalRoute = form.admission_route === 'Other' && form.admission_route_other.trim() ? form.admission_route_other.trim() : form.admission_route;
       } else if (form.admission_mode === 'Board Marks') {
         finalRoute = 'Board Marks';
+      } else if (form.admission_mode === 'Other') {
+        finalRoute = form.admission_mode_other.trim() || 'Other';
       }
 
       const finalStatus = form.current_status === 'Other' && form.current_status_other.trim() ? form.current_status_other.trim() : form.current_status;
@@ -313,7 +320,7 @@ export default function RegisterPage() {
         phone_number: form.phone_number.trim() || null,
         linkedin_url: form.linkedin_url.trim() || null,
         college_id: collegeId,
-        degree: form.degree.trim() || null,
+        degree: finalDegree.trim() || null,
         branch: form.branch.trim() || null,
         field: form.field.trim() || null,
         admission_route: finalRoute,
@@ -321,7 +328,7 @@ export default function RegisterPage() {
         board_marks: form.admission_mode === 'Board Marks' ? (form.board_marks.trim() || null) : null,
         board_cutoff: form.admission_mode === 'Board Marks' ? (form.board_cutoff.trim() || null) : null,
         current_status: finalStatus,
-        expected_finish_year: (finalStatus.toLowerCase().includes('studying') || finalStatus.toLowerCase().includes('preparing')) && form.expected_finish_year.trim() ? parseInt(form.expected_finish_year, 10) : null,
+        expected_finish_year: (finalStatus.toLowerCase().includes('studying') || finalStatus.toLowerCase().includes('higher studies') || finalStatus.toLowerCase().includes('preparing')) && form.expected_finish_year.trim() ? parseInt(form.expected_finish_year, 10) : null,
         currently_at: form.currently_at.trim() || null,
         designation: form.designation.trim() || null,
         message_1: form.message_1.trim() || null,
@@ -413,7 +420,7 @@ function StepAccount({ form, update }: StepProps) {
       <p className="step-sub">You will use these details to edit your profile later.</p>
       
       <FloatingField label="Choose Username" value={form.username} onChange={(v) => update('username', v.toLowerCase().replace(/[^a-z0-9_-]/g, ''))} autoFocus />
-      <FloatingField label="Choose Password" type="password" value={form.password_val} onChange={(v) => update('password_val', v)} />
+      <FloatingField label="Choose Password" type="password" revealable value={form.password_val} onChange={(v) => update('password_val', v)} />
     </>
   );
 }
@@ -488,28 +495,43 @@ function StepStudies({ form, update, collegeOptions }: StepProps & { collegeOpti
       </datalist>
 
       <div className="field">
-        <label>Degree <span className="hint">pick one or type your own</span></label>
-        <Chips options={DEGREES} value={form.degree} onChange={(v) => update('degree', v)} wrapText />
-        <FloatingField label="Degree" value={form.degree} onChange={(v) => update('degree', v)} style={{ marginTop: 10 }} />
+        <label>Degree</label>
+        <OtherAwareSelect
+          label="Degree"
+          options={DEGREES}
+          value={form.degree}
+          onChange={(v) => update('degree', v)}
+          otherValue={form.degree_other}
+          onOtherChange={(v) => update('degree_other', v)}
+          otherPlaceholder="Please specify your degree"
+        />
       </div>
 
       <FloatingField label="Branch / Department" value={form.branch} onChange={(v) => update('branch', v)} />
 
       <div className="field">
         <label>How did you get in?</label>
-        <Chips 
-          options={['Entrance Exam', 'Board Marks', 'Direct / Other']} 
-          value={form.admission_mode} 
-          onChange={(v) => update('admission_mode', v as any)} 
+        <Chips
+          options={['Entrance Exam', 'Board Marks', 'Other']}
+          value={form.admission_mode}
+          onChange={(v) => update('admission_mode', v as any)}
         />
+        {form.admission_mode === 'Other' && (
+          <FloatingField
+            label="Please specify"
+            value={form.admission_mode_other}
+            onChange={(v) => update('admission_mode_other', v)}
+            style={{ marginTop: 10 }}
+          />
+        )}
       </div>
 
       {form.admission_mode === 'Entrance Exam' && (
         <>
           <div className="field" style={{ marginTop: 14 }}>
-            <label>Entrance Exam</label>
-            <OtherAwareChips
-              options={ROUTES.filter(r => r !== 'Board Marks' && r !== 'Sports Quota' && r !== 'Management Quota')}
+            <OtherAwareSelect
+              label="Entrance Exam"
+              options={ROUTES.filter((r) => r !== 'Other')}
               value={form.admission_route}
               onChange={(v) => update('admission_route', v)}
               otherValue={form.admission_route_other}
@@ -676,6 +698,7 @@ function FloatingField({
   min,
   max,
   step,
+  revealable,
 }: {
   label: string;
   hint?: string;
@@ -690,15 +713,18 @@ function FloatingField({
   min?: number;
   max?: number;
   step?: number;
+  revealable?: boolean;
 }) {
   const id = `f-${label.replace(/\s+/g, '-').toLowerCase()}`;
   const [focused, setFocused] = useState(false);
+  const [revealed, setRevealed] = useState(false);
   const active = focused || value.trim().length > 0;
+  const effectiveType = revealable && revealed ? 'text' : type;
   return (
     <div className={`f-field${active ? ' f-field--active' : ''}`} style={style}>
       <input
         id={id}
-        type={type}
+        type={effectiveType}
         list={list}
         value={value}
         onChange={(e) => onChange(e.target.value)}
@@ -711,10 +737,33 @@ function FloatingField({
         min={min}
         max={max}
         step={step}
+        style={revealable ? { paddingRight: 44 } : undefined}
       />
       <label htmlFor={id}>
         {label}
       </label>
+      {revealable && (
+        <button
+          type="button"
+          onClick={() => setRevealed((r) => !r)}
+          aria-label={revealed ? 'Hide password' : 'Show password'}
+          style={{
+            position: 'absolute',
+            right: 12,
+            top: '50%',
+            transform: 'translateY(-50%)',
+            background: 'none',
+            border: 0,
+            cursor: 'pointer',
+            fontSize: '1.1rem',
+            color: 'var(--text-faint)',
+            lineHeight: 1,
+            padding: 4,
+          }}
+        >
+          {revealed ? '🙈' : '👁️'}
+        </button>
+      )}
       {hint && <span className="hint">{hint}</span>}
     </div>
   );
@@ -792,6 +841,42 @@ function OtherAwareChips({
   return (
     <>
       <Chips options={options} value={value} onChange={onChange} />
+      {value === 'Other' && (
+        <FloatingField
+          label={otherPlaceholder}
+          value={otherValue}
+          onChange={onOtherChange}
+          style={{ marginTop: 10 }}
+        />
+      )}
+    </>
+  );
+}
+
+// Same "Other -> type your own" pattern as OtherAwareChips, but as a clean
+// dropdown instead of a wall of buttons - used where the option list is
+// long (Degree, Entrance Exam) and chips would look cluttered.
+function OtherAwareSelect({
+  label,
+  options,
+  value,
+  onChange,
+  otherValue,
+  onOtherChange,
+  otherPlaceholder = 'Please specify',
+}: {
+  label: string;
+  options: string[];
+  value: string;
+  onChange: (v: string) => void;
+  otherValue: string;
+  onOtherChange: (v: string) => void;
+  otherPlaceholder?: string;
+}) {
+  const selectOptions = options.includes('Other') ? options : [...options, 'Other'];
+  return (
+    <>
+      <FloatingSelect label={label} value={value} onChange={onChange} options={selectOptions} />
       {value === 'Other' && (
         <FloatingField
           label={otherPlaceholder}
