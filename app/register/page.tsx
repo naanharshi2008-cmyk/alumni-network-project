@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { supabase, isSupabaseConfigured } from '../../lib/supabaseClient';
 import { commonColleges } from '../../lib/commonColleges';
 import { commonOrganizations } from '../../lib/commonOrganizations';
@@ -88,7 +88,7 @@ const CURRENT_YEAR = new Date().getFullYear();
 // Fake internal domain used to build a Supabase Auth email from an alumnus's
 // username - keeps their login identity separate from their real (optional)
 // personal email. Must match the same constant used in app/login/page.tsx.
-const ALUMNI_LOGIN_DOMAIN = 'veveaham-alumni.local';
+const ALUMNI_LOGIN_DOMAIN = 'veveaham-alumni-network.com';
 const STEPS = ['Account', 'You', 'Studies', 'Now', 'Advice'];
 const STREAMS = ['Bio-Maths', 'CS-Maths', 'Commerce (Business & Finance)', 'Other'];
 const ROUTES = [
@@ -107,6 +107,11 @@ export default function RegisterPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [submitted, setSubmitted] = useState(false);
+  // A ref (not state) so a double-click can't slip through before React
+  // re-renders the disabled button. State updates are async and can lag
+  // by a frame; this lock is checked and set synchronously, so two rapid
+  // clicks can never both start a submission.
+  const submitLockRef = useRef(false);
 
   const [collegeOptions, setCollegeOptions] = useState<string[]>(commonColleges);
   const [orgOptions, setOrgOptions] = useState<string[]>(commonOrganizations);
@@ -201,25 +206,37 @@ export default function RegisterPage() {
   }
 
   async function submit() {
+    // Hard stop against double-submission - checked and set synchronously,
+    // before any async work or state updates happen.
+    if (submitLockRef.current) return;
+    submitLockRef.current = true;
+
     setError('');
     if (!isSupabaseConfigured) {
       setError('Supabase isn’t connected yet, add your keys to .env.local to enable submissions.');
+      submitLockRef.current = false;
       return;
     }
     if (!form.consent_given) {
       setError('Please tick the consent box so we can show your profile.');
+      submitLockRef.current = false;
       return;
     }
 
     setSubmitting(true);
     try {
       // 1. Check if username is already taken in the alumni database
-      const { data: userCheck } = await supabase
+      const { data: userCheck, error: userCheckErr } = await supabase
         .from('alumni')
         .select('username')
         .eq('username', form.username.trim())
         .maybeSingle();
-      
+
+      // A real query failure (e.g. a missing column) must not be treated
+      // the same as "no matching row" - surface it clearly instead of
+      // silently letting a broken check pass through.
+      if (userCheckErr) throw userCheckErr;
+
       if (userCheck) {
         throw new Error('This username is already taken. Please choose another one.');
       }
@@ -365,6 +382,9 @@ export default function RegisterPage() {
     } catch (err) {
       console.error(err);
       setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
+      // Only release the lock on failure, so the person can correct
+      // something and retry. On success there's nothing left to submit.
+      submitLockRef.current = false;
     } finally {
       setSubmitting(false);
     }

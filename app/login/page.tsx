@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '../../lib/supabaseClient';
 
 const ADMIN_LOGIN_DOMAIN = 'veveaham-admin.local';
-const ALUMNI_LOGIN_DOMAIN = 'veveaham-alumni.local';
+const ALUMNI_LOGIN_DOMAIN = 'veveaham-alumni-network.com';
 
 export default function LoginPage() {
   const router = useRouter();
