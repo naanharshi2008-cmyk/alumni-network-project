@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '../../lib/supabaseClient';
 
 const ADMIN_LOGIN_DOMAIN = 'veveaham-admin.local';
+const ALUMNI_LOGIN_DOMAIN = 'veveaham-alumni.local';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -19,40 +20,39 @@ export default function LoginPage() {
     setLoading(true);
 
     const input = identifier.trim();
-    let emailToAuth = '';
 
     try {
-      if (input.includes('@')) {
-        // It's already an email
-        emailToAuth = input;
-      } else {
-        // It's a username. Let's check if it's an alumnus username first.
-        const { data: alum, error: alumErr } = await supabase
-          .from('alumni')
-          .select('personal_email')
-          .eq('username', input)
-          .maybeSingle();
+      let user = null;
 
-        if (alum && alum.personal_email) {
-          emailToAuth = alum.personal_email;
+      if (input.includes('@')) {
+        // Someone typed a real email directly (rare, but supported).
+        const { data, error: signInError } = await supabase.auth.signInWithPassword({
+          email: input,
+          password,
+        });
+        if (signInError) throw new Error('Incorrect username, email, or password.');
+        user = data.user;
+      } else {
+        // Try as an alumni username first, then fall back to a staff username.
+        // Both use a fake internal email built from the username itself, so
+        // this never depends on whether a real personal email was provided.
+        const { data: alumData, error: alumErr } = await supabase.auth.signInWithPassword({
+          email: `${input}@${ALUMNI_LOGIN_DOMAIN}`,
+          password,
+        });
+
+        if (!alumErr && alumData.user) {
+          user = alumData.user;
         } else {
-          // If not an alumnus username, assume it might be a staff username
-          emailToAuth = `${input}@${ADMIN_LOGIN_DOMAIN}`;
+          const { data: staffData, error: staffErr } = await supabase.auth.signInWithPassword({
+            email: `${input}@${ADMIN_LOGIN_DOMAIN}`,
+            password,
+          });
+          if (staffErr) throw new Error('Incorrect username, email, or password.');
+          user = staffData.user;
         }
       }
 
-      // Log in via Supabase Auth
-      const { data: authData, error: signInError } = await supabase.auth.signInWithPassword({
-        email: emailToAuth,
-        password,
-      });
-
-      if (signInError) {
-        throw new Error('Incorrect username, email, or password.');
-      }
-
-      const user = authData.user;
-      
       if (user && user.email && user.email.endsWith(`@${ADMIN_LOGIN_DOMAIN}`)) {
         // Staff/Admin redirects to `/admin`
         router.push('/admin');

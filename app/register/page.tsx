@@ -85,6 +85,10 @@ const initialForm: FormState = {
 };
 
 const CURRENT_YEAR = new Date().getFullYear();
+// Fake internal domain used to build a Supabase Auth email from an alumnus's
+// username - keeps their login identity separate from their real (optional)
+// personal email. Must match the same constant used in app/login/page.tsx.
+const ALUMNI_LOGIN_DOMAIN = 'veveaham-alumni.local';
 const STEPS = ['Account', 'You', 'Studies', 'Now', 'Advice'];
 const STREAMS = ['Bio-Maths', 'CS-Maths', 'Commerce (Business & Finance)', 'Other'];
 const ROUTES = [
@@ -221,8 +225,14 @@ export default function RegisterPage() {
       }
 
       // 2. Sign up user via Supabase Auth
+      // We use a fake internal email built from the username rather than
+      // their real personal email - real email is optional on this form,
+      // and Supabase's free-tier mailer has a very low sending limit that
+      // real registrations would quickly hit. This keeps login identity
+      // fully decoupled from whatever email (if any) they typed in.
+      const authEmail = `${form.username.trim()}@${ALUMNI_LOGIN_DOMAIN}`;
       const { data: authData, error: authErr } = await supabase.auth.signUp({
-        email: form.personal_email.trim(),
+        email: authEmail,
         password: form.password_val,
         options: {
           data: {
