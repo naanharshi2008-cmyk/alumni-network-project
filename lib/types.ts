@@ -84,6 +84,9 @@ export interface Alumnus {
   linkedin_url: string | null;
   message_1: string | null;
   message_2: string | null;
+  admission_route: string | null;
+  admission_rank: string | null;
+  board_marks: string | null;
   modification_status: string | null;
   original_data: any | null;
   // Supabase returns the joined row as an object (or array); we normalise it.

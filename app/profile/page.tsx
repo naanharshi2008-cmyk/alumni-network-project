@@ -454,6 +454,9 @@ function FloatingField({
   list,
   autoFocus,
   style,
+  min,
+  max,
+  step,
 }: {
   label: string;
   hint?: string;
@@ -463,6 +466,9 @@ function FloatingField({
   list?: string;
   autoFocus?: boolean;
   style?: React.CSSProperties;
+  min?: number;
+  max?: number;
+  step?: number;
 }) {
   const id = `f-${label.replace(/\s+/g, '-').toLowerCase()}`;
   const [focused, setFocused] = useState(false);
@@ -479,6 +485,9 @@ function FloatingField({
         onBlur={() => setFocused(false)}
         placeholder=""
         autoFocus={autoFocus}
+        min={min}
+        max={max}
+        step={step}
       />
       <label htmlFor={id}>{label}</label>
       {hint && <span className="hint">{hint}</span>}
