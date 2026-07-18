@@ -321,6 +321,26 @@ textarea { min-height: 84px; resize: vertical; }
   box-shadow: none;
   background: #191621;
 }
+/* Same floating-label treatment for <select> fields (e.g. country code),
+   so a select sitting next to a FloatingField input in a two-col row
+   lines up at the same height instead of looking mismatched. */
+.f-field select {
+  background: var(--surface-2);
+  border: 0;
+  border-bottom: 2px solid var(--border-strong);
+  border-radius: var(--r-sm) var(--r-sm) 0 0;
+  display: block;
+  width: 100%;
+  padding: 20px 14px 10px;
+  font-size: 0.98rem;
+  color: var(--text);
+}
+.f-field--active select {
+  outline: 0;
+  border-bottom-color: var(--gold);
+  box-shadow: none;
+  background: #191621;
+}
 .f-field label {
   position: absolute;
   top: 17px;

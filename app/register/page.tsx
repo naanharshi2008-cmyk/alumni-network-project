@@ -13,7 +13,11 @@ interface FormState {
   photo_file: File | null;
   class_of: string;
   stream: string;
+  stream_other: string;
+  school_board: string;
+  school_board_other: string;
   personal_email: string;
+  phone_country_code: string;
   phone_number: string;
   linkedin_url: string;
   college_name: string;
@@ -21,8 +25,13 @@ interface FormState {
   branch: string;
   field: string;
   admission_route: string;
+  admission_route_other: string;
   admission_rank: string;
+  board_marks: string;
+  board_cutoff: string;
   current_status: string;
+  current_status_other: string;
+  expected_finish_year: string;
   currently_at: string;
   designation: string;
   message_1: string;
@@ -37,7 +46,11 @@ const initialForm: FormState = {
   photo_file: null,
   class_of: '',
   stream: 'Bio-Maths',
+  stream_other: '',
+  school_board: 'State Board',
+  school_board_other: '',
   personal_email: '',
+  phone_country_code: '+91',
   phone_number: '',
   linkedin_url: '',
   college_name: '',
@@ -45,8 +58,13 @@ const initialForm: FormState = {
   branch: '',
   field: 'Engineering',
   admission_route: 'JEE Main',
+  admission_route_other: '',
   admission_rank: '',
+  board_marks: '',
+  board_cutoff: '',
   current_status: 'Studying UG',
+  current_status_other: '',
+  expected_finish_year: '',
   currently_at: '',
   designation: '',
   message_1: '',
@@ -56,10 +74,16 @@ const initialForm: FormState = {
 
 const CURRENT_YEAR = new Date().getFullYear();
 const STEPS = ['You', 'Studies', 'Now', 'Advice'];
-const STREAMS = ['Bio-Maths', 'CS-Maths', 'Commerce', 'Other'];
-const ROUTES = ['JEE Main', 'JEE Advanced', 'NEET', 'CUET', 'Board Marks', 'Sports Quota', 'Other'];
-const STATUSES = ['Studying UG', 'Studying PG', 'Working', 'Entrepreneur', 'Preparing', 'Other'];
+const STREAMS = ['Bio-Maths', 'CS-Maths', 'Commerce (Business & Finance)', 'Other'];
+const ROUTES = [
+  'JEE Main', 'JEE Advanced', 'NEET', 'CUET', 'BITSAT', 'VITEEE', 'SRMJEEE',
+  'COMEDK', 'KCET', 'MHT-CET', 'WBJEE', 'KEAM', 'CLAT',
+  'Board Marks', 'Sports Quota', 'Management Quota', 'Other',
+];
+const SCHOOL_BOARDS = ['State Board', 'CBSE', 'ICSE', 'Other'];
+const STATUSES = ['Studying UG', 'Studying PG', 'Working', 'Entrepreneur', 'Preparing', 'On Break', 'Other'];
 const DEGREES = ['BTech', 'BE', 'BSc', 'MBBS', 'BCom', 'BA', 'BArch', 'LLB', 'BBA', 'BCA'];
+const COUNTRY_CODES = ['+91', '+1', '+44', '+61', '+971', '+65', '+49', '+33', '+81', '+86'];
 
 export default function RegisterPage() {
   const [form, setForm] = useState<FormState>(initialForm);
@@ -107,18 +131,15 @@ export default function RegisterPage() {
     if (s === 0) {
       if (!form.full_name.trim()) return 'Please tell us your full name.';
       if (form.full_name.trim().length < 2) return 'Full name looks too short.';
-      if (!form.admission_number.trim()) return 'Admission number is required.';
       const yr = parseInt(form.class_of, 10);
-if (!form.class_of || Number.isNaN(yr) || yr < 1960 || yr > CURRENT_YEAR)
-  return `Enter a valid graduating year, ${CURRENT_YEAR} or earlier.`;
+      if (!form.class_of || Number.isNaN(yr) || yr < 1960 || yr > CURRENT_YEAR)
+        return `Enter a valid graduating year, ${CURRENT_YEAR} or earlier.`;
     }
     if (s === 1) {
       if (!form.college_name.trim()) return 'Tell us which college or university you attended.';
       if (!form.degree.trim()) return 'Pick or type your degree.';
     }
     if (s === 2) {
-      if (!form.currently_at.trim()) return 'Tell us where you currently study or work.';
-      if (!form.designation.trim()) return 'Tell us your current role or designation.';
       if (form.linkedin_url.trim() && !URL_RE.test(form.linkedin_url.trim()))
         return 'Enter a valid LinkedIn URL, starting with https://';
       if (!form.personal_email.trim() || !EMAIL_RE.test(form.personal_email.trim()))
@@ -129,6 +150,10 @@ if (!form.class_of || Number.isNaN(yr) || yr < 1960 || yr > CURRENT_YEAR)
     if (s === 1 && form.admission_rank.trim()) {
       const rank = parseInt(form.admission_rank, 10);
       if (Number.isNaN(rank) || rank <= 0) return 'Admission rank must be a positive number.';
+    }
+    if (s === 1 && form.board_marks.trim()) {
+      const marks = parseFloat(form.board_marks);
+      if (Number.isNaN(marks) || marks < 0 || marks > 100) return 'Board marks must be between 0 and 100.';
     }
     return '';
   }
@@ -215,23 +240,37 @@ if (!form.class_of || Number.isNaN(yr) || yr < 1960 || yr > CURRENT_YEAR)
         }
       }
 
+      // If someone picked "Other" and typed their own answer, store that
+      // actual text instead of the literal word "Other" - this is also
+      // what makes it visible to staff in the admin review list, so they
+      // can spot a pattern and add it as a proper option later.
+      const finalStream = form.stream === 'Other' && form.stream_other.trim() ? form.stream_other.trim() : form.stream;
+      const finalSchoolBoard = form.school_board === 'Other' && form.school_board_other.trim() ? form.school_board_other.trim() : form.school_board;
+      const finalRoute = form.admission_route === 'Other' && form.admission_route_other.trim() ? form.admission_route_other.trim() : form.admission_route;
+      const finalStatus = form.current_status === 'Other' && form.current_status_other.trim() ? form.current_status_other.trim() : form.current_status;
+
       const { error: insErr } = await supabase.from('alumni').insert({
         full_name: form.full_name.trim(),
-        admission_number: form.admission_number.trim(),
+        admission_number: form.admission_number.trim() || null,
         show_photo: form.show_photo === 'yes',
         photo_url: photoUrl,
         class_of: parseInt(form.class_of, 10),
-        stream: form.stream,
+        stream: finalStream,
+        school_board: finalSchoolBoard,
         personal_email: form.personal_email.trim() || null,
+        phone_country_code: form.phone_number.trim() ? form.phone_country_code : null,
         phone_number: form.phone_number.trim() || null,
         linkedin_url: form.linkedin_url.trim() || null,
         college_id: collegeId,
         degree: form.degree.trim() || null,
         branch: form.branch.trim() || null,
         field: form.field.trim() || null,
-        admission_route: form.admission_route,
+        admission_route: finalRoute,
         admission_rank: form.admission_rank.trim() || null,
-        current_status: form.current_status,
+        board_marks: form.board_marks.trim() || null,
+        board_cutoff: form.board_cutoff.trim() || null,
+        current_status: finalStatus,
+        expected_finish_year: form.expected_finish_year.trim() ? parseInt(form.expected_finish_year, 10) : null,
         currently_at: form.currently_at.trim() || null,
         designation: form.designation.trim() || null,
         message_1: form.message_1.trim() || null,
@@ -240,6 +279,18 @@ if (!form.class_of || Number.isNaN(yr) || yr < 1960 || yr > CURRENT_YEAR)
         approval_status: 'pending',
       });
       if (insErr) throw insErr;
+
+      // Best-effort notification to staff - if this fails, the person's
+      // registration has already succeeded, so we don't want to throw here.
+      fetch('/api/notify-admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fullName: form.full_name.trim(),
+          classOf: form.class_of,
+          currentStatus: form.current_status,
+        }),
+      }).catch(() => {});
 
       setSubmitted(true);
     } catch (err) {
@@ -312,13 +363,32 @@ function StepYou({ form, update }: StepProps) {
       <FloatingField label="Full name" value={form.full_name} onChange={(v) => update('full_name', v)} autoFocus />
 
       <div className="two-col">
-        <FloatingField label="Admission number" value={form.admission_number} onChange={(v) => update('admission_number', v)} />
+        <FloatingField label="Admission number" hint="optional" value={form.admission_number} onChange={(v) => update('admission_number', v)} />
         <FloatingField label="Graduating year (Class of)" type="number" max={CURRENT_YEAR} value={form.class_of} onChange={(v) => update('class_of', v)} />
       </div>
 
       <div className="field">
         <label>Stream at school</label>
-        <Chips options={STREAMS} value={form.stream} onChange={(v) => update('stream', v)} />
+        <OtherAwareChips
+          options={STREAMS}
+          value={form.stream}
+          onChange={(v) => update('stream', v)}
+          otherValue={form.stream_other}
+          onOtherChange={(v) => update('stream_other', v)}
+          otherPlaceholder="Please specify your stream"
+        />
+      </div>
+
+      <div className="field">
+        <label>School board</label>
+        <OtherAwareChips
+          options={SCHOOL_BOARDS}
+          value={form.school_board}
+          onChange={(v) => update('school_board', v)}
+          otherValue={form.school_board_other}
+          onOtherChange={(v) => update('school_board_other', v)}
+          otherPlaceholder="Please specify your board"
+        />
       </div>
     </>
   );
@@ -364,23 +434,52 @@ function StepStudies({ form, update, collegeOptions }: StepProps & { collegeOpti
         <FloatingField label="Degree" value={form.degree} onChange={(v) => update('degree', v)} style={{ marginTop: 10 }} />
       </div>
 
-      <div className="two-col">
-        <FloatingField label="Branch / Department" value={form.branch} onChange={(v) => update('branch', v)} />
-        <FloatingField
-          label="Admission rank"
-          hint="optional"
-          type="number"
-          min={1}
-          step={1}
-          value={form.admission_rank}
-          onChange={(v) => update('admission_rank', v.replace(/[^\d]/g, ''))}
-        />
-      </div>
+      <FloatingField label="Branch / Department" value={form.branch} onChange={(v) => update('branch', v)} />
 
       <div className="field">
         <label>How did you get in?</label>
-        <Chips options={ROUTES} value={form.admission_route} onChange={(v) => update('admission_route', v)} />
+        <OtherAwareChips
+          options={ROUTES}
+          value={form.admission_route}
+          onChange={(v) => update('admission_route', v)}
+          otherValue={form.admission_route_other}
+          onOtherChange={(v) => update('admission_route_other', v)}
+          otherPlaceholder="Please specify how you got in"
+        />
       </div>
+
+      {form.admission_route === 'Board Marks' ? (
+        <div className="two-col">
+          <FloatingField
+            label="Board marks (%)"
+            hint="optional"
+            type="number"
+            min={0}
+            max={100}
+            step={0.01}
+            value={form.board_marks}
+            onChange={(v) => update('board_marks', v)}
+          />
+          <FloatingField
+            label="Cutoff"
+            hint="if applicable"
+            value={form.board_cutoff}
+            onChange={(v) => update('board_cutoff', v)}
+          />
+        </div>
+      ) : (
+        !['Sports Quota', 'Management Quota', 'Other'].includes(form.admission_route) && (
+          <FloatingField
+            label="Admission rank"
+            hint="optional"
+            type="number"
+            min={1}
+            step={1}
+            value={form.admission_rank}
+            onChange={(v) => update('admission_rank', v.replace(/[^\d]/g, ''))}
+          />
+        )
+      )}
     </>
   );
 }
@@ -393,23 +492,47 @@ function StepNow({ form, update, orgOptions }: StepProps & { orgOptions: string[
 
       <div className="field">
         <label>Current status</label>
-        <Chips options={STATUSES} value={form.current_status} onChange={(v) => update('current_status', v)} />
+        <select value={form.current_status} onChange={(e) => update('current_status', e.target.value)}>
+          {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+        </select>
+        {form.current_status === 'Other' && (
+          <FloatingField
+            label="Please specify"
+            value={form.current_status_other}
+            onChange={(v) => update('current_status_other', v)}
+            style={{ marginTop: 10 }}
+          />
+        )}
+        {(form.current_status === 'Studying UG' || form.current_status === 'Studying PG') && (
+          <FloatingField
+            label="Expected to finish in"
+            hint="year, optional"
+            type="number"
+            min={CURRENT_YEAR}
+            max={CURRENT_YEAR + 6}
+            value={form.expected_finish_year}
+            onChange={(v) => update('expected_finish_year', v)}
+            style={{ marginTop: 10 }}
+          />
+        )}
       </div>
 
       <div className="two-col">
         <div>
-          <FloatingField label="Currently at" hint="org / institute" value={form.currently_at} onChange={(v) => update('currently_at', v)} list="org-list" />
+          <FloatingField label="Currently at" hint="org / institute, optional" value={form.currently_at} onChange={(v) => update('currently_at', v)} list="org-list" />
           <datalist id="org-list">
             {orgOptions.map((o) => <option key={o} value={o} />)}
           </datalist>
         </div>
-        <FloatingField label="Role / Designation" value={form.designation} onChange={(v) => update('designation', v)} />
+        <FloatingField label="Role / Designation" hint="optional" value={form.designation} onChange={(v) => update('designation', v)} />
       </div>
 
       <FloatingField label="LinkedIn" hint="optional, shown publicly" type="url" value={form.linkedin_url} onChange={(v) => update('linkedin_url', v)} />
 
+      <FloatingField label="Email" hint="never shown publicly" type="email" value={form.personal_email} onChange={(v) => update('personal_email', v)} />
+
       <div className="two-col">
-        <FloatingField label="Email" hint="never shown publicly" type="email" value={form.personal_email} onChange={(v) => update('personal_email', v)} />
+        <FloatingSelect label="Country code" value={form.phone_country_code} onChange={(v) => update('phone_country_code', v)} options={COUNTRY_CODES} />
         <FloatingField
           label="Phone (10 digits)"
           hint="never shown publicly"
@@ -427,18 +550,8 @@ function StepNow({ form, update, orgOptions }: StepProps & { orgOptions: string[
 function StepAdvice({ form, update }: StepProps) {
   return (
     <>
-      <h2 className="step-title">Leave something behind ✨</h2>
-      <p className="step-sub">Optional, but juniors love this part.</p>
-
-      <div className="field">
-        <label>One thing I wish I knew in Class 11/12</label>
-        <textarea value={form.message_1} onChange={(e) => update('message_1', e.target.value)} placeholder="Your honest take…" />
-      </div>
-
-      <div className="field">
-        <label>One tip for someone in my stream</label>
-        <textarea value={form.message_2} onChange={(e) => update('message_2', e.target.value)} placeholder="Keep it short and real…" />
-      </div>
+      <h2 className="step-title">Almost there ✨</h2>
+      <p className="step-sub">A photo helps juniors recognize you, and your advice means a lot to them.</p>
 
       <div className="two-col">
         <div className="field">
@@ -462,6 +575,11 @@ function StepAdvice({ form, update }: StepProps) {
         </div>
       </div>
 
+      <div className="field">
+        <label>What&apos;s one thing you&apos;d want a junior in your stream to know?</label>
+        <textarea value={form.message_1} onChange={(e) => update('message_1', e.target.value)} placeholder="Keep it short, honest, and real…" />
+      </div>
+
       <div className="consent">
         <label className="cbox">
           <input type="checkbox" id="consent" checked={form.consent_given} onChange={(e) => update('consent_given', e.target.checked)} />
@@ -470,7 +588,8 @@ function StepAdvice({ form, update }: StepProps) {
         <label htmlFor="consent">
           I agree that my name and the details I chose to share can be displayed
           publicly on the Veveaham alumni site. My email and phone number will
-          never be shown publicly.
+          never be shown publicly, and any additional information I provide
+          later will never be shared publicly without my consent.
         </label>
       </div>
     </>
@@ -533,14 +652,39 @@ function FloatingField({
         step={step}
       />
       <label htmlFor={id}>
-  {label}
-</label>
-{hint && <span className="hint">{hint}</span>}
+        {label}
+      </label>
+      {hint && <span className="hint">{hint}</span>}
     </div>
   );
 }
 
-function Chips({
+// Same visual treatment as FloatingField, but for a <select>. A select
+// always has a real value selected (never truly "empty" the way a text
+// input can be) so the label stays permanently in its floated-up position.
+function FloatingSelect({
+  label,
+  value,
+  onChange,
+  options,
+  style,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: string[];
+  style?: React.CSSProperties;
+}) {
+  const id = `f-${label.replace(/\s+/g, '-').toLowerCase()}`;
+  return (
+    <div className="f-field f-field--active" style={style}>
+      <select id={id} value={value} onChange={(e) => onChange(e.target.value)}>
+        {options.map((o) => <option key={o} value={o}>{o}</option>)}
+      </select>
+      <label htmlFor={id}>{label}</label>
+    </div>
+  );
+}
   options,
   value,
   onChange,
@@ -567,6 +711,40 @@ function Chips({
         </button>
       ))}
     </div>
+  );
+}
+
+// Chips where picking "Other" reveals a text field to specify what that
+// actually is. Keeping the free-text visible right in the admin review
+// list is what lets staff notice a pattern and later add it as a proper
+// option in the code - no separate database flag needed for that.
+function OtherAwareChips({
+  options,
+  value,
+  onChange,
+  otherValue,
+  onOtherChange,
+  otherPlaceholder = 'Please specify',
+}: {
+  options: string[];
+  value: string;
+  onChange: (v: string) => void;
+  otherValue: string;
+  onOtherChange: (v: string) => void;
+  otherPlaceholder?: string;
+}) {
+  return (
+    <>
+      <Chips options={options} value={value} onChange={onChange} />
+      {value === 'Other' && (
+        <FloatingField
+          label={otherPlaceholder}
+          value={otherValue}
+          onChange={onOtherChange}
+          style={{ marginTop: 10 }}
+        />
+      )}
+    </>
   );
 }
 
