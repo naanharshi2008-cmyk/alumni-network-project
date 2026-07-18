@@ -4,20 +4,11 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../lib/supabaseClient';
 
-// Teachers log in with a plain username + shared password - no email signup,
-// no per-teacher accounts. Under the hood Supabase Auth still needs an
-// email-shaped identifier, so we silently attach a fixed fake domain to
-// whatever username is typed. Teachers never see or type an "email".
 const ADMIN_LOGIN_DOMAIN = 'veveaham-admin.local';
-
-function usernameToEmail(username: string) {
-  const trimmed = username.trim();
-  return trimmed.includes('@') ? trimmed : `${trimmed}@${ADMIN_LOGIN_DOMAIN}`;
-}
 
 export default function LoginPage() {
   const router = useRouter();
-  const [username, setUsername] = useState('');
+  const [identifier, setIdentifier] = useState(''); // Username or Email
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -27,19 +18,53 @@ export default function LoginPage() {
     setError('');
     setLoading(true);
 
-    const { error: signInError } = await supabase.auth.signInWithPassword({
-      email: usernameToEmail(username),
-      password,
-    });
+    const input = identifier.trim();
+    let emailToAuth = '';
 
-    setLoading(false);
+    try {
+      if (input.includes('@')) {
+        // It's already an email
+        emailToAuth = input;
+      } else {
+        // It's a username. Let's check if it's an alumnus username first.
+        const { data: alum, error: alumErr } = await supabase
+          .from('alumni')
+          .select('personal_email')
+          .eq('username', input)
+          .maybeSingle();
 
-    if (signInError) {
-      setError('Incorrect username or password.');
-      return;
+        if (alum && alum.personal_email) {
+          emailToAuth = alum.personal_email;
+        } else {
+          // If not an alumnus username, assume it might be a staff username
+          emailToAuth = `${input}@${ADMIN_LOGIN_DOMAIN}`;
+        }
+      }
+
+      // Log in via Supabase Auth
+      const { data: authData, error: signInError } = await supabase.auth.signInWithPassword({
+        email: emailToAuth,
+        password,
+      });
+
+      if (signInError) {
+        throw new Error('Incorrect username, email, or password.');
+      }
+
+      const user = authData.user;
+      
+      if (user && user.email && user.email.endsWith(`@${ADMIN_LOGIN_DOMAIN}`)) {
+        // Staff/Admin redirects to `/admin`
+        router.push('/admin');
+      } else {
+        // Alumni redirects to `/profile`
+        router.push('/profile');
+      }
+    } catch (err) {
+      console.error(err);
+      setError(err instanceof Error ? err.message : 'Incorrect login details.');
+      setLoading(false);
     }
-
-    router.push('/admin');
   }
 
   return (
@@ -47,10 +72,10 @@ export default function LoginPage() {
       <div className="card fade-up" style={{ width: '100%', maxWidth: 380 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 11, marginBottom: 6 }}>
           <span className="nav__logo">🎓</span>
-          <h1 style={{ fontSize: '1.4rem', margin: 0 }}>Staff Login</h1>
+          <h1 style={{ fontSize: '1.4rem', margin: 0 }}>Alumni & Staff Login</h1>
         </div>
         <p className="subtitle" style={{ marginBottom: 24 }}>
-          Sign in to review pending alumni submissions.
+          Sign in to manage your profile or review submissions.
         </p>
 
         {error && (
@@ -69,13 +94,13 @@ export default function LoginPage() {
 
         <form onSubmit={handleLogin}>
           <div className="field">
-            <label htmlFor="username">Username</label>
+            <label htmlFor="identifier">Username or Email</label>
             <input
-              id="username"
+              id="identifier"
               type="text"
-              autoComplete="username"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
+              value={identifier}
+              onChange={(e) => setIdentifier(e.target.value)}
+              placeholder="e.g. johndoe or email@domain.com"
               required
             />
           </div>
@@ -96,6 +121,10 @@ export default function LoginPage() {
             <span className="btn__inner">{loading ? <span className="spinner" /> : 'Sign In'}</span>
           </button>
         </form>
+        
+        <div style={{ textAlign: 'center', marginTop: 18, fontSize: '0.88rem', color: 'var(--text-muted)' }}>
+          Don't have an account? <a href="/register" style={{ color: 'var(--gold)', fontWeight: 600 }}>Register here →</a>
+        </div>
       </div>
     </div>
   );

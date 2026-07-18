@@ -28,7 +28,7 @@ export const CATEGORIES: Category[] = [
   { key: 'medicine',     label: 'Medicine',      emoji: '🩺', accent: '#e11d48', aliases: ['medicine', 'medical', 'mbbs', 'allied health science', 'nursing', 'dental', 'pharmacy'] },
   { key: 'sciences',     label: 'Sciences',      emoji: '🔬', accent: '#7c3aed', aliases: ['science', 'sciences', 'research', 'agriculture', 'bsc'] },
   { key: 'humanities',   label: 'Humanities & Arts', emoji: '🎭', accent: '#d97706', aliases: ['arts', 'humanities', 'design', 'media', 'literature'] },
-  { key: 'commerce',     label: 'Commerce',      emoji: '💼', accent: '#059669', aliases: ['commerce', 'business', 'finance', 'management', 'ca', 'economics'] },
+  { key: 'commerce',     label: 'Business & Finance', emoji: '💼', accent: '#059669', aliases: ['commerce', 'business', 'finance', 'management', 'ca', 'economics'] },
   { key: 'law',          label: 'Law',           emoji: '⚖️', accent: '#475569', aliases: ['law', 'legal'] },
   { key: 'architecture', label: 'Architecture',  emoji: '📐', accent: '#0d9488', aliases: ['architecture', 'planning'] },
   { key: 'other',        label: 'Other',         emoji: '✨', accent: '#64748b', aliases: ['other', ''] },
@@ -53,9 +53,24 @@ export function categorize(field: string | null | undefined): Category {
 // The one school this alumni network belongs to.
 export const SCHOOL_NAME = 'Veveaham Hr. Sec. School';
 
+export interface CollegeDetails {
+  name: string | null;
+  state: string | null;
+  district: string | null;
+  website: string | null;
+  university_name: string | null;
+  management_type: string | null;
+  established_year: number | null;
+  is_engineering: boolean | null;
+}
+
 /** Public-facing alumnus record. Never includes email / phone. */
 export interface Alumnus {
+  id?: string;
   full_name: string;
+  username: string | null;
+  user_id: string | null;
+  school_name: string | null;
   class_of: number | null;
   stream: string | null;
   degree: string | null;
@@ -69,8 +84,10 @@ export interface Alumnus {
   linkedin_url: string | null;
   message_1: string | null;
   message_2: string | null;
+  modification_status: string | null;
+  original_data: any | null;
   // Supabase returns the joined row as an object (or array); we normalise it.
-  colleges: { name: string | null } | { name: string | null }[] | null;
+  colleges: CollegeDetails | CollegeDetails[] | null;
 }
 
 /** Pull the college name out of whatever shape the join returns. */
@@ -78,6 +95,13 @@ export function collegeNameOf(a: Alumnus): string | null {
   const c = a.colleges;
   if (!c) return null;
   return Array.isArray(c) ? c[0]?.name ?? null : c.name;
+}
+
+/** Pull the full college details out of whatever shape the join returns. */
+export function collegeDetailsOf(a: Alumnus): CollegeDetails | null {
+  const c = a.colleges;
+  if (!c) return null;
+  return Array.isArray(c) ? c[0] ?? null : c;
 }
 
 /** Initials for the avatar fallback. */

@@ -8,7 +8,10 @@ import { CATEGORIES } from '../../lib/types';
 
 interface FormState {
   full_name: string;
+  username: string;
+  password_val: string;
   admission_number: string;
+  school_name: string;
   show_photo: 'yes' | 'no';
   photo_file: File | null;
   class_of: string;
@@ -24,6 +27,7 @@ interface FormState {
   degree: string;
   branch: string;
   field: string;
+  admission_mode: 'Entrance Exam' | 'Board Marks' | 'Direct / Other';
   admission_route: string;
   admission_route_other: string;
   admission_rank: string;
@@ -41,7 +45,10 @@ interface FormState {
 
 const initialForm: FormState = {
   full_name: '',
+  username: '',
+  password_val: '',
   admission_number: '',
+  school_name: 'Veveaham Hr. Sec. School',
   show_photo: 'no',
   photo_file: null,
   class_of: '',
@@ -57,6 +64,7 @@ const initialForm: FormState = {
   degree: '',
   branch: '',
   field: 'Engineering',
+  admission_mode: 'Entrance Exam',
   admission_route: 'JEE Main',
   admission_route_other: '',
   admission_rank: '',
@@ -73,17 +81,17 @@ const initialForm: FormState = {
 };
 
 const CURRENT_YEAR = new Date().getFullYear();
-const STEPS = ['You', 'Studies', 'Now', 'Advice'];
+const STEPS = ['Account', 'You', 'Studies', 'Now', 'Advice'];
 const STREAMS = ['Bio-Maths', 'CS-Maths', 'Commerce (Business & Finance)', 'Other'];
 const ROUTES = [
   'JEE Main', 'JEE Advanced', 'NEET', 'CUET', 'BITSAT', 'VITEEE', 'SRMJEEE',
-  'COMEDK', 'KCET', 'MHT-CET', 'WBJEE', 'KEAM', 'CLAT',
-  'Board Marks', 'Sports Quota', 'Management Quota', 'Other',
+  'COMEDK', 'KCET', 'MHT-CET', 'WBJEE', 'KEAM', 'CLAT', 'Other'
 ];
 const SCHOOL_BOARDS = ['State Board', 'CBSE', 'ICSE', 'Other'];
 const STATUSES = ['Studying UG', 'Studying PG', 'Working', 'Entrepreneur', 'Preparing', 'On Break', 'Other'];
 const DEGREES = ['BTech', 'BE', 'BSc', 'MBBS', 'BCom', 'BA', 'BArch', 'LLB', 'BBA', 'BCA'];
 const COUNTRY_CODES = ['+91', '+1', '+44', '+61', '+971', '+65', '+49', '+33', '+81', '+86'];
+const SCHOOLS = ['Veveaham Hr. Sec. School', 'Veveaham Prime Academy'];
 
 export default function RegisterPage() {
   const [form, setForm] = useState<FormState>(initialForm);
@@ -105,9 +113,6 @@ export default function RegisterPage() {
       }
     })();
     (async () => {
-      // Only pull organisation names from already-approved profiles - pending/
-      // unreviewed submissions shouldn't leak into another applicant's
-      // autocomplete suggestions.
       const { data } = await supabase
         .from('alumni')
         .select('currently_at')
@@ -124,36 +129,41 @@ export default function RegisterPage() {
   }
 
   const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  const PHONE_RE = /^[6-9]\d{9}$/;
   const URL_RE = /^https?:\/\/.+/i;
 
   function validateStep(s: number): string {
     if (s === 0) {
+      if (!form.username.trim()) return 'Please choose a username.';
+      if (form.username.trim().length < 3) return 'Username must be at least 3 characters.';
+      if (!form.password_val || form.password_val.length < 6) return 'Password must be at least 6 characters.';
+    }
+    if (s === 1) {
       if (!form.full_name.trim()) return 'Please tell us your full name.';
       if (form.full_name.trim().length < 2) return 'Full name looks too short.';
       const yr = parseInt(form.class_of, 10);
       if (!form.class_of || Number.isNaN(yr) || yr < 1960 || yr > CURRENT_YEAR)
         return `Enter a valid graduating year, ${CURRENT_YEAR} or earlier.`;
     }
-    if (s === 1) {
+    if (s === 2) {
       if (!form.college_name.trim()) return 'Tell us which college or university you attended.';
       if (!form.degree.trim()) return 'Pick or type your degree.';
+      
+      if (form.admission_mode === 'Entrance Exam' && form.admission_rank.trim()) {
+        const rank = parseInt(form.admission_rank, 10);
+        if (Number.isNaN(rank) || rank <= 0) return 'Admission rank must be a positive number.';
+      }
+      if (form.admission_mode === 'Board Marks' && form.board_marks.trim()) {
+        const marks = parseFloat(form.board_marks);
+        if (Number.isNaN(marks) || marks < 0 || marks > 100) return 'Board marks must be between 0 and 100.';
+      }
     }
-    if (s === 2) {
+    if (s === 3) {
       if (form.linkedin_url.trim() && !URL_RE.test(form.linkedin_url.trim()))
         return 'Enter a valid LinkedIn URL, starting with https://';
       if (!form.personal_email.trim() || !EMAIL_RE.test(form.personal_email.trim()))
         return 'Enter a valid email address.';
-      if (!form.phone_number.trim() || !PHONE_RE.test(form.phone_number.trim()))
-        return 'Enter a valid 10-digit phone number.';
-    }
-    if (s === 1 && form.admission_rank.trim()) {
-      const rank = parseInt(form.admission_rank, 10);
-      if (Number.isNaN(rank) || rank <= 0) return 'Admission rank must be a positive number.';
-    }
-    if (s === 1 && form.board_marks.trim()) {
-      const marks = parseFloat(form.board_marks);
-      if (Number.isNaN(marks) || marks < 0 || marks > 100) return 'Board marks must be between 0 and 100.';
+      if (!form.phone_number.trim() || form.phone_number.trim().length < 7)
+        return 'Enter a valid phone number.';
     }
     return '';
   }
@@ -173,7 +183,6 @@ export default function RegisterPage() {
     setStep((s) => Math.max(s - 1, 0));
   }
 
-  // Enter / primary button: advance while there are steps left, else submit.
   function handleFormSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (step < STEPS.length - 1) {
@@ -196,6 +205,35 @@ export default function RegisterPage() {
 
     setSubmitting(true);
     try {
+      // 1. Check if username is already taken in the alumni database
+      const { data: userCheck } = await supabase
+        .from('alumni')
+        .select('username')
+        .eq('username', form.username.trim())
+        .maybeSingle();
+      
+      if (userCheck) {
+        throw new Error('This username is already taken. Please choose another one.');
+      }
+
+      // 2. Sign up user via Supabase Auth
+      const { data: authData, error: authErr } = await supabase.auth.signUp({
+        email: form.personal_email.trim(),
+        password: form.password_val,
+        options: {
+          data: {
+            username: form.username.trim(),
+            full_name: form.full_name.trim(),
+          }
+        }
+      });
+
+      if (authErr) throw authErr;
+      if (!authData.user) throw new Error('Auth registration failed.');
+
+      const userId = authData.user.id;
+
+      // 3. Handle photo upload if present
       let photoUrl: string | null = null;
       if (form.photo_file) {
         const file = form.photo_file;
@@ -206,12 +244,10 @@ export default function RegisterPage() {
         if (file.size > MAX_BYTES) {
           throw new Error('Photo is too large, please pick one under 5MB.');
         }
-        // Sanitize the extension so the storage key can't be used to smuggle
-        // path segments or an unexpected content type into the bucket.
         const extMatch = file.name.match(/\.([a-zA-Z0-9]{1,5})$/);
         const ext = (extMatch?.[1] ?? 'jpg').toLowerCase();
-        const safeAdmissionNo = form.admission_number.trim().replace(/[^a-zA-Z0-9-_]/g, '_');
-        const fileName = `${safeAdmissionNo}-${Date.now()}.${ext}`;
+        const safeUsername = form.username.trim().replace(/[^a-zA-Z0-9-_]/g, '_');
+        const fileName = `${safeUsername}-${Date.now()}.${ext}`;
         const { error: upErr } = await supabase.storage.from('photos').upload(fileName, file, {
           contentType: file.type,
         });
@@ -219,7 +255,7 @@ export default function RegisterPage() {
         photoUrl = supabase.storage.from('photos').getPublicUrl(fileName).data.publicUrl;
       }
 
-      // Find-or-create the college.
+      // 4. Find-or-create the college
       let collegeId: string | number | null = null;
       if (form.college_name.trim()) {
         const { data: existing } = await supabase
@@ -230,9 +266,16 @@ export default function RegisterPage() {
         if (existing) {
           collegeId = existing.id;
         } else {
+          // Detect if it is an engineering college based on common terms
+          const isEng = /engineering|technology|iit|nit|iiit|polytechnic/i.test(form.college_name.trim());
           const { data: created, error: cErr } = await supabase
             .from('colleges')
-            .insert({ name: form.college_name.trim(), status: 'pending' })
+            .insert({ 
+              name: form.college_name.trim(), 
+              status: 'pending',
+              is_engineering: isEng,
+              state: 'Tamil Nadu' // Default to Tamil Nadu for new colleges, editable by admins
+            })
             .select('id')
             .single();
           if (cErr) throw cErr;
@@ -240,19 +283,27 @@ export default function RegisterPage() {
         }
       }
 
-      // If someone picked "Other" and typed their own answer, store that
-      // actual text instead of the literal word "Other" - this is also
-      // what makes it visible to staff in the admin review list, so they
-      // can spot a pattern and add it as a proper option later.
+      // Map values
       const finalStream = form.stream === 'Other' && form.stream_other.trim() ? form.stream_other.trim() : form.stream;
       const finalSchoolBoard = form.school_board === 'Other' && form.school_board_other.trim() ? form.school_board_other.trim() : form.school_board;
-      const finalRoute = form.admission_route === 'Other' && form.admission_route_other.trim() ? form.admission_route_other.trim() : form.admission_route;
+      
+      let finalRoute = 'Direct';
+      if (form.admission_mode === 'Entrance Exam') {
+        finalRoute = form.admission_route === 'Other' && form.admission_route_other.trim() ? form.admission_route_other.trim() : form.admission_route;
+      } else if (form.admission_mode === 'Board Marks') {
+        finalRoute = 'Board Marks';
+      }
+
       const finalStatus = form.current_status === 'Other' && form.current_status_other.trim() ? form.current_status_other.trim() : form.current_status;
 
+      // 5. Insert profile row with link to auth user
       const { error: insErr } = await supabase.from('alumni').insert({
+        user_id: userId,
+        username: form.username.trim(),
         full_name: form.full_name.trim(),
+        school_name: form.school_name,
         admission_number: form.admission_number.trim() || null,
-        show_photo: form.show_photo === 'yes',
+        show_photo: !!photoUrl,
         photo_url: photoUrl,
         class_of: parseInt(form.class_of, 10),
         stream: finalStream,
@@ -266,22 +317,23 @@ export default function RegisterPage() {
         branch: form.branch.trim() || null,
         field: form.field.trim() || null,
         admission_route: finalRoute,
-        admission_rank: form.admission_rank.trim() || null,
-        board_marks: form.board_marks.trim() || null,
-        board_cutoff: form.board_cutoff.trim() || null,
+        admission_rank: form.admission_mode === 'Entrance Exam' ? (form.admission_rank.trim() || null) : null,
+        board_marks: form.admission_mode === 'Board Marks' ? (form.board_marks.trim() || null) : null,
+        board_cutoff: form.admission_mode === 'Board Marks' ? (form.board_cutoff.trim() || null) : null,
         current_status: finalStatus,
-        expected_finish_year: form.expected_finish_year.trim() ? parseInt(form.expected_finish_year, 10) : null,
+        expected_finish_year: (finalStatus.toLowerCase().includes('studying') || finalStatus.toLowerCase().includes('preparing')) && form.expected_finish_year.trim() ? parseInt(form.expected_finish_year, 10) : null,
         currently_at: form.currently_at.trim() || null,
         designation: form.designation.trim() || null,
         message_1: form.message_1.trim() || null,
         message_2: form.message_2.trim() || null,
         consent_given: true,
         approval_status: 'pending',
+        modification_status: 'none'
       });
+
       if (insErr) throw insErr;
 
-      // Best-effort notification to staff - if this fails, the person's
-      // registration has already succeeded, so we don't want to throw here.
+      // Notify admin
       fetch('/api/notify-admin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -295,7 +347,7 @@ export default function RegisterPage() {
       setSubmitted(true);
     } catch (err) {
       console.error(err);
-      setError('Something went wrong: ' + (err instanceof Error ? err.message : 'unknown error'));
+      setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -315,12 +367,12 @@ export default function RegisterPage() {
         {error && <div className="alert alert--error">{error}</div>}
 
         <form onSubmit={handleFormSubmit}>
-          {/* remounting on step change replays the entrance animation */}
           <div key={step} className="fade-up">
-            {step === 0 && <StepYou form={form} update={update} />}
-            {step === 1 && <StepStudies form={form} update={update} collegeOptions={collegeOptions} />}
-            {step === 2 && <StepNow form={form} update={update} orgOptions={orgOptions} />}
-            {step === 3 && <StepAdvice form={form} update={update} />}
+            {step === 0 && <StepAccount form={form} update={update} />}
+            {step === 1 && <StepYou form={form} update={update} />}
+            {step === 2 && <StepStudies form={form} update={update} collegeOptions={collegeOptions} />}
+            {step === 3 && <StepNow form={form} update={update} orgOptions={orgOptions} />}
+            {step === 4 && <StepAdvice form={form} update={update} />}
           </div>
 
           <div className="wizard-nav">
@@ -354,13 +406,30 @@ type StepProps = {
   update: <K extends keyof FormState>(key: K, value: FormState[K]) => void;
 };
 
+function StepAccount({ form, update }: StepProps) {
+  return (
+    <>
+      <h2 className="step-title">Create your account 🔒</h2>
+      <p className="step-sub">You will use these details to edit your profile later.</p>
+      
+      <FloatingField label="Choose Username" value={form.username} onChange={(v) => update('username', v.toLowerCase().replace(/[^a-z0-9_-]/g, ''))} autoFocus />
+      <FloatingField label="Choose Password" type="password" value={form.password_val} onChange={(v) => update('password_val', v)} />
+    </>
+  );
+}
+
 function StepYou({ form, update }: StepProps) {
   return (
     <>
-      <h2 className="step-title">Let&apos;s start with you 👋</h2>
-      <p className="step-sub">Just the basics, takes 20 seconds.</p>
+      <h2 className="step-title">Tell us about you 👋</h2>
+      <p className="step-sub">Let's associate your high school details.</p>
 
-      <FloatingField label="Full name" value={form.full_name} onChange={(v) => update('full_name', v)} autoFocus />
+      <div className="field">
+        <label>Which school did you attend?</label>
+        <Chips options={SCHOOLS} value={form.school_name} onChange={(v) => update('school_name', v)} />
+      </div>
+
+      <FloatingField label="Full name" value={form.full_name} onChange={(v) => update('full_name', v)} />
 
       <div className="two-col">
         <FloatingField label="Admission number" hint="optional" value={form.admission_number} onChange={(v) => update('admission_number', v)} />
@@ -398,23 +467,13 @@ function StepStudies({ form, update, collegeOptions }: StepProps & { collegeOpti
   return (
     <>
       <h2 className="step-title">What did you study? 🎓</h2>
-      <p className="step-sub">Tap the area that fits, details are optional.</p>
+      <p className="step-sub">Select the area that fits your higher education.</p>
 
       <div className="field">
         <label>Broad area</label>
-        <div className="chips">
-          {CATEGORIES.map((c) => (
-            <button
-              type="button"
-              key={c.key}
-              className={`chip${form.field === c.label ? ' chip--active' : ''}`}
-              onClick={() => update('field', c.label)}
-            >
-              <span className="chip__emoji">{c.emoji}</span>
-              {c.label}
-            </button>
-          ))}
-        </div>
+        <select value={form.field} onChange={(e) => update('field', e.target.value)}>
+          {CATEGORIES.map((c) => <option key={c.key} value={c.label}>{c.emoji} {c.label}</option>)}
+        </select>
       </div>
 
       <FloatingField
@@ -438,18 +497,40 @@ function StepStudies({ form, update, collegeOptions }: StepProps & { collegeOpti
 
       <div className="field">
         <label>How did you get in?</label>
-        <OtherAwareChips
-          options={ROUTES}
-          value={form.admission_route}
-          onChange={(v) => update('admission_route', v)}
-          otherValue={form.admission_route_other}
-          onOtherChange={(v) => update('admission_route_other', v)}
-          otherPlaceholder="Please specify how you got in"
+        <Chips 
+          options={['Entrance Exam', 'Board Marks', 'Direct / Other']} 
+          value={form.admission_mode} 
+          onChange={(v) => update('admission_mode', v as any)} 
         />
       </div>
 
-      {form.admission_route === 'Board Marks' ? (
-        <div className="two-col">
+      {form.admission_mode === 'Entrance Exam' && (
+        <>
+          <div className="field" style={{ marginTop: 14 }}>
+            <label>Entrance Exam</label>
+            <OtherAwareChips
+              options={ROUTES.filter(r => r !== 'Board Marks' && r !== 'Sports Quota' && r !== 'Management Quota')}
+              value={form.admission_route}
+              onChange={(v) => update('admission_route', v)}
+              otherValue={form.admission_route_other}
+              onOtherChange={(v) => update('admission_route_other', v)}
+              otherPlaceholder="Specify Entrance Exam"
+            />
+          </div>
+          <FloatingField
+            label="Admission rank"
+            hint="optional"
+            type="number"
+            min={1}
+            step={1}
+            value={form.admission_rank}
+            onChange={(v) => update('admission_rank', v.replace(/[^\d]/g, ''))}
+          />
+        </>
+      )}
+
+      {form.admission_mode === 'Board Marks' && (
+        <div className="two-col" style={{ marginTop: 14 }}>
           <FloatingField
             label="Board marks (%)"
             hint="optional"
@@ -467,18 +548,6 @@ function StepStudies({ form, update, collegeOptions }: StepProps & { collegeOpti
             onChange={(v) => update('board_cutoff', v)}
           />
         </div>
-      ) : (
-        !['Sports Quota', 'Management Quota', 'Other'].includes(form.admission_route) && (
-          <FloatingField
-            label="Admission rank"
-            hint="optional"
-            type="number"
-            min={1}
-            step={1}
-            value={form.admission_rank}
-            onChange={(v) => update('admission_rank', v.replace(/[^\d]/g, ''))}
-          />
-        )
       )}
     </>
   );
@@ -503,7 +572,7 @@ function StepNow({ form, update, orgOptions }: StepProps & { orgOptions: string[
             style={{ marginTop: 10 }}
           />
         )}
-        {(form.current_status === 'Studying UG' || form.current_status === 'Studying PG') && (
+        {(form.current_status.toLowerCase().includes('studying') || form.current_status.toLowerCase().includes('preparing')) && (
           <FloatingField
             label="Expected to finish in"
             hint="year, optional"
@@ -534,13 +603,11 @@ function StepNow({ form, update, orgOptions }: StepProps & { orgOptions: string[
       <div className="two-col">
         <FloatingSelect label="Country code" value={form.phone_country_code} onChange={(v) => update('phone_country_code', v)} options={COUNTRY_CODES} />
         <FloatingField
-          label="Phone (10 digits)"
+          label="Phone number"
           hint="never shown publicly"
           type="tel"
-          inputMode="numeric"
-          maxLength={10}
           value={form.phone_number}
-          onChange={(v) => update('phone_number', v.replace(/\D/g, '').slice(0, 10))}
+          onChange={(v) => update('phone_number', v.replace(/\D/g, ''))}
         />
       </div>
     </>
@@ -551,33 +618,31 @@ function StepAdvice({ form, update }: StepProps) {
   return (
     <>
       <h2 className="step-title">Almost there ✨</h2>
-      <p className="step-sub">A photo helps juniors recognize you, and your advice means a lot to them.</p>
+      <p className="step-sub">Upload a photo so juniors recognize you, and leave some advice.</p>
 
-      <div className="two-col">
-        <div className="field">
-          <label>Show your photo publicly?</label>
-          <Chips options={['no', 'yes']} value={form.show_photo} onChange={(v) => update('show_photo', v as 'yes' | 'no')} emojiMap={{ no: '🙈', yes: '📸' }} />
-        </div>
-        <div className="field">
-          <label>Upload photo <span className="hint">optional</span></label>
-          <label className="upload">
-            <span className="upload__blob" />
-            <span className="upload__inner">
-              <span className="upload__icon">📷</span>
-              <span className="upload__text">
-                <span className="upload__title">{form.photo_file ? 'Change photo' : 'Choose a photo'}</span>
-                <span className="upload__hint">JPG, PNG or WEBP · up to 5MB</span>
-              </span>
+      <div className="field" style={{ marginBottom: 24 }}>
+        <label>Upload photo <span className="hint">optional</span></label>
+        <label className="upload">
+          <span className="upload__blob" />
+          <span className="upload__inner">
+            <span className="upload__icon">📷</span>
+            <span className="upload__text">
+              <span className="upload__title">{form.photo_file ? 'Change photo' : 'Choose a photo'}</span>
+              <span className="upload__hint">JPG, PNG or WEBP · up to 5MB</span>
             </span>
-            <input type="file" accept="image/*" onChange={(e) => update('photo_file', e.target.files?.[0] ?? null)} />
-          </label>
-          {form.photo_file && <div className="upload__filename">✓ {form.photo_file.name}</div>}
-        </div>
+          </span>
+          <input type="file" accept="image/*" onChange={(e) => update('photo_file', e.target.files?.[0] ?? null)} />
+        </label>
+        {form.photo_file && <div className="upload__filename">✓ {form.photo_file.name}</div>}
       </div>
 
       <div className="field">
-        <label>What&apos;s one thing you&apos;d want a junior in your stream to know?</label>
-        <textarea value={form.message_1} onChange={(e) => update('message_1', e.target.value)} placeholder="Keep it short, honest, and real…" />
+        <label>Suggestions / Advice for juniors</label>
+        <textarea 
+          value={form.message_1} 
+          onChange={(e) => update('message_1', e.target.value)} 
+          placeholder="Share your advice, tips, or suggestions for juniors..." 
+        />
       </div>
 
       <div className="consent">
@@ -588,8 +653,7 @@ function StepAdvice({ form, update }: StepProps) {
         <label htmlFor="consent">
           I agree that my name and the details I chose to share can be displayed
           publicly on the Veveaham alumni site. My email and phone number will
-          never be shown publicly, and any additional information I provide
-          later will never be shared publicly without my consent.
+          never be shown publicly. Your information will never be shared publicly without your concern.
         </label>
       </div>
     </>
@@ -629,9 +693,6 @@ function FloatingField({
 }) {
   const id = `f-${label.replace(/\s+/g, '-').toLowerCase()}`;
   const [focused, setFocused] = useState(false);
-  // Driven entirely by React state (focus + actual value) rather than the
-  // CSS-only `:placeholder-shown` trick, which browsers can leave stale
-  // after autofill and causes the label to sit on top of the typed value.
   const active = focused || value.trim().length > 0;
   return (
     <div className={`f-field${active ? ' f-field--active' : ''}`} style={style}>
@@ -659,9 +720,6 @@ function FloatingField({
   );
 }
 
-// Same visual treatment as FloatingField, but for a <select>. A select
-// always has a real value selected (never truly "empty" the way a text
-// input can be) so the label stays permanently in its floated-up position.
 function FloatingSelect({
   label,
   value,
@@ -685,6 +743,8 @@ function FloatingSelect({
     </div>
   );
 }
+
+function Chips({
   options,
   value,
   onChange,
@@ -714,10 +774,6 @@ function FloatingSelect({
   );
 }
 
-// Chips where picking "Other" reveals a text field to specify what that
-// actually is. Keeping the free-text visible right in the admin review
-// list is what lets staff notice a pattern and later add it as a proper
-// option in the code - no separate database flag needed for that.
 function OtherAwareChips({
   options,
   value,
@@ -764,7 +820,7 @@ function StepBar({ step }: { step: number }) {
 }
 
 function SuccessScreen() {
-  const shareUrl = typeof window !== 'undefined' ? window.location.href : '';
+  const shareUrl = typeof window !== 'undefined' ? window.location.origin + '/login' : '';
   const shareText = 'Register yourself on the Veveaham Alumni site!';
   const whatsapp = `https://wa.me/?text=${encodeURIComponent(shareText + ' ' + shareUrl)}`;
   const email = `mailto:?subject=${encodeURIComponent('Veveaham Alumni Registration')}&body=${encodeURIComponent(shareText + '\n\n' + shareUrl)}`;
@@ -775,23 +831,10 @@ function SuccessScreen() {
         <div style={{ fontSize: 56, animation: 'pop 0.5s var(--ease)' }}>🎉</div>
         <h1>You&apos;re in!</h1>
         <p className="subtitle">
-          Your details are submitted and waiting for admin approval. Once approved,
-          your profile appears in the directory.
+          Your account has been created and your profile is pending admin approval. You can log in using your username and password.
         </p>
-        <p style={{ fontWeight: 600 }}>Pass it on, share the link with a friend or senior:</p>
         <div className="chips" style={{ justifyContent: 'center', marginTop: 16 }}>
-          <a className="btn btn--plain btn--plain-neutral" href={whatsapp} target="_blank" rel="noopener noreferrer">💬 WhatsApp</a>
-          <a className="btn btn--plain btn--plain-neutral" href={email}>📧 Email</a>
-          <button
-            type="button"
-            className="btn btn--plain btn--plain-neutral"
-            onClick={() => {
-              navigator.clipboard.writeText(shareUrl);
-              alert('Link copied! Paste it in an Instagram DM or story.');
-            }}
-          >
-            📷 Copy link
-          </button>
+          <a className="btn btn--primary" href="/login">Go to Login 🔑</a>
         </div>
       </div>
     </main>
