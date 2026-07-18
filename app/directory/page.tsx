@@ -64,8 +64,6 @@ export default function DirectoryPage() {
   const [colleges, setColleges] = useState<CollegeRow[]>([]);
   const [explorerState, setExplorerState] = useState('');
   const [explorerQuery, setExplorerQuery] = useState('');
-  const [targetRank, setTargetRank] = useState('');
-  const [targetMarks, setTargetMarks] = useState('');
 
   // Lock page scroll while modal is open; close on Escape
   useEffect(() => {
@@ -324,39 +322,6 @@ export default function DirectoryPage() {
             </div>
           </div>
 
-          {/* Target score inputs */}
-          <div className="card" style={{ marginBottom: 24, padding: '16px 20px' }}>
-            <p style={{ margin: '0 0 12px 0', fontWeight: 600, fontSize: '0.95rem' }}>
-              🎯 Enter your target scores to see if you match (optional)
-            </p>
-            <div className="two-col">
-              <div className="f-field f-field--active">
-                <input
-                  type="number"
-                  value={targetRank}
-                  onChange={e => setTargetRank(e.target.value)}
-                  placeholder=" "
-                  min={1}
-                />
-                <label>Target Entrance Rank</label>
-              </div>
-              <div className="f-field f-field--active">
-                <input
-                  type="number"
-                  value={targetMarks}
-                  onChange={e => setTargetMarks(e.target.value)}
-                  placeholder=" "
-                  min={0}
-                  max={100}
-                />
-                <label>Target Board Marks (%)</label>
-              </div>
-            </div>
-            <p className="hint" style={{ margin: '8px 0 0' }}>
-              We'll show matching seniors who got in with similar or better scores.
-            </p>
-          </div>
-
           {filteredColleges.length === 0 ? (
             <div className="empty">
               <span className="empty__emoji">🏫</span>
@@ -367,29 +332,7 @@ export default function DirectoryPage() {
             <div className="stagger">
               {filteredColleges.map(college => {
                 const seniors = alumniByCollege.get(college.name) ?? [];
-
-                // Filter seniors by target scores if provided
-                const rank = targetRank ? parseInt(targetRank, 10) : null;
-                const marks = targetMarks ? parseFloat(targetMarks) : null;
-
-                const matchingSeniors = seniors.filter(a => {
-                  if (!rank && !marks) return true;
-                  const aRank = a.admission_rank ? parseInt(String(a.admission_rank), 10) : null;
-                  const aMarks = a.board_marks ? parseFloat(String(a.board_marks)) : null;
-                  if (rank && aRank) return aRank >= rank;
-                  if (marks && aMarks) return aMarks <= marks;
-                  return true;
-                });
-
-                return (
-                  <CollegeExplorerCard
-                    key={college.id}
-                    college={college}
-                    seniors={seniors}
-                    matchingSeniors={matchingSeniors}
-                    hasFilter={!!(rank || marks)}
-                  />
-                );
+                return <CollegeExplorerCard key={college.id} college={college} seniors={seniors} />;
               })}
             </div>
           )}
@@ -407,13 +350,9 @@ export default function DirectoryPage() {
 function CollegeExplorerCard({
   college,
   seniors,
-  matchingSeniors,
-  hasFilter,
 }: {
   college: CollegeRow;
   seniors: Alumnus[];
-  matchingSeniors: Alumnus[];
-  hasFilter: boolean;
 }) {
   const [showSeniors, setShowSeniors] = useState(false);
 
@@ -461,13 +400,6 @@ function CollegeExplorerCard({
       {/* Seniors section */}
       {seniors.length > 0 && (
         <div style={{ marginTop: 14 }}>
-          {hasFilter && (
-            <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: 8 }}>
-              {matchingSeniors.length === 0
-                ? '⚠ No seniors matched your target scores for this college.'
-                : `✓ ${matchingSeniors.length} senior(s) got in with similar or better scores.`}
-            </p>
-          )}
           <button
             type="button"
             onClick={() => setShowSeniors(v => !v)}
