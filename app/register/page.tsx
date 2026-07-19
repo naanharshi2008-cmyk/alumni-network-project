@@ -10,7 +10,6 @@ interface FormState {
   full_name: string;
   username: string;
   password_val: string;
-  admission_number: string;
   school_name: string;
   show_photo: 'yes' | 'no';
   photo_file: File | null;
@@ -50,7 +49,6 @@ const initialForm: FormState = {
   full_name: '',
   username: '',
   password_val: '',
-  admission_number: '',
   school_name: 'Veveaham Hr. Sec. School',
   show_photo: 'no',
   photo_file: null,
@@ -250,6 +248,8 @@ export default function RegisterPage() {
       // real registrations would quickly hit. This keeps login identity
       // fully decoupled from whatever email (if any) they typed in.
       const authEmail = `${form.username.trim()}@${ALUMNI_LOGIN_DOMAIN}`;
+      let userId: string;
+
       const { data: authData, error: authErr } = await supabase.auth.signUp({
         email: authEmail,
         password: form.password_val,
@@ -261,10 +261,30 @@ export default function RegisterPage() {
         }
       });
 
-      if (authErr) throw authErr;
-      if (!authData.user) throw new Error('Auth registration failed.');
+      if (authErr) {
+        // "Already registered" can legitimately mean THIS SAME PERSON tried
+        // before, the login account got created, but saving their profile
+        // failed right after (e.g. a database constraint error) - leaving
+        // an orphaned account with no profile. Rather than dead-ending
+        // here, try signing in with the exact credentials they just typed:
+        // if that succeeds, it's safely their own account and we continue;
+        // if it fails too, the username genuinely belongs to someone else.
+        const isDuplicate = /already registered|already exists/i.test(authErr.message);
+        if (!isDuplicate) throw authErr;
 
-      const userId = authData.user.id;
+        const { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({
+          email: authEmail,
+          password: form.password_val,
+        });
+
+        if (signInErr || !signInData.user) {
+          throw new Error('This username is already taken. Please choose another one.');
+        }
+        userId = signInData.user.id;
+      } else {
+        if (!authData.user) throw new Error('Auth registration failed.');
+        userId = authData.user.id;
+      }
 
       // 3. Handle photo upload if present
       let photoUrl: string | null = null;
@@ -332,7 +352,6 @@ export default function RegisterPage() {
         username: form.username.trim(),
         full_name: form.full_name.trim(),
         school_name: form.school_name,
-        admission_number: form.admission_number.trim() || null,
         show_photo: !!photoUrl,
         photo_url: photoUrl,
         class_of: parseInt(form.class_of, 10),
@@ -378,7 +397,17 @@ export default function RegisterPage() {
       setSubmitted(true);
     } catch (err) {
       console.error(err);
-      setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
+      // Supabase/Postgrest errors are plain objects with a `message`
+      // property - they are NOT real `Error` instances, so the old check
+      // here (`err instanceof Error`) silently missed them and always
+      // fell back to a generic message, hiding the real reason.
+      const realMessage =
+        err instanceof Error
+          ? err.message
+          : (err && typeof err === 'object' && 'message' in err)
+            ? String((err as { message: unknown }).message)
+            : null;
+      setError(realMessage || 'Something went wrong. Please try again.');
       // Only release the lock on failure, so the person can correct
       // something and retry. On success there's nothing left to submit.
       submitLockRef.current = false;
@@ -481,10 +510,7 @@ function StepYou({ form, update }: StepProps) {
 
       <FloatingField label="Full name" value={form.full_name} onChange={(v) => update('full_name', v)} />
 
-      <div className="two-col">
-        <FloatingField label="Admission number" hint="optional" value={form.admission_number} onChange={(v) => update('admission_number', v)} />
-        <FloatingField label="Graduating year (Class of)" type="number" max={CURRENT_YEAR} value={form.class_of} onChange={(v) => update('class_of', v)} />
-      </div>
+      <FloatingField label="Graduating year (Class of)" type="number" max={CURRENT_YEAR} value={form.class_of} onChange={(v) => update('class_of', v)} />
 
       <div className="field">
         <label>Stream at school</label>
