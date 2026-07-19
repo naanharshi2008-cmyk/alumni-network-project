@@ -451,6 +451,22 @@ function StepAccount({ form, update }: StepProps) {
       
       <FloatingField label="Choose Username" value={form.username} onChange={(v) => update('username', v.toLowerCase().replace(/[^a-z0-9_-]/g, ''))} autoFocus />
       <FloatingField label="Choose Password" type="password" revealable value={form.password_val} onChange={(v) => update('password_val', v)} />
+
+      {/* TEMPORARY testing helper - remove this button before real students
+          start using the site. Fills in a guaranteed-unique username/password
+          so repeated test runs never collide with an earlier test account. */}
+      <button
+        type="button"
+        onClick={() => {
+          const rand = Math.random().toString(36).slice(2, 8);
+          update('username', `test_${rand}`);
+          update('password_val', `Test${rand}!`);
+        }}
+        className="btn btn--ghost"
+        style={{ marginTop: 8, fontSize: '0.8rem' }}
+      >
+        <span className="btn__inner">🎲 Fill random test account</span>
+      </button>
     </>
   );
 }
