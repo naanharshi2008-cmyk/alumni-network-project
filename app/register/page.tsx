@@ -28,6 +28,7 @@ interface FormState {
   degree_other: string;
   branch: string;
   field: string;
+  field_other: string;
   admission_mode: 'Entrance Exam' | 'Board Marks' | 'Other';
   admission_mode_other: string;
   admission_route: string;
@@ -67,6 +68,7 @@ const initialForm: FormState = {
   degree_other: '',
   branch: '',
   field: 'Engineering',
+  field_other: '',
   admission_mode: 'Entrance Exam',
   admission_mode_other: '',
   admission_route: 'JEE Main',
@@ -286,31 +288,24 @@ export default function RegisterPage() {
         photoUrl = supabase.storage.from('photos').getPublicUrl(fileName).data.publicUrl;
       }
 
-      // 4. Find-or-create the college
+      // 4. Look up the college the person typed against the (now Kaggle-backed)
+      // colleges table. We no longer create new rows here - with 47k+ real
+      // colleges already loaded, a typed name that doesn't match is more
+      // likely a typo or an genuinely obscure institution than something
+      // that needs a brand-new row, and letting any visitor insert into a
+      // shared reference table was the source of an earlier RLS bug. If it
+      // doesn't match, we keep the raw text so admin can review and match
+      // or add it manually later.
       let collegeId: string | number | null = null;
-      if (form.college_name.trim()) {
+      const typedCollege = form.college_name.trim();
+      if (typedCollege) {
         const { data: existing } = await supabase
           .from('colleges')
           .select('id')
-          .ilike('name', form.college_name.trim())
+          .ilike('name', typedCollege)
           .maybeSingle();
         if (existing) {
           collegeId = existing.id;
-        } else {
-          // Detect if it is an engineering college based on common terms
-          const isEng = /engineering|technology|iit|nit|iiit|polytechnic/i.test(form.college_name.trim());
-          const { data: created, error: cErr } = await supabase
-            .from('colleges')
-            .insert({ 
-              name: form.college_name.trim(), 
-              status: 'pending',
-              is_engineering: isEng,
-              state: 'Tamil Nadu' // Default to Tamil Nadu for new colleges, editable by admins
-            })
-            .select('id')
-            .single();
-          if (cErr) throw cErr;
-          collegeId = created.id;
         }
       }
 
@@ -318,6 +313,7 @@ export default function RegisterPage() {
       const finalStream = form.stream === 'Other' && form.stream_other.trim() ? form.stream_other.trim() : form.stream;
       const finalSchoolBoard = form.school_board === 'Other' && form.school_board_other.trim() ? form.school_board_other.trim() : form.school_board;
       const finalDegree = form.degree === 'Other' && form.degree_other.trim() ? form.degree_other.trim() : form.degree;
+      const finalField = form.field === 'Other' && form.field_other.trim() ? form.field_other.trim() : form.field;
 
       let finalRoute = 'Direct';
       if (form.admission_mode === 'Entrance Exam') {
@@ -347,9 +343,10 @@ export default function RegisterPage() {
         phone_number: form.phone_number.trim() || null,
         linkedin_url: form.linkedin_url.trim() || null,
         college_id: collegeId,
+        college_name_raw: typedCollege || null,
         degree: finalDegree.trim() || null,
         branch: form.branch.trim() || null,
-        field: form.field.trim() || null,
+        field: finalField.trim() || null,
         admission_route: finalRoute,
         admission_rank: form.admission_mode === 'Entrance Exam' ? (form.admission_rank.trim() || null) : null,
         board_marks: form.admission_mode === 'Board Marks' ? (form.board_marks.trim() || null) : null,
@@ -527,6 +524,14 @@ function StepStudies({ form, update, collegeOptions }: StepProps & { collegeOpti
         <select value={form.field} onChange={(e) => update('field', e.target.value)}>
           {CATEGORIES.map((c) => <option key={c.key} value={c.label}>{c.emoji} {c.label}</option>)}
         </select>
+        {form.field === 'Other' && (
+          <FloatingField
+            label="Please specify"
+            value={form.field_other}
+            onChange={(v) => update('field_other', v)}
+            style={{ marginTop: 10 }}
+          />
+        )}
       </div>
 
       <FloatingField
@@ -821,17 +826,24 @@ function FloatingSelect({
   onChange,
   options,
   style,
+  placeholder,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   options: string[];
   style?: React.CSSProperties;
+  placeholder?: string;
 }) {
   const id = `f-${label.replace(/\s+/g, '-').toLowerCase()}`;
   return (
     <div className="f-field f-field--active" style={style}>
       <select id={id} value={value} onChange={(e) => onChange(e.target.value)}>
+        {/* A real placeholder option - without this, an empty `value` that
+            matches no option would make the browser silently DISPLAY the
+            first real option (e.g. "BTech") even though nothing was
+            actually chosen yet, which is exactly the bug being fixed. */}
+        <option value="" disabled hidden>{placeholder ?? `Select ${label.toLowerCase()}`}</option>
         {options.map((o) => <option key={o} value={o}>{o}</option>)}
       </select>
       <label htmlFor={id}>{label}</label>
