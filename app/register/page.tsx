@@ -964,6 +964,8 @@ function CollegeSearchField({ value, onChange }: { value: string; onChange: (v: 
     </div>
   );
 }
+
+function Chips({
   options,
   value,
   onChange,
