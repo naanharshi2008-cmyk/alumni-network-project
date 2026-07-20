@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { supabase, isSupabaseConfigured } from '../../lib/supabaseClient';
-import { commonColleges } from '../../lib/commonColleges';
 import { commonOrganizations } from '../../lib/commonOrganizations';
 import { CATEGORIES } from '../../lib/types';
 
@@ -113,18 +112,10 @@ export default function RegisterPage() {
   // clicks can never both start a submission.
   const submitLockRef = useRef(false);
 
-  const [collegeOptions, setCollegeOptions] = useState<string[]>(commonColleges);
   const [orgOptions, setOrgOptions] = useState<string[]>(commonOrganizations);
 
   useEffect(() => {
     if (!isSupabaseConfigured) return;
-    (async () => {
-      const { data } = await supabase.from('colleges').select('name').order('name');
-      if (data) {
-        const merged = Array.from(new Set([...commonColleges, ...data.map((c) => c.name as string)])).sort();
-        setCollegeOptions(merged);
-      }
-    })();
     (async () => {
       const { data } = await supabase
         .from('alumni')
@@ -433,7 +424,7 @@ export default function RegisterPage() {
           <div key={step} className="fade-up">
             {step === 0 && <StepAccount form={form} update={update} />}
             {step === 1 && <StepYou form={form} update={update} />}
-            {step === 2 && <StepStudies form={form} update={update} collegeOptions={collegeOptions} />}
+            {step === 2 && <StepStudies form={form} update={update} />}
             {step === 3 && <StepNow form={form} update={update} orgOptions={orgOptions} />}
             {step === 4 && <StepAdvice form={form} update={update} />}
           </div>
@@ -539,7 +530,7 @@ function StepYou({ form, update }: StepProps) {
   );
 }
 
-function StepStudies({ form, update, collegeOptions }: StepProps & { collegeOptions: string[] }) {
+function StepStudies({ form, update }: StepProps) {
   return (
     <>
       <h2 className="step-title">What did you study? 🎓</h2>
@@ -560,16 +551,10 @@ function StepStudies({ form, update, collegeOptions }: StepProps & { collegeOpti
         )}
       </div>
 
-      <FloatingField
-        label="College / University"
-        hint="start typing to search"
+      <CollegeSearchField
         value={form.college_name}
         onChange={(v) => update('college_name', v)}
-        list="college-list"
       />
-      <datalist id="college-list">
-        {collegeOptions.map((name) => <option key={name} value={name} />)}
-      </datalist>
 
       <div className="field">
         <label>Degree</label>
@@ -877,7 +862,108 @@ function FloatingSelect({
   );
 }
 
-function Chips({
+// Live search-as-you-type against the full colleges table (47k+ rows),
+// instead of the old approach of pre-loading a list into the browser - that
+// approach was silently capped at Supabase's default 1000-row limit, so
+// most colleges (anything past roughly the first letter of the alphabet)
+// never showed up at all, no matter how well the data itself was cleaned.
+function CollegeSearchField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [results, setResults] = useState<{ id: string; name: string; state: string | null }[]>([]);
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const id = 'f-college-university';
+
+  useEffect(() => {
+    const query = value.trim();
+    if (query.length < 3) {
+      setResults([]);
+      return;
+    }
+    setLoading(true);
+    const t = setTimeout(async () => {
+      const { data } = await supabase
+        .from('colleges')
+        .select('id, name, state')
+        .ilike('name', `%${query}%`)
+        .order('name')
+        .limit(12);
+      setResults(data ?? []);
+      setLoading(false);
+    }, 300); // debounce so we're not firing a query on every keystroke
+    return () => clearTimeout(t);
+  }, [value]);
+
+  const active = focused || value.trim().length > 0;
+
+  return (
+    <div className={`f-field${active ? ' f-field--active' : ''}`} style={{ position: 'relative' }}>
+      <input
+        id={id}
+        type="text"
+        value={value}
+        onChange={(e) => { onChange(e.target.value); setOpen(true); }}
+        onFocus={() => { setFocused(true); setOpen(true); }}
+        onBlur={() => setTimeout(() => setFocused(false), 150)}
+        placeholder=""
+        autoComplete="off"
+      />
+      <label htmlFor={id}>College / University</label>
+      <span className="hint">start typing to search all 47,000+ colleges</span>
+
+      {open && value.trim().length >= 3 && (
+        <div
+          style={{
+            position: 'absolute',
+            top: '100%',
+            left: 0,
+            right: 0,
+            marginTop: 6,
+            background: 'var(--surface-2, #191621)',
+            border: '1px solid var(--border-strong, #333)',
+            borderRadius: 'var(--r-sm, 10px)',
+            maxHeight: 260,
+            overflowY: 'auto',
+            zIndex: 20,
+            boxShadow: '0 12px 30px rgba(0,0,0,0.4)',
+          }}
+        >
+          {loading && (
+            <div style={{ padding: '10px 14px', color: 'var(--text-faint)', fontSize: '0.85rem' }}>Searching…</div>
+          )}
+          {!loading && results.length === 0 && (
+            <div style={{ padding: '10px 14px', color: 'var(--text-faint)', fontSize: '0.85rem' }}>
+              No match - not a problem, just keep your typed name and continue.
+            </div>
+          )}
+          {!loading && results.map((r) => (
+            <button
+              key={r.id}
+              type="button"
+              onMouseDown={(e) => e.preventDefault()} // keep focus so onBlur doesn't fire before click
+              onClick={() => { onChange(r.name); setOpen(false); }}
+              style={{
+                display: 'block',
+                width: '100%',
+                textAlign: 'left',
+                padding: '10px 14px',
+                background: 'transparent',
+                border: 'none',
+                borderBottom: '1px solid rgba(255,255,255,0.06)',
+                color: 'var(--text)',
+                cursor: 'pointer',
+                fontSize: '0.9rem',
+              }}
+            >
+              {r.name}
+              {r.state && <span style={{ color: 'var(--text-faint)', fontSize: '0.78rem' }}> — {r.state}</span>}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
   options,
   value,
   onChange,

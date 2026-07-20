@@ -3,7 +3,6 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase, isSupabaseConfigured } from '../../lib/supabaseClient';
-import { commonColleges } from '../../lib/commonColleges';
 import { commonOrganizations } from '../../lib/commonOrganizations';
 import { CATEGORIES } from '../../lib/types';
 
@@ -104,7 +103,6 @@ export default function ProfilePage() {
   const [profile, setProfile] = useState<AlumnusData | null>(null);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
 
-  const [collegeOptions, setCollegeOptions] = useState<string[]>(commonColleges);
   const [orgOptions, setOrgOptions] = useState<string[]>(commonOrganizations);
 
   useEffect(() => {
@@ -146,12 +144,6 @@ export default function ProfilePage() {
         setProfile(normalizeProfile(data));
       }
 
-      // Load autocompletes
-      const { data: colleges } = await supabase.from('colleges').select('name').order('name');
-      if (colleges) {
-        setCollegeOptions(Array.from(new Set([...commonColleges, ...colleges.map(c => c.name as string)])).sort());
-      }
-      
       const { data: currentOrgs } = await supabase.from('alumni').select('currently_at').eq('approval_status', 'approved');
       if (currentOrgs) {
         const orgs = currentOrgs.map(a => a.currently_at as string).filter(Boolean);
@@ -202,30 +194,19 @@ export default function ProfilePage() {
         photoUrl = supabase.storage.from('photos').getPublicUrl(fileName).data.publicUrl;
       }
 
-      // Find or create college
-      let collegeId = null;
-      if (profile.college_name.trim()) {
+      // Look up the college - we no longer create new rows here, same as
+      // registration. See the matching fix in app/register/page.tsx for
+      // the full reasoning (RLS blocked this for regular users anyway).
+      let collegeId: string | number | null = null;
+      const typedCollege = profile.college_name.trim();
+      if (typedCollege) {
         const { data: existing } = await supabase
           .from('colleges')
           .select('id')
-          .ilike('name', profile.college_name.trim())
+          .ilike('name', typedCollege)
           .maybeSingle();
         if (existing) {
           collegeId = existing.id;
-        } else {
-          const isEng = /engineering|technology|iit|nit|iiit|polytechnic/i.test(profile.college_name.trim());
-          const { data: created, error: cErr } = await supabase
-            .from('colleges')
-            .insert({ 
-              name: profile.college_name.trim(), 
-              status: 'pending',
-              is_engineering: isEng,
-              state: 'Tamil Nadu'
-            })
-            .select('id')
-            .single();
-          if (cErr) throw cErr;
-          collegeId = created.id;
         }
       }
 
@@ -394,15 +375,10 @@ export default function ProfilePage() {
             </select>
           </div>
 
-          <FloatingField
-            label="College / University"
+          <CollegeSearchField
             value={profile.college_name}
             onChange={(v) => updateField('college_name', v)}
-            list="profile-college-list"
           />
-          <datalist id="profile-college-list">
-            {collegeOptions.map((name) => <option key={name} value={name} />)}
-          </datalist>
 
           <FloatingField label="Degree" value={profile.degree} onChange={(v) => updateField('degree', v)} />
           <FloatingField label="Branch / Department" value={profile.branch} onChange={(v) => updateField('branch', v)} />
@@ -517,6 +493,108 @@ function FloatingField({
       />
       <label htmlFor={id}>{label}</label>
       {hint && <span className="hint">{hint}</span>}
+    </div>
+  );
+}
+
+// Live search-as-you-type against the full colleges table (47k+ rows) -
+// same component as app/register/page.tsx. Kept as a separate copy here
+// rather than a shared import to avoid restructuring this project's file
+// layout; keep both in sync if this ever needs changing.
+function CollegeSearchField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [results, setResults] = useState<{ id: string; name: string; state: string | null }[]>([]);
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const id = 'f-college-university';
+
+  useEffect(() => {
+    const query = value.trim();
+    if (query.length < 3) {
+      setResults([]);
+      return;
+    }
+    setLoading(true);
+    const t = setTimeout(async () => {
+      const { data } = await supabase
+        .from('colleges')
+        .select('id, name, state')
+        .ilike('name', `%${query}%`)
+        .order('name')
+        .limit(12);
+      setResults(data ?? []);
+      setLoading(false);
+    }, 300);
+    return () => clearTimeout(t);
+  }, [value]);
+
+  const active = focused || value.trim().length > 0;
+
+  return (
+    <div className={`f-field${active ? ' f-field--active' : ''}`} style={{ position: 'relative' }}>
+      <input
+        id={id}
+        type="text"
+        value={value}
+        onChange={(e) => { onChange(e.target.value); setOpen(true); }}
+        onFocus={() => { setFocused(true); setOpen(true); }}
+        onBlur={() => setTimeout(() => setFocused(false), 150)}
+        placeholder=""
+        autoComplete="off"
+      />
+      <label htmlFor={id}>College / University</label>
+      <span className="hint">start typing to search all 47,000+ colleges</span>
+
+      {open && value.trim().length >= 3 && (
+        <div
+          style={{
+            position: 'absolute',
+            top: '100%',
+            left: 0,
+            right: 0,
+            marginTop: 6,
+            background: 'var(--surface-2, #191621)',
+            border: '1px solid var(--border-strong, #333)',
+            borderRadius: 'var(--r-sm, 10px)',
+            maxHeight: 260,
+            overflowY: 'auto',
+            zIndex: 20,
+            boxShadow: '0 12px 30px rgba(0,0,0,0.4)',
+          }}
+        >
+          {loading && (
+            <div style={{ padding: '10px 14px', color: 'var(--text-faint)', fontSize: '0.85rem' }}>Searching…</div>
+          )}
+          {!loading && results.length === 0 && (
+            <div style={{ padding: '10px 14px', color: 'var(--text-faint)', fontSize: '0.85rem' }}>
+              No match - not a problem, just keep your typed name and continue.
+            </div>
+          )}
+          {!loading && results.map((r) => (
+            <button
+              key={r.id}
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => { onChange(r.name); setOpen(false); }}
+              style={{
+                display: 'block',
+                width: '100%',
+                textAlign: 'left',
+                padding: '10px 14px',
+                background: 'transparent',
+                border: 'none',
+                borderBottom: '1px solid rgba(255,255,255,0.06)',
+                color: 'var(--text)',
+                cursor: 'pointer',
+                fontSize: '0.9rem',
+              }}
+            >
+              {r.name}
+              {r.state && <span style={{ color: 'var(--text-faint)', fontSize: '0.78rem' }}> — {r.state}</span>}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
