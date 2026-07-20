@@ -40,6 +40,48 @@ interface AlumnusData {
   original_data: any;
 }
 
+// The database allows most of these fields to be null (many were made
+// optional over time), but every .trim() call in this file assumes a real
+// string. Loading a raw Supabase row straight into state let a null value
+// slip through and crash on save with "Cannot read properties of null
+// (reading 'trim')". This normalizer guarantees every string field really
+// is a string (never null/undefined) the moment data comes in, so nothing
+// downstream needs to guard against null itself.
+function normalizeProfile(raw: any): AlumnusData {
+  const str = (v: unknown) => (v === null || v === undefined ? '' : String(v));
+  return {
+    ...raw,
+    full_name: str(raw.full_name),
+    username: str(raw.username),
+    school_name: str(raw.school_name),
+    admission_number: str(raw.admission_number),
+    class_of: raw.class_of ? String(raw.class_of) : '',
+    stream: str(raw.stream),
+    school_board: str(raw.school_board),
+    personal_email: str(raw.personal_email),
+    phone_country_code: str(raw.phone_country_code),
+    phone_number: str(raw.phone_number),
+    linkedin_url: str(raw.linkedin_url),
+    college_name: raw.colleges?.name || '',
+    degree: str(raw.degree),
+    branch: str(raw.branch),
+    field: str(raw.field),
+    admission_route: str(raw.admission_route),
+    admission_rank: raw.admission_rank ? String(raw.admission_rank) : '',
+    board_marks: raw.board_marks ? String(raw.board_marks) : '',
+    board_cutoff: str(raw.board_cutoff),
+    current_status: str(raw.current_status),
+    expected_finish_year: raw.expected_finish_year ? String(raw.expected_finish_year) : '',
+    currently_at: str(raw.currently_at),
+    designation: str(raw.designation),
+    message_1: str(raw.message_1),
+    message_2: str(raw.message_2),
+    photo_url: raw.photo_url ?? null,
+    approval_status: str(raw.approval_status),
+    modification_status: str(raw.modification_status),
+  };
+}
+
 const CURRENT_YEAR = new Date().getFullYear();
 const STREAMS = ['Bio-Maths', 'CS-Maths', 'Commerce (Business & Finance)', 'Other'];
 const ROUTES = [
@@ -97,27 +139,11 @@ export default function ProfilePage() {
             .eq('personal_email', user.email)
             .maybeSingle();
           if (fallbackData) {
-            setProfile({
-              ...fallbackData,
-              college_name: fallbackData.colleges?.name || '',
-              class_of: fallbackData.class_of ? String(fallbackData.class_of) : '',
-              expected_finish_year: fallbackData.expected_finish_year ? String(fallbackData.expected_finish_year) : '',
-              admission_rank: fallbackData.admission_rank ? String(fallbackData.admission_rank) : '',
-              board_marks: fallbackData.board_marks ? String(fallbackData.board_marks) : '',
-              board_cutoff: fallbackData.board_cutoff ? String(fallbackData.board_cutoff) : '',
-            });
+            setProfile(normalizeProfile(fallbackData));
           }
         }
       } else {
-        setProfile({
-          ...data,
-          college_name: data.colleges?.name || '',
-          class_of: data.class_of ? String(data.class_of) : '',
-          expected_finish_year: data.expected_finish_year ? String(data.expected_finish_year) : '',
-          admission_rank: data.admission_rank ? String(data.admission_rank) : '',
-          board_marks: data.board_marks ? String(data.board_marks) : '',
-          board_cutoff: data.board_cutoff ? String(data.board_cutoff) : '',
-        });
+        setProfile(normalizeProfile(data));
       }
 
       // Load autocompletes
