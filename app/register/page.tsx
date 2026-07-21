@@ -721,11 +721,11 @@ function StepAdvice({ form, update }: StepProps) {
       </div>
 
       <div className="field">
-        <label>Suggestions / Advice for juniors</label>
+        <label>One thing you'd tell your junior self?</label>
         <textarea 
           value={form.message_1} 
           onChange={(e) => update('message_1', e.target.value)} 
-          placeholder="Share your advice, tips, or suggestions for juniors..." 
+          placeholder="e.g. don't stress over one bad exam, or start applying early..." 
         />
       </div>
 

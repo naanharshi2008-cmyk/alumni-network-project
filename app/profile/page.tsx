@@ -432,8 +432,8 @@ export default function ProfilePage() {
           </div>
 
           <div className="field" style={{ marginTop: 20 }}>
-            <label>Suggestions / Advice for juniors</label>
-            <textarea value={profile.message_1 || ''} onChange={(e) => updateField('message_1', e.target.value)} placeholder="Share advice, tips, or preparation routes..." />
+            <label>One thing you'd tell your junior self?</label>
+            <textarea value={profile.message_1 || ''} onChange={(e) => updateField('message_1', e.target.value)} placeholder="e.g. don't stress over one bad exam, or start applying early..." />
           </div>
 
           <button type="submit" disabled={saving} className="btn btn--neutral btn--lg btn--block" style={{ marginTop: 24 }}>
