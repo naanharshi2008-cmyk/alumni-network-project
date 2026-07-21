@@ -530,7 +530,7 @@ export default function RegisterPage() {
               />
             )}
             {step === 4 && <StepAdvice form={form} update={update} />}
-          </iv>
+          </div>
 
           <div className="wizard-nav">
             {step > 0 && (
