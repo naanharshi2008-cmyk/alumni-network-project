@@ -39,6 +39,30 @@ interface AlumnusData {
   original_data: any;
 }
 
+// One row from the "higher_studies" table -- an alumnus can have several of
+// these (PG, PhD, diploma, etc), each with its own finishing year.
+interface HigherStudyEntry {
+  id?: string;
+  degree_name: string;
+  institution: string;
+  start_year: string;
+  finish_year: string;
+}
+
+// One row from the "work_experience" table -- a LinkedIn-style job history
+// entry. is_current means "Present" instead of a fixed end year.
+interface WorkExperienceEntry {
+  id?: string;
+  company: string;
+  role: string;
+  start_year: string;
+  end_year: string;
+  is_current: boolean;
+}
+
+const emptyHigherStudy = (): HigherStudyEntry => ({ degree_name: '', institution: '', start_year: '', finish_year: '' });
+const emptyWorkExperience = (): WorkExperienceEntry => ({ company: '', role: '', start_year: '', end_year: '', is_current: false });
+
 // The database allows most of these fields to be null (many were made
 // optional over time), but every .trim() call in this file assumes a real
 // string. Loading a raw Supabase row straight into state let a null value
@@ -102,6 +126,8 @@ export default function ProfilePage() {
   
   const [profile, setProfile] = useState<AlumnusData | null>(null);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [higherStudies, setHigherStudies] = useState<HigherStudyEntry[]>([]);
+  const [workExperience, setWorkExperience] = useState<WorkExperienceEntry[]>([]);
 
   const [orgOptions, setOrgOptions] = useState<string[]>(commonOrganizations);
 
@@ -127,6 +153,8 @@ export default function ProfilePage() {
 
       if (profileErr) throw profileErr;
 
+      let resolvedId: string | undefined = data?.id;
+
       if (!data) {
         // Fallback search by email
         const { data: { user } } = await supabase.auth.getUser();
@@ -138,10 +166,47 @@ export default function ProfilePage() {
             .maybeSingle();
           if (fallbackData) {
             setProfile(normalizeProfile(fallbackData));
+            resolvedId = fallbackData.id;
           }
         }
       } else {
         setProfile(normalizeProfile(data));
+      }
+
+      // Load their higher-studies and work-experience entries too (these
+      // live in separate tables since one alumnus can have several of each).
+      const alumniId = resolvedId;
+      if (alumniId) {
+        const { data: studiesRows } = await supabase
+          .from('higher_studies')
+          .select('*')
+          .eq('alumni_id', alumniId)
+          .order('finish_year', { ascending: true });
+        if (studiesRows) {
+          setHigherStudies(studiesRows.map((r: any) => ({
+            id: r.id,
+            degree_name: r.degree_name || '',
+            institution: r.institution || '',
+            start_year: r.start_year ? String(r.start_year) : '',
+            finish_year: r.finish_year ? String(r.finish_year) : '',
+          })));
+        }
+
+        const { data: workRows } = await supabase
+          .from('work_experience')
+          .select('*')
+          .eq('alumni_id', alumniId)
+          .order('start_year', { ascending: true });
+        if (workRows) {
+          setWorkExperience(workRows.map((r: any) => ({
+            id: r.id,
+            company: r.company || '',
+            role: r.role || '',
+            start_year: r.start_year ? String(r.start_year) : '',
+            end_year: r.end_year ? String(r.end_year) : '',
+            is_current: !!r.is_current,
+          })));
+        }
       }
 
       const { data: currentOrgs } = await supabase.from('alumni').select('currently_at').eq('approval_status', 'approved');
@@ -161,6 +226,26 @@ export default function ProfilePage() {
     if (profile) {
       setProfile({ ...profile, [key]: value });
     }
+  }
+
+  function updateHigherStudy(index: number, patch: Partial<HigherStudyEntry>) {
+    setHigherStudies((prev) => prev.map((entry, i) => (i === index ? { ...entry, ...patch } : entry)));
+  }
+  function addHigherStudy() {
+    setHigherStudies((prev) => [...prev, emptyHigherStudy()]);
+  }
+  function removeHigherStudy(index: number) {
+    setHigherStudies((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  function updateWorkExperience(index: number, patch: Partial<WorkExperienceEntry>) {
+    setWorkExperience((prev) => prev.map((entry, i) => (i === index ? { ...entry, ...patch } : entry)));
+  }
+  function addWorkExperience() {
+    setWorkExperience((prev) => [...prev, emptyWorkExperience()]);
+  }
+  function removeWorkExperience(index: number) {
+    setWorkExperience((prev) => prev.filter((_, i) => i !== index));
   }
 
   async function handleSave(e: React.FormEvent) {
@@ -250,6 +335,41 @@ export default function ProfilePage() {
         .eq('id', profile.id);
 
       if (saveErr) throw saveErr;
+
+      // Sync higher-studies and work-experience: simplest safe approach is
+      // to wipe this alumnus's rows and re-insert whatever's in the form
+      // right now. Only entries with the "main" field filled in are kept --
+      // a row someone added and then left blank is just dropped, not saved.
+      await supabase.from('higher_studies').delete().eq('alumni_id', profile.id);
+      const studiesToInsert = higherStudies
+        .filter((s) => s.degree_name.trim())
+        .map((s) => ({
+          alumni_id: profile.id,
+          degree_name: s.degree_name.trim(),
+          institution: s.institution.trim() || null,
+          start_year: s.start_year ? parseInt(s.start_year, 10) : null,
+          finish_year: s.finish_year ? parseInt(s.finish_year, 10) : null,
+        }));
+      if (studiesToInsert.length) {
+        const { error: studiesErr } = await supabase.from('higher_studies').insert(studiesToInsert);
+        if (studiesErr) throw studiesErr;
+      }
+
+      await supabase.from('work_experience').delete().eq('alumni_id', profile.id);
+      const workToInsert = workExperience
+        .filter((w) => w.company.trim())
+        .map((w) => ({
+          alumni_id: profile.id,
+          company: w.company.trim(),
+          role: w.role.trim() || null,
+          start_year: w.start_year ? parseInt(w.start_year, 10) : null,
+          end_year: w.is_current ? null : (w.end_year ? parseInt(w.end_year, 10) : null),
+          is_current: w.is_current,
+        }));
+      if (workToInsert.length) {
+        const { error: workErr } = await supabase.from('work_experience').insert(workToInsert);
+        if (workErr) throw workErr;
+      }
 
       setSuccess('Your profile modifications have been submitted for review.');
       setProfile(prev => prev ? { ...prev, ...updateData, photo_url: photoUrl } : null);
@@ -403,6 +523,26 @@ export default function ProfilePage() {
 
           <hr style={{ border: 'none', borderBottom: '1px solid var(--border)', margin: '24px 0' }} />
 
+          <h3>Higher Studies <span className="hint">optional — add as many as you've done</span></h3>
+          {higherStudies.map((entry, i) => (
+            <div key={entry.id ?? `new-${i}`} className="field" style={{ border: '1px solid var(--border)', borderRadius: 'var(--r-sm)', padding: 14, marginBottom: 12 }}>
+              <FloatingField label="Degree" hint="e.g. MS, MBA, PhD" value={entry.degree_name} onChange={(v) => updateHigherStudy(i, { degree_name: v })} />
+              <FloatingField label="Institution" hint="optional" value={entry.institution} onChange={(v) => updateHigherStudy(i, { institution: v })} />
+              <div className="two-col">
+                <FloatingField label="Start year" hint="optional" type="number" value={entry.start_year} onChange={(v) => updateHigherStudy(i, { start_year: v })} />
+                <FloatingField label="Finish year" type="number" value={entry.finish_year} onChange={(v) => updateHigherStudy(i, { finish_year: v })} />
+              </div>
+              <button type="button" onClick={() => removeHigherStudy(i)} className="btn btn--ghost" style={{ marginTop: 8 }}>
+                <span className="btn__inner">Remove</span>
+              </button>
+            </div>
+          ))}
+          <button type="button" onClick={addHigherStudy} className="btn btn--ghost btn--block" style={{ marginBottom: 24 }}>
+            <span className="btn__inner">+ Add a degree</span>
+          </button>
+
+          <hr style={{ border: 'none', borderBottom: '1px solid var(--border)', margin: '24px 0' }} />
+
           <h3>Current Status</h3>
           <div className="field">
             <label>What are you up to now?</label>
@@ -411,7 +551,7 @@ export default function ProfilePage() {
             </select>
           </div>
 
-          {(profile.current_status.toLowerCase().includes('studying') || profile.current_status.toLowerCase().includes('preparing')) && (
+          {(profile.current_status.toLowerCase().includes('studying') || profile.current_status.toLowerCase().includes('higher studies') || profile.current_status.toLowerCase().includes('preparing')) && (
             <FloatingField label="Expected to finish in (Year)" type="number" min={CURRENT_YEAR} max={CURRENT_YEAR + 6} value={profile.expected_finish_year} onChange={(v) => updateField('expected_finish_year', v)} />
           )}
 
@@ -422,6 +562,31 @@ export default function ProfilePage() {
             </datalist>
             <FloatingField label="Role / Designation" value={profile.designation || ''} onChange={(v) => updateField('designation', v)} />
           </div>
+
+          <h4 style={{ marginTop: 20 }}>Work Experience <span className="hint">optional — like a LinkedIn timeline</span></h4>
+          {workExperience.map((entry, i) => (
+            <div key={entry.id ?? `new-${i}`} className="field" style={{ border: '1px solid var(--border)', borderRadius: 'var(--r-sm)', padding: 14, marginBottom: 12 }}>
+              <FloatingField label="Company / Organization" value={entry.company} onChange={(v) => updateWorkExperience(i, { company: v })} />
+              <FloatingField label="Role" hint="optional" value={entry.role} onChange={(v) => updateWorkExperience(i, { role: v })} />
+              <div className="two-col">
+                <FloatingField label="Start year" hint="optional" type="number" value={entry.start_year} onChange={(v) => updateWorkExperience(i, { start_year: v })} />
+                {!entry.is_current && (
+                  <FloatingField label="End year" hint="optional" type="number" value={entry.end_year} onChange={(v) => updateWorkExperience(i, { end_year: v })} />
+                )}
+              </div>
+              <label className="cbox" style={{ marginTop: 6 }}>
+                <input type="checkbox" checked={entry.is_current} onChange={(e) => updateWorkExperience(i, { is_current: e.target.checked, end_year: '' })} />
+                <span className="cbox__mark" />
+                <span>I currently work here</span>
+              </label>
+              <button type="button" onClick={() => removeWorkExperience(i)} className="btn btn--ghost" style={{ marginTop: 8 }}>
+                <span className="btn__inner">Remove</span>
+              </button>
+            </div>
+          ))}
+          <button type="button" onClick={addWorkExperience} className="btn btn--ghost btn--block" style={{ marginBottom: 24 }}>
+            <span className="btn__inner">+ Add work experience</span>
+          </button>
 
           <FloatingField label="LinkedIn Profile URL" type="url" value={profile.linkedin_url || ''} onChange={(v) => updateField('linkedin_url', v)} />
           <FloatingField label="Personal Email" type="email" value={profile.personal_email} onChange={(v) => updateField('personal_email', v)} />

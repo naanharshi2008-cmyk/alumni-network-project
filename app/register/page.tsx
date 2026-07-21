@@ -760,7 +760,7 @@ function StepNow({ form, update, orgOptions }: StepProps & { orgOptions: string[
             style={{ marginTop: 10 }}
           />
         )}
-        {(form.current_status.toLowerCase().includes('studying') || form.current_status.toLowerCase().includes('preparing')) && (
+        {(form.current_status.toLowerCase().includes('studying') || form.current_status.toLowerCase().includes('higher studies') || form.current_status.toLowerCase().includes('preparing')) && (
           <FloatingField
             label="Expected to finish in"
             hint="year, optional"
@@ -1264,10 +1264,22 @@ function StepBar({ step }: { step: number }) {
 }
 
 function SuccessScreen() {
-  const shareUrl = typeof window !== 'undefined' ? window.location.origin + '/login' : '';
-  const shareText = 'Register yourself on the Veveaham Alumni site!';
+  const [copied, setCopied] = useState(false);
+  const shareUrl = typeof window !== 'undefined' ? window.location.origin + '/register' : '';
+  const shareText = 'Join the Veveaham Alumni network — add your own journey here:';
   const whatsapp = `https://wa.me/?text=${encodeURIComponent(shareText + ' ' + shareUrl)}`;
-  const email = `mailto:?subject=${encodeURIComponent('Veveaham Alumni Registration')}&body=${encodeURIComponent(shareText + '\n\n' + shareUrl)}`;
+  const email = `mailto:?subject=${encodeURIComponent('Join the Veveaham Alumni network')}&body=${encodeURIComponent(shareText + '\n\n' + shareUrl)}`;
+
+  async function copyLink() {
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard API can fail (older browsers, no HTTPS) -- fail quietly,
+      // the link is still shown in the field for a manual copy.
+    }
+  }
 
   return (
     <main className="container container--narrow">
@@ -1279,6 +1291,23 @@ function SuccessScreen() {
         </p>
         <div className="chips" style={{ justifyContent: 'center', marginTop: 16 }}>
           <a className="btn btn--primary" href="/login">Go to Login 🔑</a>
+        </div>
+
+        <hr style={{ border: 'none', borderBottom: '1px solid var(--border)', margin: '28px 0 20px' }} />
+
+        <h3 style={{ marginBottom: 4 }}>Invite your batchmates</h3>
+        <p className="hint" style={{ marginBottom: 14 }}>The more seniors who join, the more useful this is for juniors.</p>
+
+        <div className="field" style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+          <input readOnly value={shareUrl} style={{ flex: 1 }} onFocus={(e) => e.target.select()} />
+          <button type="button" onClick={copyLink} className="btn btn--ghost">
+            <span className="btn__inner">{copied ? '✓ Copied' : 'Copy link'}</span>
+          </button>
+        </div>
+
+        <div className="chips" style={{ justifyContent: 'center' }}>
+          <a className="btn btn--ghost" href={whatsapp} target="_blank" rel="noopener noreferrer">Share on WhatsApp</a>
+          <a className="btn btn--ghost" href={email}>Share via Email</a>
         </div>
       </div>
     </main>
