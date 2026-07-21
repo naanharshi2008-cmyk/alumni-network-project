@@ -1318,24 +1318,54 @@ function SuccessScreen() {
   </div>
 </div>
         <div className="chips" style={{ justifyContent: 'center', marginTop: 16 }}>
-          <a className="btn btn--primary" href="/login">Go to Login 🔑</a>
-        </div>
+          <div className="success-login">
+  <a className="success-login-btn" href="/login">
+    Continue to Login →
+  </a>
+</div>
 
         <hr style={{ border: 'none', borderBottom: '1px solid var(--border)', margin: '28px 0 20px' }} />
 
-        <h3 style={{ marginBottom: 4 }}>Invite your batchmates</h3>
-        <p className="hint" style={{ marginBottom: 14 }}>The more seniors who join, the more useful this is for juniors.</p>
+        <h3 style={{ marginBottom: 4 }}>Help grow the alumni network</h3>
 
-        <div className="field" style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-          <input readOnly value={shareUrl} style={{ flex: 1 }} onFocus={(e) => e.target.select()} />
-          <button type="button" onClick={copyLink} className="btn btn--ghost">
-            <span className="btn__inner">{copied ? '✓ Copied' : 'Copy link'}</span>
-          </button>
-        </div>
+<p className="hint" style={{ marginBottom: 14 }}>
+  Invite your classmates and help build a stronger alumni community.
+</p>
+
+        <div className="share-row">
+
+  <div className="share-link">
+    🔗 Alumni Invite Link
+  </div>
+
+  <button
+    type="button"
+    onClick={copyLink}
+    className="btn btn--ghost"
+  >
+    <span className="btn__inner">
+      {copied ? '✓ Copied' : 'Copy Link'}
+    </span>
+  </button>
+
+</div>
 
         <div className="chips" style={{ justifyContent: 'center' }}>
-          <a className="btn btn--ghost" href={whatsapp} target="_blank" rel="noopener noreferrer">Share on WhatsApp</a>
-          <a className="btn btn--ghost" href={email}>Share via Email</a>
+          <a
+  className="btn btn--ghost"
+  href={whatsapp}
+  target="_blank"
+  rel="noopener noreferrer"
+>
+  🟢 WhatsApp
+</a>
+
+<a
+  className="btn btn--ghost"
+  href={email}
+>
+  ✉️ Email
+</a>
         </div>
       </div>
     </main>

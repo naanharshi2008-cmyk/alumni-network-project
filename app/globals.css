@@ -892,3 +892,15 @@ textarea { min-height: 84px; resize: vertical; }
   font-weight:700;
   flex-shrink:0;
 }
+.share-row{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:12px;
+    margin-bottom:18px;
+}
+
+.share-link{
+    color:var(--muted);
+    font-weight:600;
+}
