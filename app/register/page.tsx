@@ -1317,8 +1317,7 @@ function SuccessScreen() {
     <span>3.</span> You can log in anytime using your username and password.
   </div>
 </div>
-        <div className="chips" style={{ justifyContent: 'center', marginTop: 16 }}>
-          <div className="success-login">
+        <div className="success-login">
   <a className="success-login-btn" href="/login">
     Continue to Login →
   </a>
