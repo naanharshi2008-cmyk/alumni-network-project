@@ -67,7 +67,7 @@ const initialForm: FormState = {
   full_name: '',
   username: '',
   password_val: '',
-  school_name: 'Veveaham Hr. Sec. School',
+  school_name: 'Veveaham Group Of Schools',
   show_photo: 'no',
   photo_file: null,
   class_of: '',
@@ -1284,11 +1284,39 @@ function SuccessScreen() {
   return (
     <main className="container container--narrow">
       <div className="card fade-up" style={{ textAlign: 'center' }}>
-        <div style={{ fontSize: 56, animation: 'pop 0.5s var(--ease)' }}>🎉</div>
-        <h1>You&apos;re in!</h1>
-        <p className="subtitle">
-          Your account has been created and your profile is pending admin approval. You can log in using your username and password.
-        </p>
+        <div className="success-icon">
+  <span>✓</span>
+</div>
+
+<h1 className="success-title">
+  Registration Successful
+</h1>
+
+<p className="success-subtitle">
+  Welcome to the Veveaham Alumni Network.
+</p>
+
+<p className="subtitle">
+  Your profile has been submitted successfully and is awaiting admin approval.
+  <br />
+  You can log in anytime using your username and password.
+</p>
+
+<div className="success-next">
+  <h3>What happens next?</h3>
+
+  <div className="next-item">
+    <span>1.</span> Your profile will be reviewed by an administrator.
+  </div>
+
+  <div className="next-item">
+    <span>2.</span> Once approved, you'll appear in the alumni directory.
+  </div>
+
+  <div className="next-item">
+    <span>3.</span> You can log in anytime using your username and password.
+  </div>
+</div>
         <div className="chips" style={{ justifyContent: 'center', marginTop: 16 }}>
           <a className="btn btn--primary" href="/login">Go to Login 🔑</a>
         </div>
