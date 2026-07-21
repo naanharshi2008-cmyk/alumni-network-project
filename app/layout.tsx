@@ -53,7 +53,7 @@ function Footer() {
             <span>Veveaham Alumni</span>
           </div>
           <p className="footer__tag">
-            A living record of every senior from Veveaham Hr. Sec. School, where
+            A living record of every senior from Veveaham group of Schools, where
             they studied, and what they went on to build.
           </p>
         </div>
@@ -68,7 +68,7 @@ function Footer() {
           <div className="footer__col">
             <h4>About</h4>
             <span style={{ display: 'block', color: 'var(--text-muted)', fontSize: '0.9rem', padding: '3px 0' }}>
-              Veveaham Hr. Sec. School
+              Veveaham Group of Schools
             </span>
             <span style={{ display: 'block', color: 'var(--text-muted)', fontSize: '0.9rem', padding: '3px 0' }}>
               Alumni Network
