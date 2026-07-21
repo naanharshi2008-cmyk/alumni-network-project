@@ -468,6 +468,27 @@ textarea { min-height: 84px; resize: vertical; }
 .cbox input:checked ~ .cbox__mark::after { display: block; animation: splash 0.3s forwards; }
 .cbox:active .cbox__mark { transform: scale(0.9) translateY(3px); box-shadow: 0px 0px 0px rgba(0, 0, 0, 0.6); }
 
+.cbox-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.entry-card {
+  position: relative;
+  background: var(--grad-soft);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-lg);
+  padding: 18px;
+  margin-bottom: 14px;
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow 0.2s var(--ease), border-color 0.2s var(--ease);
+}
+.entry-card:hover { border-color: var(--gold); box-shadow: var(--shadow); }
+
 /* ---------- Hero ----------------------------------------------------------- */
 
 .hero { text-align: center; padding: clamp(40px, 9vw, 96px) 0 40px; position: relative; isolation: isolate; }

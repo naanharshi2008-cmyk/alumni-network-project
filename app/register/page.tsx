@@ -510,11 +510,11 @@ export default function RegisterPage() {
             {step === 0 && <StepAccount form={form} update={update} />}
             {step === 1 && <StepYou form={form} update={update} />}
             {step === 2 && <StepStudies form={form} update={update} />}
-            {step === 3 && <StepNow form={form} update={update} orgOptions={orgOptions} />}
-            {step === 4 && (
-              <StepAdvice
+            {step === 3 && (
+              <StepNow
                 form={form}
                 update={update}
+                orgOptions={orgOptions}
                 showHigherStudies={showHigherStudies}
                 setShowHigherStudies={setShowHigherStudies}
                 higherStudies={higherStudies}
@@ -529,7 +529,8 @@ export default function RegisterPage() {
                 removeWorkExperience={removeWorkExperience}
               />
             )}
-          </div>
+            {step === 4 && <StepAdvice form={form} update={update} />}
+          </iv>
 
           <div className="wizard-nav">
             {step > 0 && (
@@ -740,7 +741,11 @@ function StepStudies({ form, update }: StepProps) {
   );
 }
 
-function StepNow({ form, update, orgOptions }: StepProps & { orgOptions: string[] }) {
+function StepNow({
+  form, update, orgOptions,
+  showHigherStudies, setShowHigherStudies, higherStudies, updateHigherStudy, addHigherStudy, removeHigherStudy,
+  showWorkExperience, setShowWorkExperience, workExperience, updateWorkExperience, addWorkExperience, removeWorkExperience,
+}: StepProps & { orgOptions: string[] } & OptionalSectionsProps) { 
   return (
     <>
       <h2 className="step-title">What are you up to now? 💼</h2>
@@ -784,6 +789,69 @@ function StepNow({ form, update, orgOptions }: StepProps & { orgOptions: string[
         <FloatingField label="Role / Designation" hint="optional" value={form.designation} onChange={(v) => update('designation', v)} />
       </div>
 
+      <div className="field" style={{ marginTop: 20 }}>
+        <label>Higher studies <span className="hint">optional</span></label>
+        <Chips options={['Add later', 'Add now']} value={showHigherStudies ? 'Add now' : 'Add later'} onChange={(v) => setShowHigherStudies(v === 'Add now')} />
+        {showHigherStudies && (
+          <div style={{ marginTop: 10 }}>
+            {higherStudies.map((entry, i) => (
+              <div key={i} className="entry-card">
+                <FloatingField label="Degree" hint="e.g. MS, MBA, PhD" value={entry.degree_name} onChange={(v) => updateHigherStudy(i, { degree_name: v })} />
+                <FloatingField label="Institution" hint="optional" value={entry.institution} onChange={(v) => updateHigherStudy(i, { institution: v })} style={{ marginTop: 8 }} />
+                <div className="two-col" style={{ marginTop: 8 }}>
+                  <FloatingField label="Start year" hint="optional" type="number" value={entry.start_year} onChange={(v) => updateHigherStudy(i, { start_year: v })} />
+                  <FloatingField label="Finish year" type="number" value={entry.finish_year} onChange={(v) => updateHigherStudy(i, { finish_year: v })} />
+                </div>
+                {higherStudies.length > 1 && (
+                  <button type="button" onClick={() => removeHigherStudy(i)} className="btn btn--ghost" style={{ marginTop: 10 }}>
+                    <span className="btn__inner">Remove</span>
+                  </button>
+                )}
+              </div>
+            ))}
+            <button type="button" onClick={addHigherStudy} className="btn btn--ghost btn--block">
+              <span className="btn__inner">+ Add another degree</span>
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div className="field" style={{ marginTop: 20 }}>
+        <label>Work experience <span className="hint">optional</span></label>
+        <Chips options={['Add later', 'Add now']} value={showWorkExperience ? 'Add now' : 'Add later'} onChange={(v) => setShowWorkExperience(v === 'Add now')} />
+        {showWorkExperience && (
+          <div style={{ marginTop: 10 }}>
+            {workExperience.map((entry, i) => (
+              <div key={i} className="entry-card">
+                <FloatingField label="Company / Organization" value={entry.company} onChange={(v) => updateWorkExperience(i, { company: v })} />
+                <FloatingField label="Role" hint="optional" value={entry.role} onChange={(v) => updateWorkExperience(i, { role: v })} style={{ marginTop: 8 }} />
+                <div className="two-col" style={{ marginTop: 8 }}>
+                  <FloatingField label="Start year" hint="optional" type="number" value={entry.start_year} onChange={(v) => updateWorkExperience(i, { start_year: v })} />
+                  {!entry.is_current && (
+                    <FloatingField label="End year" hint="optional" type="number" value={entry.end_year} onChange={(v) => updateWorkExperience(i, { end_year: v })} />
+                  )}
+                </div>
+                <label className="cbox-row" style={{ marginTop: 10 }}>
+                  <span className="cbox">
+                    <input type="checkbox" checked={entry.is_current} onChange={(e) => updateWorkExperience(i, { is_current: e.target.checked, end_year: '' })} />
+                    <span className="cbox__mark" />
+                  </span>
+                  <span>I currently work here</span>
+                </label>
+                {workExperience.length > 1 && (
+                  <button type="button" onClick={() => removeWorkExperience(i)} className="btn btn--ghost" style={{ marginTop: 10 }}>
+                    <span className="btn__inner">Remove</span>
+                  </button>
+                )}
+              </div>
+            ))}
+            <button type="button" onClick={addWorkExperience} className="btn btn--ghost btn--block">
+              <span className="btn__inner">+ Add another job</span>
+            </button>
+          </div>
+        )}
+      </div>
+
       <FloatingField label="LinkedIn" hint="optional, shown publicly" type="url" value={form.linkedin_url} onChange={(v) => update('linkedin_url', v)} />
 
       <FloatingField label="Email" hint="never shown publicly" type="email" value={form.personal_email} onChange={(v) => update('personal_email', v)} />
@@ -817,11 +885,7 @@ interface OptionalSectionsProps {
   removeWorkExperience: (i: number) => void;
 }
 
-function StepAdvice({
-  form, update,
-  showHigherStudies, setShowHigherStudies, higherStudies, updateHigherStudy, addHigherStudy, removeHigherStudy,
-  showWorkExperience, setShowWorkExperience, workExperience, updateWorkExperience, addWorkExperience, removeWorkExperience,
-}: StepProps & OptionalSectionsProps) {
+function StepAdvice({ form, update }: StepProps) {
   return (
     <>
       <h2 className="step-title">Almost there ✨</h2>
@@ -850,70 +914,6 @@ function StepAdvice({
           onChange={(e) => update('message_1', e.target.value)} 
           placeholder="e.g. don't stress over one bad exam, or start applying early..." 
         />
-      </div>
-
-      {/* Two optional, collapsed-by-default sections. Picking "Add now"
-          reveals the mini form; "I'll add later" keeps things tidy and
-          points people to their profile instead. */}
-      <div className="field" style={{ marginTop: 20 }}>
-        <label>Higher studies <span className="hint">optional</span></label>
-        <Chips options={['Add later', 'Add now']} value={showHigherStudies ? 'Add now' : 'Add later'} onChange={(v) => setShowHigherStudies(v === 'Add now')} />
-        {showHigherStudies && (
-          <div style={{ marginTop: 10 }}>
-            {higherStudies.map((entry, i) => (
-              <div key={i} style={{ border: '1px solid var(--border)', borderRadius: 'var(--r-sm)', padding: 12, marginBottom: 10 }}>
-                <FloatingField label="Degree" hint="e.g. MS, MBA, PhD" value={entry.degree_name} onChange={(v) => updateHigherStudy(i, { degree_name: v })} />
-                <FloatingField label="Institution" hint="optional" value={entry.institution} onChange={(v) => updateHigherStudy(i, { institution: v })} style={{ marginTop: 8 }} />
-                <div className="two-col" style={{ marginTop: 8 }}>
-                  <FloatingField label="Start year" hint="optional" type="number" value={entry.start_year} onChange={(v) => updateHigherStudy(i, { start_year: v })} />
-                  <FloatingField label="Finish year" type="number" value={entry.finish_year} onChange={(v) => updateHigherStudy(i, { finish_year: v })} />
-                </div>
-                {higherStudies.length > 1 && (
-                  <button type="button" onClick={() => removeHigherStudy(i)} className="btn btn--ghost" style={{ marginTop: 8 }}>
-                    <span className="btn__inner">Remove</span>
-                  </button>
-                )}
-              </div>
-            ))}
-            <button type="button" onClick={addHigherStudy} className="btn btn--ghost btn--block">
-              <span className="btn__inner">+ Add another degree</span>
-            </button>
-          </div>
-        )}
-      </div>
-
-      <div className="field" style={{ marginTop: 20 }}>
-        <label>Work experience <span className="hint">optional</span></label>
-        <Chips options={['Add later', 'Add now']} value={showWorkExperience ? 'Add now' : 'Add later'} onChange={(v) => setShowWorkExperience(v === 'Add now')} />
-        {showWorkExperience && (
-          <div style={{ marginTop: 10 }}>
-            {workExperience.map((entry, i) => (
-              <div key={i} style={{ border: '1px solid var(--border)', borderRadius: 'var(--r-sm)', padding: 12, marginBottom: 10 }}>
-                <FloatingField label="Company / Organization" value={entry.company} onChange={(v) => updateWorkExperience(i, { company: v })} />
-                <FloatingField label="Role" hint="optional" value={entry.role} onChange={(v) => updateWorkExperience(i, { role: v })} style={{ marginTop: 8 }} />
-                <div className="two-col" style={{ marginTop: 8 }}>
-                  <FloatingField label="Start year" hint="optional" type="number" value={entry.start_year} onChange={(v) => updateWorkExperience(i, { start_year: v })} />
-                  {!entry.is_current && (
-                    <FloatingField label="End year" hint="optional" type="number" value={entry.end_year} onChange={(v) => updateWorkExperience(i, { end_year: v })} />
-                  )}
-                </div>
-                <label className="cbox" style={{ marginTop: 6 }}>
-                  <input type="checkbox" checked={entry.is_current} onChange={(e) => updateWorkExperience(i, { is_current: e.target.checked, end_year: '' })} />
-                  <span className="cbox__mark" />
-                  <span>I currently work here</span>
-                </label>
-                {workExperience.length > 1 && (
-                  <button type="button" onClick={() => removeWorkExperience(i)} className="btn btn--ghost" style={{ marginTop: 8 }}>
-                    <span className="btn__inner">Remove</span>
-                  </button>
-                )}
-              </div>
-            ))}
-            <button type="button" onClick={addWorkExperience} className="btn btn--ghost btn--block">
-              <span className="btn__inner">+ Add another job</span>
-            </button>
-          </div>
-        )}
       </div>
 
       <div className="consent" style={{ marginTop: 20 }}>
