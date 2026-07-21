@@ -44,6 +44,25 @@ interface FormState {
   consent_given: boolean;
 }
 
+// Same shape as the Profile page's repeatable entries -- kept optional here
+// so registration itself stays quick; people can also add these later from
+// their profile.
+interface HigherStudyEntry {
+  degree_name: string;
+  institution: string;
+  start_year: string;
+  finish_year: string;
+}
+interface WorkExperienceEntry {
+  company: string;
+  role: string;
+  start_year: string;
+  end_year: string;
+  is_current: boolean;
+}
+const emptyHigherStudy = (): HigherStudyEntry => ({ degree_name: '', institution: '', start_year: '', finish_year: '' });
+const emptyWorkExperience = (): WorkExperienceEntry => ({ company: '', role: '', start_year: '', end_year: '', is_current: false });
+
 const initialForm: FormState = {
   full_name: '',
   username: '',
@@ -64,16 +83,16 @@ const initialForm: FormState = {
   degree: '',
   degree_other: '',
   branch: '',
-  field: 'Engineering',
+  field: '',
   field_other: '',
   admission_mode: 'Entrance Exam',
   admission_mode_other: '',
-  admission_route: 'JEE Main',
+  admission_route: '',
   admission_route_other: '',
   admission_rank: '',
   board_marks: '',
   board_cutoff: '',
-  current_status: 'Studying UG',
+  current_status: '',
   current_status_other: '',
   expected_finish_year: '',
   currently_at: '',
@@ -114,6 +133,33 @@ export default function RegisterPage() {
 
   const [orgOptions, setOrgOptions] = useState<string[]>(commonOrganizations);
 
+  // Optional "add now" sections -- collapsed by default so the form stays
+  // quick; people can also add these later from their profile instead.
+  const [showHigherStudies, setShowHigherStudies] = useState(false);
+  const [higherStudies, setHigherStudies] = useState<HigherStudyEntry[]>([emptyHigherStudy()]);
+  const [showWorkExperience, setShowWorkExperience] = useState(false);
+  const [workExperience, setWorkExperience] = useState<WorkExperienceEntry[]>([emptyWorkExperience()]);
+
+  function updateHigherStudy(index: number, patch: Partial<HigherStudyEntry>) {
+    setHigherStudies((prev) => prev.map((entry, i) => (i === index ? { ...entry, ...patch } : entry)));
+  }
+  function addHigherStudy() {
+    setHigherStudies((prev) => [...prev, emptyHigherStudy()]);
+  }
+  function removeHigherStudy(index: number) {
+    setHigherStudies((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  function updateWorkExperience(index: number, patch: Partial<WorkExperienceEntry>) {
+    setWorkExperience((prev) => prev.map((entry, i) => (i === index ? { ...entry, ...patch } : entry)));
+  }
+  function addWorkExperience() {
+    setWorkExperience((prev) => [...prev, emptyWorkExperience()]);
+  }
+  function removeWorkExperience(index: number) {
+    setWorkExperience((prev) => prev.filter((_, i) => i !== index));
+  }
+
   useEffect(() => {
     if (!isSupabaseConfigured) return;
     (async () => {
@@ -151,6 +197,9 @@ export default function RegisterPage() {
     if (s === 2) {
       if (!form.college_name.trim()) return 'Tell us which college or university you attended.';
       if (!form.degree.trim()) return 'Pick or type your degree.';
+      if (!form.field.trim()) return 'Select your field of study.';
+      if (form.admission_mode === 'Entrance Exam' && !form.admission_route.trim())
+        return 'Select which entrance exam you took.';
       
       if (form.admission_mode === 'Entrance Exam' && form.admission_rank.trim()) {
         const rank = parseInt(form.admission_rank, 10);
@@ -162,6 +211,7 @@ export default function RegisterPage() {
       }
     }
     if (s === 3) {
+      if (!form.current_status.trim()) return 'Please select your current status.';
       if (form.linkedin_url.trim() && !URL_RE.test(form.linkedin_url.trim()))
         return 'Enter a valid LinkedIn URL, starting with https://';
       if (!form.personal_email.trim() || !EMAIL_RE.test(form.personal_email.trim()))
@@ -338,7 +388,7 @@ export default function RegisterPage() {
       const finalStatus = form.current_status === 'Other' && form.current_status_other.trim() ? form.current_status_other.trim() : form.current_status;
 
       // 5. Insert profile row with link to auth user
-      const { error: insErr } = await supabase.from('alumni').insert({
+      const { data: insertedAlumni, error: insErr } = await supabase.from('alumni').insert({
         user_id: userId,
         username: form.username.trim(),
         full_name: form.full_name.trim(),
@@ -370,9 +420,44 @@ export default function RegisterPage() {
         consent_given: true,
         approval_status: 'pending',
         modification_status: 'none'
-      });
+      }).select('id').single();
 
       if (insErr) throw insErr;
+
+      // 5b. If they chose "Add now" for higher studies and/or work
+      // experience, save those too. Anything left blank (or if they picked
+      // "add later") is simply skipped -- they can fill it in from their
+      // profile afterwards.
+      const newAlumniId = insertedAlumni?.id;
+      if (newAlumniId && showHigherStudies) {
+        const studiesToInsert = higherStudies
+          .filter((s) => s.degree_name.trim())
+          .map((s) => ({
+            alumni_id: newAlumniId,
+            degree_name: s.degree_name.trim(),
+            institution: s.institution.trim() || null,
+            start_year: s.start_year ? parseInt(s.start_year, 10) : null,
+            finish_year: s.finish_year ? parseInt(s.finish_year, 10) : null,
+          }));
+        if (studiesToInsert.length) {
+          await supabase.from('higher_studies').insert(studiesToInsert);
+        }
+      }
+      if (newAlumniId && showWorkExperience) {
+        const workToInsert = workExperience
+          .filter((w) => w.company.trim())
+          .map((w) => ({
+            alumni_id: newAlumniId,
+            company: w.company.trim(),
+            role: w.role.trim() || null,
+            start_year: w.start_year ? parseInt(w.start_year, 10) : null,
+            end_year: w.is_current ? null : (w.end_year ? parseInt(w.end_year, 10) : null),
+            is_current: w.is_current,
+          }));
+        if (workToInsert.length) {
+          await supabase.from('work_experience').insert(workToInsert);
+        }
+      }
 
       // Notify admin
       fetch('/api/notify-admin', {
@@ -426,7 +511,24 @@ export default function RegisterPage() {
             {step === 1 && <StepYou form={form} update={update} />}
             {step === 2 && <StepStudies form={form} update={update} />}
             {step === 3 && <StepNow form={form} update={update} orgOptions={orgOptions} />}
-            {step === 4 && <StepAdvice form={form} update={update} />}
+            {step === 4 && (
+              <StepAdvice
+                form={form}
+                update={update}
+                showHigherStudies={showHigherStudies}
+                setShowHigherStudies={setShowHigherStudies}
+                higherStudies={higherStudies}
+                updateHigherStudy={updateHigherStudy}
+                addHigherStudy={addHigherStudy}
+                removeHigherStudy={removeHigherStudy}
+                showWorkExperience={showWorkExperience}
+                setShowWorkExperience={setShowWorkExperience}
+                workExperience={workExperience}
+                updateWorkExperience={updateWorkExperience}
+                addWorkExperience={addWorkExperience}
+                removeWorkExperience={removeWorkExperience}
+              />
+            )}
           </div>
 
           <div className="wizard-nav">
@@ -539,6 +641,7 @@ function StepStudies({ form, update }: StepProps) {
       <div className="field">
         <label>Broad area</label>
         <select value={form.field} onChange={(e) => update('field', e.target.value)}>
+          <option value="" disabled hidden>Select your field</option>
           {CATEGORIES.map((c) => <option key={c.key} value={c.label}>{c.emoji} {c.label}</option>)}
         </select>
         {form.field === 'Other' && (
@@ -646,6 +749,7 @@ function StepNow({ form, update, orgOptions }: StepProps & { orgOptions: string[
       <div className="field">
         <label>Current status</label>
         <select value={form.current_status} onChange={(e) => update('current_status', e.target.value)}>
+          <option value="" disabled hidden>Select your current status</option>
           {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
         {form.current_status === 'Other' && (
@@ -698,7 +802,26 @@ function StepNow({ form, update, orgOptions }: StepProps & { orgOptions: string[
   );
 }
 
-function StepAdvice({ form, update }: StepProps) {
+interface OptionalSectionsProps {
+  showHigherStudies: boolean;
+  setShowHigherStudies: (v: boolean) => void;
+  higherStudies: HigherStudyEntry[];
+  updateHigherStudy: (i: number, patch: Partial<HigherStudyEntry>) => void;
+  addHigherStudy: () => void;
+  removeHigherStudy: (i: number) => void;
+  showWorkExperience: boolean;
+  setShowWorkExperience: (v: boolean) => void;
+  workExperience: WorkExperienceEntry[];
+  updateWorkExperience: (i: number, patch: Partial<WorkExperienceEntry>) => void;
+  addWorkExperience: () => void;
+  removeWorkExperience: (i: number) => void;
+}
+
+function StepAdvice({
+  form, update,
+  showHigherStudies, setShowHigherStudies, higherStudies, updateHigherStudy, addHigherStudy, removeHigherStudy,
+  showWorkExperience, setShowWorkExperience, workExperience, updateWorkExperience, addWorkExperience, removeWorkExperience,
+}: StepProps & OptionalSectionsProps) {
   return (
     <>
       <h2 className="step-title">Almost there ✨</h2>
@@ -729,7 +852,71 @@ function StepAdvice({ form, update }: StepProps) {
         />
       </div>
 
-      <div className="consent">
+      {/* Two optional, collapsed-by-default sections. Picking "Add now"
+          reveals the mini form; "I'll add later" keeps things tidy and
+          points people to their profile instead. */}
+      <div className="field" style={{ marginTop: 20 }}>
+        <label>Higher studies <span className="hint">optional</span></label>
+        <Chips options={['Add later', 'Add now']} value={showHigherStudies ? 'Add now' : 'Add later'} onChange={(v) => setShowHigherStudies(v === 'Add now')} />
+        {showHigherStudies && (
+          <div style={{ marginTop: 10 }}>
+            {higherStudies.map((entry, i) => (
+              <div key={i} style={{ border: '1px solid var(--border)', borderRadius: 'var(--r-sm)', padding: 12, marginBottom: 10 }}>
+                <FloatingField label="Degree" hint="e.g. MS, MBA, PhD" value={entry.degree_name} onChange={(v) => updateHigherStudy(i, { degree_name: v })} />
+                <FloatingField label="Institution" hint="optional" value={entry.institution} onChange={(v) => updateHigherStudy(i, { institution: v })} style={{ marginTop: 8 }} />
+                <div className="two-col" style={{ marginTop: 8 }}>
+                  <FloatingField label="Start year" hint="optional" type="number" value={entry.start_year} onChange={(v) => updateHigherStudy(i, { start_year: v })} />
+                  <FloatingField label="Finish year" type="number" value={entry.finish_year} onChange={(v) => updateHigherStudy(i, { finish_year: v })} />
+                </div>
+                {higherStudies.length > 1 && (
+                  <button type="button" onClick={() => removeHigherStudy(i)} className="btn btn--ghost" style={{ marginTop: 8 }}>
+                    <span className="btn__inner">Remove</span>
+                  </button>
+                )}
+              </div>
+            ))}
+            <button type="button" onClick={addHigherStudy} className="btn btn--ghost btn--block">
+              <span className="btn__inner">+ Add another degree</span>
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div className="field" style={{ marginTop: 20 }}>
+        <label>Work experience <span className="hint">optional</span></label>
+        <Chips options={['Add later', 'Add now']} value={showWorkExperience ? 'Add now' : 'Add later'} onChange={(v) => setShowWorkExperience(v === 'Add now')} />
+        {showWorkExperience && (
+          <div style={{ marginTop: 10 }}>
+            {workExperience.map((entry, i) => (
+              <div key={i} style={{ border: '1px solid var(--border)', borderRadius: 'var(--r-sm)', padding: 12, marginBottom: 10 }}>
+                <FloatingField label="Company / Organization" value={entry.company} onChange={(v) => updateWorkExperience(i, { company: v })} />
+                <FloatingField label="Role" hint="optional" value={entry.role} onChange={(v) => updateWorkExperience(i, { role: v })} style={{ marginTop: 8 }} />
+                <div className="two-col" style={{ marginTop: 8 }}>
+                  <FloatingField label="Start year" hint="optional" type="number" value={entry.start_year} onChange={(v) => updateWorkExperience(i, { start_year: v })} />
+                  {!entry.is_current && (
+                    <FloatingField label="End year" hint="optional" type="number" value={entry.end_year} onChange={(v) => updateWorkExperience(i, { end_year: v })} />
+                  )}
+                </div>
+                <label className="cbox" style={{ marginTop: 6 }}>
+                  <input type="checkbox" checked={entry.is_current} onChange={(e) => updateWorkExperience(i, { is_current: e.target.checked, end_year: '' })} />
+                  <span className="cbox__mark" />
+                  <span>I currently work here</span>
+                </label>
+                {workExperience.length > 1 && (
+                  <button type="button" onClick={() => removeWorkExperience(i)} className="btn btn--ghost" style={{ marginTop: 8 }}>
+                    <span className="btn__inner">Remove</span>
+                  </button>
+                )}
+              </div>
+            ))}
+            <button type="button" onClick={addWorkExperience} className="btn btn--ghost btn--block">
+              <span className="btn__inner">+ Add another job</span>
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div className="consent" style={{ marginTop: 20 }}>
         <label className="cbox">
           <input type="checkbox" id="consent" checked={form.consent_given} onChange={(e) => update('consent_given', e.target.checked)} />
           <span className="cbox__mark" />
