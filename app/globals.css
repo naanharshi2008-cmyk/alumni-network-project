@@ -922,3 +922,22 @@ textarea { min-height: 84px; resize: vertical; }
 }
 .tag-add-btn:disabled { cursor: default; }
 .tag-add-btn--done { border-style: solid; border-color: var(--emerald); color: var(--emerald); opacity: 0.9; }
+.icon-share-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 46px; height: 46px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border-strong);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  transition: all 0.2s var(--ease);
+}
+.icon-share-btn:hover {
+  transform: translateY(-3px);
+  border-color: var(--gold);
+  color: var(--gold);
+  box-shadow: 0 10px 24px -10px var(--ring);
+}
+.icon-share-btn svg {
+  width: 22px;
+  height: 22px;
+}

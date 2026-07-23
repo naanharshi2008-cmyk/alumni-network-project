@@ -38,6 +38,25 @@ type AlumniRow = {
 
 type Tab = 'registrations' | 'edits';
 
+type HigherStudyRow = {
+  id: string;
+  alumni_id: string;
+  degree_name: string;
+  institution: string | null;
+  start_year: number | null;
+  finish_year: number | null;
+};
+
+type WorkExperienceRow = {
+  id: string;
+  alumni_id: string;
+  company: string;
+  role: string | null;
+  start_year: number | null;
+  end_year: number | null;
+  is_current: boolean;
+};
+
 const FIELD_LABELS: Record<string, string> = {
   full_name: 'Full Name', school_name: 'School', class_of: 'Class Of',
   stream: 'Stream', degree: 'Degree', branch: 'Branch', field: 'Field',
@@ -64,6 +83,8 @@ export default function AdminPage() {
   const [tab, setTab] = useState<Tab>('registrations');
   const [pending, setPending] = useState<AlumniRow[]>([]);
   const [pendingEdits, setPendingEdits] = useState<AlumniRow[]>([]);
+  const [higherStudiesMap, setHigherStudiesMap] = useState<Record<string, HigherStudyRow[]>>({});
+  const [workExperienceMap, setWorkExperienceMap] = useState<Record<string, WorkExperienceRow[]>>({});
   const [loading, setLoading] = useState(true);
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [actionError, setActionError] = useState('');
@@ -114,6 +135,31 @@ export default function AdminPage() {
     if (regRes.error) setActionError('Could not load registrations: ' + regRes.error.message);
     else setPending((regRes.data as AlumniRow[]) || []);
     if (editRes.data) setPendingEdits((editRes.data as AlumniRow[]) || []);
+
+    const allIds = [
+      ...((regRes.data as AlumniRow[]) || []),
+      ...((editRes.data as AlumniRow[]) || []),
+    ].map((p) => p.id);
+    if (allIds.length) {
+      const [studiesRes, workRes] = await Promise.all([
+        supabase.from('higher_studies').select('*').in('alumni_id', allIds),
+        supabase.from('work_experience').select('*').in('alumni_id', allIds),
+      ]);
+      if (studiesRes.data) {
+        const grouped: Record<string, HigherStudyRow[]> = {};
+        for (const row of studiesRes.data as HigherStudyRow[]) {
+          (grouped[row.alumni_id] ??= []).push(row);
+        }
+        setHigherStudiesMap(grouped);
+      }
+      if (workRes.data) {
+        const grouped: Record<string, WorkExperienceRow[]> = {};
+        for (const row of workRes.data as WorkExperienceRow[]) {
+          (grouped[row.alumni_id] ??= []).push(row);
+        }
+        setWorkExperienceMap(grouped);
+      }
+    }
     setLoading(false);
   }
 
@@ -254,7 +300,13 @@ export default function AdminPage() {
             pending.map((person) => (
               <div key={person.id} className="card" style={{ marginBottom: 18 }}>
                 <PersonHeader person={person} existingTags={existingTags} onTagAdded={markTagAdded} />
-                <PersonDetails person={person} existingTags={existingTags} onTagAdded={markTagAdded} />
+                <PersonDetails
+                  person={person}
+                  existingTags={existingTags}
+                  onTagAdded={markTagAdded}
+                  higherStudies={higherStudiesMap[person.id]}
+                  workExperience={workExperienceMap[person.id]}
+                />
                 <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
                   <button type="button" onClick={() => handleApprove(person.id)} className="btn btn--primary">
                     <span className="btn__inner">✓ Approve</span>
@@ -396,11 +448,13 @@ function PersonHeader({
 }
 
 function PersonDetails({
-  person, existingTags, onTagAdded,
+  person, existingTags, onTagAdded, higherStudies, workExperience,
 }: {
   person: AlumniRow;
   existingTags?: Record<string, Set<string>>;
   onTagAdded?: (category: string, value: string) => void;
+  higherStudies?: HigherStudyRow[];
+  workExperience?: WorkExperienceRow[];
 }) {
   const showTagButtons = !!(existingTags && onTagAdded);
   return (
@@ -429,6 +483,29 @@ function PersonDetails({
         )}
         {person.currently_at ? ` — ${person.designation || ''} at ${person.currently_at}` : ''}
       </p>
+      {!!higherStudies?.length && (
+        <div className="a-row" style={{ margin: '8px 0' }}>
+          <strong>Higher studies:</strong>
+          {higherStudies.map((s) => (
+            <div key={s.id} style={{ marginLeft: 14, fontSize: '0.9rem', color: 'var(--text-muted)' }}>
+              🎓 {s.degree_name}
+              {s.institution ? ` — ${s.institution}` : ''}
+              {(s.start_year || s.finish_year) ? ` (${s.start_year || '?'}–${s.finish_year || '?'})` : ''}
+            </div>
+          ))}
+        </div>
+      )}
+      {!!workExperience?.length && (
+        <div className="a-row" style={{ margin: '8px 0' }}>
+          <strong>Work experience:</strong>
+          {workExperience.map((w) => (
+            <div key={w.id} style={{ marginLeft: 14, fontSize: '0.9rem', color: 'var(--text-muted)' }}>
+              💼 {w.role ? `${w.role} at ` : ''}{w.company}
+              {w.start_year ? ` (${w.start_year}–${w.is_current ? 'Present' : (w.end_year || '?')})` : ''}
+            </div>
+          ))}
+        </div>
+      )}
       {person.linkedin_url && (
         <p className="a-row" style={{ margin: '4px 0' }}>
           <strong>LinkedIn:</strong>&nbsp;
