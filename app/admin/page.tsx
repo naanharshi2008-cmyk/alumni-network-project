@@ -13,6 +13,7 @@ type AlumniRow = {
   class_of: number;
   stream: string;
   school_board: string | null;
+  college_name_raw: string | null;
   degree: string | null;
   branch: string | null;
   field: string | null;

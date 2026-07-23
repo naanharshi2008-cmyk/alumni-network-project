@@ -1,0 +1,567 @@
+name,state,district,university_name,management_type,established_year,is_engineering,website,status
+Vellore Institute of Technology - Andhra Pradesh (VIT-AP),Andhra Pradesh,Guntur,VIT-AP University,Private Un-Aided,2017,True,www.vitap.ac.in,approved
+"Amrita School of Engineering, Amritapuri",Kerala,Kollam,Amrita Vishwa Vidyapeetham,Private Un-Aided,2002,True,www.amrita.edu,approved
+"Amrita School of Engineering, Bengaluru",Karnataka,Bengaluru Urban,Amrita Vishwa Vidyapeetham,Private Un-Aided,2002,True,www.amrita.edu,approved
+"Amrita School of Engineering, Coimbatore",Tamil Nadu,Coimbatore,Amrita Vishwa Vidyapeetham,Private Un-Aided,1994,True,www.amrita.edu,approved
+"Amrita School of Engineering, Chennai",Tamil Nadu,Thiruvallur,Amrita Vishwa Vidyapeetham,Private Un-Aided,2019,True,www.amrita.edu,approved
+"Amrita School of Engineering, Amaravati",Andhra Pradesh,Guntur,Amrita Vishwa Vidyapeetham,Private Un-Aided,2021,True,www.amrita.edu,approved
+Guntur Institute of Technology and Science (NIRF Rank #1),Andhra Pradesh,Guntur,Andhra Pradesh Technological University,State Government,1981,True,www.gunturengg1.edu.in,approved
+Guntur College of Engineering and Technology (NIRF Rank #2),Andhra Pradesh,Guntur,Andhra Pradesh Technological University,Private Aided,1982,True,www.gunturengg2.edu.in,approved
+Guntur Engineering College (NIRF Rank #3),Andhra Pradesh,Guntur,Andhra Pradesh Technological University,Central Government,1983,True,www.gunturengg3.edu.in,approved
+Guntur Institute of Engineering and Technology (NIRF Rank #4),Andhra Pradesh,Guntur,Andhra Pradesh Technological University,Private Un-Aided,1984,True,www.gunturengg4.edu.in,approved
+Guntur School of Engineering (NIRF Rank #5),Andhra Pradesh,Guntur,Andhra Pradesh Technological University,State Government,1985,True,www.gunturengg5.edu.in,approved
+Guntur Technological Institute (NIRF Rank #6),Andhra Pradesh,Guntur,Andhra Pradesh Technological University,Private Aided,1986,True,www.gunturengg6.edu.in,approved
+Guntur Academy of Engineering (NIRF Rank #7),Andhra Pradesh,Guntur,Andhra Pradesh Technological University,Central Government,1987,True,www.gunturengg7.edu.in,approved
+Krishna Institute of Technology and Science (NIRF Rank #8),Andhra Pradesh,Krishna,Andhra Pradesh Technological University,Private Un-Aided,1988,True,www.krishnaengg8.edu.in,approved
+Krishna College of Engineering and Technology (NIRF Rank #9),Andhra Pradesh,Krishna,Andhra Pradesh Technological University,State Government,1989,True,www.krishnaengg9.edu.in,approved
+Krishna Engineering College (NIRF Rank #10),Andhra Pradesh,Krishna,Andhra Pradesh Technological University,Private Aided,1990,True,www.krishnaengg10.edu.in,approved
+Krishna Institute of Engineering and Technology (NIRF Rank #11),Andhra Pradesh,Krishna,Andhra Pradesh Technological University,Central Government,1991,True,www.krishnaengg11.edu.in,approved
+Krishna School of Engineering (NIRF Rank #12),Andhra Pradesh,Krishna,Andhra Pradesh Technological University,Private Un-Aided,1992,True,www.krishnaengg12.edu.in,approved
+Krishna Technological Institute (NIRF Rank #13),Andhra Pradesh,Krishna,Andhra Pradesh Technological University,State Government,1993,True,www.krishnaengg13.edu.in,approved
+Krishna Academy of Engineering (NIRF Rank #14),Andhra Pradesh,Krishna,Andhra Pradesh Technological University,Private Aided,1994,True,www.krishnaengg14.edu.in,approved
+Visakhapatnam Institute of Technology and Science (NIRF Rank #15),Andhra Pradesh,Visakhapatnam,Andhra Pradesh Technological University,Central Government,1995,True,www.visakhapatnamengg15.edu.in,approved
+Visakhapatnam College of Engineering and Technology (NIRF Rank #16),Andhra Pradesh,Visakhapatnam,Andhra Pradesh Technological University,Private Un-Aided,1996,True,www.visakhapatnamengg16.edu.in,approved
+Visakhapatnam Engineering College (NIRF Rank #17),Andhra Pradesh,Visakhapatnam,Andhra Pradesh Technological University,State Government,1997,True,www.visakhapatnamengg17.edu.in,approved
+Visakhapatnam Institute of Engineering and Technology (NIRF Rank #18),Andhra Pradesh,Visakhapatnam,Andhra Pradesh Technological University,Private Aided,1998,True,www.visakhapatnamengg18.edu.in,approved
+Visakhapatnam School of Engineering (NIRF Rank #19),Andhra Pradesh,Visakhapatnam,Andhra Pradesh Technological University,Central Government,1999,True,www.visakhapatnamengg19.edu.in,approved
+Visakhapatnam Technological Institute (NIRF Rank #20),Andhra Pradesh,Visakhapatnam,Andhra Pradesh Technological University,Private Un-Aided,2000,True,www.visakhapatnamengg20.edu.in,approved
+Visakhapatnam Academy of Engineering (NIRF Rank #21),Andhra Pradesh,Visakhapatnam,Andhra Pradesh Technological University,State Government,2001,True,www.visakhapatnamengg21.edu.in,approved
+Chittoor Institute of Technology and Science (NIRF Rank #22),Andhra Pradesh,Chittoor,Andhra Pradesh Technological University,Private Aided,2002,True,www.chittoorengg22.edu.in,approved
+Chittoor College of Engineering and Technology (NIRF Rank #23),Andhra Pradesh,Chittoor,Andhra Pradesh Technological University,Central Government,2003,True,www.chittoorengg23.edu.in,approved
+Chittoor Engineering College (NIRF Rank #24),Andhra Pradesh,Chittoor,Andhra Pradesh Technological University,Private Un-Aided,2004,True,www.chittoorengg24.edu.in,approved
+Chittoor Institute of Engineering and Technology (NIRF Rank #25),Andhra Pradesh,Chittoor,Andhra Pradesh Technological University,State Government,2005,True,www.chittoorengg25.edu.in,approved
+Chittoor School of Engineering (NIRF Rank #26),Andhra Pradesh,Chittoor,Andhra Pradesh Technological University,Private Aided,2006,True,www.chittoorengg26.edu.in,approved
+Chittoor Technological Institute (NIRF Rank #27),Andhra Pradesh,Chittoor,Andhra Pradesh Technological University,Central Government,2007,True,www.chittoorengg27.edu.in,approved
+Chittoor Academy of Engineering (NIRF Rank #28),Andhra Pradesh,Chittoor,Andhra Pradesh Technological University,Private Un-Aided,2008,True,www.chittoorengg28.edu.in,approved
+Anantapur Institute of Technology and Science (NIRF Rank #29),Andhra Pradesh,Anantapur,Andhra Pradesh Technological University,State Government,2009,True,www.anantapurengg29.edu.in,approved
+Anantapur College of Engineering and Technology (NIRF Rank #30),Andhra Pradesh,Anantapur,Andhra Pradesh Technological University,Private Aided,2010,True,www.anantapurengg30.edu.in,approved
+Anantapur Engineering College (NIRF Rank #31),Andhra Pradesh,Anantapur,Andhra Pradesh Technological University,Central Government,2011,True,www.anantapurengg31.edu.in,approved
+Anantapur Institute of Engineering and Technology (NIRF Rank #32),Andhra Pradesh,Anantapur,Andhra Pradesh Technological University,Private Un-Aided,2012,True,www.anantapurengg32.edu.in,approved
+Anantapur School of Engineering (NIRF Rank #33),Andhra Pradesh,Anantapur,Andhra Pradesh Technological University,State Government,2013,True,www.anantapurengg33.edu.in,approved
+Anantapur Technological Institute (NIRF Rank #34),Andhra Pradesh,Anantapur,Andhra Pradesh Technological University,Private Aided,2014,True,www.anantapurengg34.edu.in,approved
+Anantapur Academy of Engineering (NIRF Rank #35),Andhra Pradesh,Anantapur,Andhra Pradesh Technological University,Central Government,2015,True,www.anantapurengg35.edu.in,approved
+East Godavari Institute of Technology and Science (NIRF Rank #36),Andhra Pradesh,East Godavari,Andhra Pradesh Technological University,Private Un-Aided,2016,True,www.eastgodavariengg36.edu.in,approved
+East Godavari College of Engineering and Technology (NIRF Rank #37),Andhra Pradesh,East Godavari,Andhra Pradesh Technological University,State Government,2017,True,www.eastgodavariengg37.edu.in,approved
+East Godavari Engineering College (NIRF Rank #38),Andhra Pradesh,East Godavari,Andhra Pradesh Technological University,Private Aided,2018,True,www.eastgodavariengg38.edu.in,approved
+East Godavari Institute of Engineering and Technology (NIRF Rank #39),Andhra Pradesh,East Godavari,Andhra Pradesh Technological University,Central Government,2019,True,www.eastgodavariengg39.edu.in,approved
+East Godavari School of Engineering (NIRF Rank #40),Andhra Pradesh,East Godavari,Andhra Pradesh Technological University,Private Un-Aided,1980,True,www.eastgodavariengg40.edu.in,approved
+East Godavari Technological Institute (NIRF Rank #41),Andhra Pradesh,East Godavari,Andhra Pradesh Technological University,State Government,1981,True,www.eastgodavariengg41.edu.in,approved
+East Godavari Academy of Engineering (NIRF Rank #42),Andhra Pradesh,East Godavari,Andhra Pradesh Technological University,Private Aided,1982,True,www.eastgodavariengg42.edu.in,approved
+Hyderabad Institute of Technology and Science (NIRF Rank #43),Telangana,Hyderabad,Telangana Technological University,Central Government,1983,True,www.hyderabadengg43.edu.in,approved
+Hyderabad College of Engineering and Technology (NIRF Rank #44),Telangana,Hyderabad,Telangana Technological University,Private Un-Aided,1984,True,www.hyderabadengg44.edu.in,approved
+Hyderabad Engineering College (NIRF Rank #45),Telangana,Hyderabad,Telangana Technological University,State Government,1985,True,www.hyderabadengg45.edu.in,approved
+Hyderabad Institute of Engineering and Technology (NIRF Rank #46),Telangana,Hyderabad,Telangana Technological University,Private Aided,1986,True,www.hyderabadengg46.edu.in,approved
+Hyderabad School of Engineering (NIRF Rank #47),Telangana,Hyderabad,Telangana Technological University,Central Government,1987,True,www.hyderabadengg47.edu.in,approved
+Hyderabad Technological Institute (NIRF Rank #48),Telangana,Hyderabad,Telangana Technological University,Private Un-Aided,1988,True,www.hyderabadengg48.edu.in,approved
+Hyderabad Academy of Engineering (NIRF Rank #49),Telangana,Hyderabad,Telangana Technological University,State Government,1989,True,www.hyderabadengg49.edu.in,approved
+Rangareddy Institute of Technology and Science (NIRF Rank #50),Telangana,Rangareddy,Telangana Technological University,Private Aided,1990,True,www.rangareddyengg50.edu.in,approved
+Rangareddy College of Engineering and Technology (NIRF Rank #51),Telangana,Rangareddy,Telangana Technological University,Central Government,1991,True,www.rangareddyengg51.edu.in,approved
+Rangareddy Engineering College (NIRF Rank #52),Telangana,Rangareddy,Telangana Technological University,Private Un-Aided,1992,True,www.rangareddyengg52.edu.in,approved
+Rangareddy Institute of Engineering and Technology (NIRF Rank #53),Telangana,Rangareddy,Telangana Technological University,State Government,1993,True,www.rangareddyengg53.edu.in,approved
+Rangareddy School of Engineering (NIRF Rank #54),Telangana,Rangareddy,Telangana Technological University,Private Aided,1994,True,www.rangareddyengg54.edu.in,approved
+Rangareddy Technological Institute (NIRF Rank #55),Telangana,Rangareddy,Telangana Technological University,Central Government,1995,True,www.rangareddyengg55.edu.in,approved
+Rangareddy Academy of Engineering (NIRF Rank #56),Telangana,Rangareddy,Telangana Technological University,Private Un-Aided,1996,True,www.rangareddyengg56.edu.in,approved
+Warangal Institute of Technology and Science (NIRF Rank #57),Telangana,Warangal,Telangana Technological University,State Government,1997,True,www.warangalengg57.edu.in,approved
+Warangal College of Engineering and Technology (NIRF Rank #58),Telangana,Warangal,Telangana Technological University,Private Aided,1998,True,www.warangalengg58.edu.in,approved
+Warangal Engineering College (NIRF Rank #59),Telangana,Warangal,Telangana Technological University,Central Government,1999,True,www.warangalengg59.edu.in,approved
+Warangal Institute of Engineering and Technology (NIRF Rank #60),Telangana,Warangal,Telangana Technological University,Private Un-Aided,2000,True,www.warangalengg60.edu.in,approved
+Warangal School of Engineering (NIRF Rank #61),Telangana,Warangal,Telangana Technological University,State Government,2001,True,www.warangalengg61.edu.in,approved
+Warangal Technological Institute (NIRF Rank #62),Telangana,Warangal,Telangana Technological University,Private Aided,2002,True,www.warangalengg62.edu.in,approved
+Warangal Academy of Engineering (NIRF Rank #63),Telangana,Warangal,Telangana Technological University,Central Government,2003,True,www.warangalengg63.edu.in,approved
+Medak Institute of Technology and Science (NIRF Rank #64),Telangana,Medak,Telangana Technological University,Private Un-Aided,2004,True,www.medakengg64.edu.in,approved
+Medak College of Engineering and Technology (NIRF Rank #65),Telangana,Medak,Telangana Technological University,State Government,2005,True,www.medakengg65.edu.in,approved
+Medak Engineering College (NIRF Rank #66),Telangana,Medak,Telangana Technological University,Private Aided,2006,True,www.medakengg66.edu.in,approved
+Medak Institute of Engineering and Technology (NIRF Rank #67),Telangana,Medak,Telangana Technological University,Central Government,2007,True,www.medakengg67.edu.in,approved
+Medak School of Engineering (NIRF Rank #68),Telangana,Medak,Telangana Technological University,Private Un-Aided,2008,True,www.medakengg68.edu.in,approved
+Medak Technological Institute (NIRF Rank #69),Telangana,Medak,Telangana Technological University,State Government,2009,True,www.medakengg69.edu.in,approved
+Medak Academy of Engineering (NIRF Rank #70),Telangana,Medak,Telangana Technological University,Private Aided,2010,True,www.medakengg70.edu.in,approved
+Nalgonda Institute of Technology and Science (NIRF Rank #71),Telangana,Nalgonda,Telangana Technological University,Central Government,2011,True,www.nalgondaengg71.edu.in,approved
+Nalgonda College of Engineering and Technology (NIRF Rank #72),Telangana,Nalgonda,Telangana Technological University,Private Un-Aided,2012,True,www.nalgondaengg72.edu.in,approved
+Nalgonda Engineering College (NIRF Rank #73),Telangana,Nalgonda,Telangana Technological University,State Government,2013,True,www.nalgondaengg73.edu.in,approved
+Nalgonda Institute of Engineering and Technology (NIRF Rank #74),Telangana,Nalgonda,Telangana Technological University,Private Aided,2014,True,www.nalgondaengg74.edu.in,approved
+Nalgonda School of Engineering (NIRF Rank #75),Telangana,Nalgonda,Telangana Technological University,Central Government,2015,True,www.nalgondaengg75.edu.in,approved
+Nalgonda Technological Institute (NIRF Rank #76),Telangana,Nalgonda,Telangana Technological University,Private Un-Aided,2016,True,www.nalgondaengg76.edu.in,approved
+Nalgonda Academy of Engineering (NIRF Rank #77),Telangana,Nalgonda,Telangana Technological University,State Government,2017,True,www.nalgondaengg77.edu.in,approved
+Chennai Institute of Technology and Science (NIRF Rank #78),Tamil Nadu,Chennai,Tamil Nadu Technological University,Private Aided,2018,True,www.chennaiengg78.edu.in,approved
+Chennai College of Engineering and Technology (NIRF Rank #79),Tamil Nadu,Chennai,Tamil Nadu Technological University,Central Government,2019,True,www.chennaiengg79.edu.in,approved
+Chennai Engineering College (NIRF Rank #80),Tamil Nadu,Chennai,Tamil Nadu Technological University,Private Un-Aided,1980,True,www.chennaiengg80.edu.in,approved
+Chennai Institute of Engineering and Technology (NIRF Rank #81),Tamil Nadu,Chennai,Tamil Nadu Technological University,State Government,1981,True,www.chennaiengg81.edu.in,approved
+Chennai School of Engineering (NIRF Rank #82),Tamil Nadu,Chennai,Tamil Nadu Technological University,Private Aided,1982,True,www.chennaiengg82.edu.in,approved
+Chennai Technological Institute (NIRF Rank #83),Tamil Nadu,Chennai,Tamil Nadu Technological University,Central Government,1983,True,www.chennaiengg83.edu.in,approved
+Chennai Academy of Engineering (NIRF Rank #84),Tamil Nadu,Chennai,Tamil Nadu Technological University,Private Un-Aided,1984,True,www.chennaiengg84.edu.in,approved
+Coimbatore Institute of Technology and Science (NIRF Rank #85),Tamil Nadu,Coimbatore,Tamil Nadu Technological University,State Government,1985,True,www.coimbatoreengg85.edu.in,approved
+Coimbatore College of Engineering and Technology (NIRF Rank #86),Tamil Nadu,Coimbatore,Tamil Nadu Technological University,Private Aided,1986,True,www.coimbatoreengg86.edu.in,approved
+Coimbatore Engineering College (NIRF Rank #87),Tamil Nadu,Coimbatore,Tamil Nadu Technological University,Central Government,1987,True,www.coimbatoreengg87.edu.in,approved
+Coimbatore Institute of Engineering and Technology (NIRF Rank #88),Tamil Nadu,Coimbatore,Tamil Nadu Technological University,Private Un-Aided,1988,True,www.coimbatoreengg88.edu.in,approved
+Coimbatore School of Engineering (NIRF Rank #89),Tamil Nadu,Coimbatore,Tamil Nadu Technological University,State Government,1989,True,www.coimbatoreengg89.edu.in,approved
+Coimbatore Technological Institute (NIRF Rank #90),Tamil Nadu,Coimbatore,Tamil Nadu Technological University,Private Aided,1990,True,www.coimbatoreengg90.edu.in,approved
+Coimbatore Academy of Engineering (NIRF Rank #91),Tamil Nadu,Coimbatore,Tamil Nadu Technological University,Central Government,1991,True,www.coimbatoreengg91.edu.in,approved
+Kanchipuram Institute of Technology and Science (NIRF Rank #92),Tamil Nadu,Kanchipuram,Tamil Nadu Technological University,Private Un-Aided,1992,True,www.kanchipuramengg92.edu.in,approved
+Kanchipuram College of Engineering and Technology (NIRF Rank #93),Tamil Nadu,Kanchipuram,Tamil Nadu Technological University,State Government,1993,True,www.kanchipuramengg93.edu.in,approved
+Kanchipuram Engineering College (NIRF Rank #94),Tamil Nadu,Kanchipuram,Tamil Nadu Technological University,Private Aided,1994,True,www.kanchipuramengg94.edu.in,approved
+Kanchipuram Institute of Engineering and Technology (NIRF Rank #95),Tamil Nadu,Kanchipuram,Tamil Nadu Technological University,Central Government,1995,True,www.kanchipuramengg95.edu.in,approved
+Kanchipuram School of Engineering (NIRF Rank #96),Tamil Nadu,Kanchipuram,Tamil Nadu Technological University,Private Un-Aided,1996,True,www.kanchipuramengg96.edu.in,approved
+Kanchipuram Technological Institute (NIRF Rank #97),Tamil Nadu,Kanchipuram,Tamil Nadu Technological University,State Government,1997,True,www.kanchipuramengg97.edu.in,approved
+Kanchipuram Academy of Engineering (NIRF Rank #98),Tamil Nadu,Kanchipuram,Tamil Nadu Technological University,Private Aided,1998,True,www.kanchipuramengg98.edu.in,approved
+Tiruchirappalli Institute of Technology and Science (NIRF Rank #99),Tamil Nadu,Tiruchirappalli,Tamil Nadu Technological University,Central Government,1999,True,www.tiruchirappalliengg99.edu.in,approved
+Tiruchirappalli College of Engineering and Technology (NIRF Rank #100),Tamil Nadu,Tiruchirappalli,Tamil Nadu Technological University,Private Un-Aided,2000,True,www.tiruchirappalliengg100.edu.in,approved
+Tiruchirappalli Engineering College (NIRF Rank #101),Tamil Nadu,Tiruchirappalli,Tamil Nadu Technological University,State Government,2001,True,www.tiruchirappalliengg101.edu.in,approved
+Tiruchirappalli Institute of Engineering and Technology (NIRF Rank #102),Tamil Nadu,Tiruchirappalli,Tamil Nadu Technological University,Private Aided,2002,True,www.tiruchirappalliengg102.edu.in,approved
+Tiruchirappalli School of Engineering (NIRF Rank #103),Tamil Nadu,Tiruchirappalli,Tamil Nadu Technological University,Central Government,2003,True,www.tiruchirappalliengg103.edu.in,approved
+Tiruchirappalli Technological Institute (NIRF Rank #104),Tamil Nadu,Tiruchirappalli,Tamil Nadu Technological University,Private Un-Aided,2004,True,www.tiruchirappalliengg104.edu.in,approved
+Tiruchirappalli Academy of Engineering (NIRF Rank #105),Tamil Nadu,Tiruchirappalli,Tamil Nadu Technological University,State Government,2005,True,www.tiruchirappalliengg105.edu.in,approved
+Vellore Institute of Technology and Science (NIRF Rank #106),Tamil Nadu,Vellore,Tamil Nadu Technological University,Private Aided,2006,True,www.velloreengg106.edu.in,approved
+Vellore College of Engineering and Technology (NIRF Rank #107),Tamil Nadu,Vellore,Tamil Nadu Technological University,Central Government,2007,True,www.velloreengg107.edu.in,approved
+Vellore Engineering College (NIRF Rank #108),Tamil Nadu,Vellore,Tamil Nadu Technological University,Private Un-Aided,2008,True,www.velloreengg108.edu.in,approved
+Vellore Institute of Engineering and Technology (NIRF Rank #109),Tamil Nadu,Vellore,Tamil Nadu Technological University,State Government,2009,True,www.velloreengg109.edu.in,approved
+Vellore School of Engineering (NIRF Rank #110),Tamil Nadu,Vellore,Tamil Nadu Technological University,Private Aided,2010,True,www.velloreengg110.edu.in,approved
+Vellore Technological Institute (NIRF Rank #111),Tamil Nadu,Vellore,Tamil Nadu Technological University,Central Government,2011,True,www.velloreengg111.edu.in,approved
+Vellore Academy of Engineering (NIRF Rank #112),Tamil Nadu,Vellore,Tamil Nadu Technological University,Private Un-Aided,2012,True,www.velloreengg112.edu.in,approved
+Madurai Institute of Technology and Science (NIRF Rank #113),Tamil Nadu,Madurai,Tamil Nadu Technological University,State Government,2013,True,www.maduraiengg113.edu.in,approved
+Madurai College of Engineering and Technology (NIRF Rank #114),Tamil Nadu,Madurai,Tamil Nadu Technological University,Private Aided,2014,True,www.maduraiengg114.edu.in,approved
+Madurai Engineering College (NIRF Rank #115),Tamil Nadu,Madurai,Tamil Nadu Technological University,Central Government,2015,True,www.maduraiengg115.edu.in,approved
+Madurai Institute of Engineering and Technology (NIRF Rank #116),Tamil Nadu,Madurai,Tamil Nadu Technological University,Private Un-Aided,2016,True,www.maduraiengg116.edu.in,approved
+Madurai School of Engineering (NIRF Rank #117),Tamil Nadu,Madurai,Tamil Nadu Technological University,State Government,2017,True,www.maduraiengg117.edu.in,approved
+Madurai Technological Institute (NIRF Rank #118),Tamil Nadu,Madurai,Tamil Nadu Technological University,Private Aided,2018,True,www.maduraiengg118.edu.in,approved
+Madurai Academy of Engineering (NIRF Rank #119),Tamil Nadu,Madurai,Tamil Nadu Technological University,Central Government,2019,True,www.maduraiengg119.edu.in,approved
+Thiruvallur Institute of Technology and Science (NIRF Rank #120),Tamil Nadu,Thiruvallur,Tamil Nadu Technological University,Private Un-Aided,1980,True,www.thiruvallurengg120.edu.in,approved
+Thiruvallur College of Engineering and Technology (NIRF Rank #121),Tamil Nadu,Thiruvallur,Tamil Nadu Technological University,State Government,1981,True,www.thiruvallurengg121.edu.in,approved
+Thiruvallur Engineering College (NIRF Rank #122),Tamil Nadu,Thiruvallur,Tamil Nadu Technological University,Private Aided,1982,True,www.thiruvallurengg122.edu.in,approved
+Thiruvallur Institute of Engineering and Technology (NIRF Rank #123),Tamil Nadu,Thiruvallur,Tamil Nadu Technological University,Central Government,1983,True,www.thiruvallurengg123.edu.in,approved
+Thiruvallur School of Engineering (NIRF Rank #124),Tamil Nadu,Thiruvallur,Tamil Nadu Technological University,Private Un-Aided,1984,True,www.thiruvallurengg124.edu.in,approved
+Thiruvallur Technological Institute (NIRF Rank #125),Tamil Nadu,Thiruvallur,Tamil Nadu Technological University,State Government,1985,True,www.thiruvallurengg125.edu.in,approved
+Thiruvallur Academy of Engineering (NIRF Rank #126),Tamil Nadu,Thiruvallur,Tamil Nadu Technological University,Private Aided,1986,True,www.thiruvallurengg126.edu.in,approved
+Bengaluru Urban Institute of Technology and Science (NIRF Rank #127),Karnataka,Bengaluru Urban,Karnataka Technological University,Central Government,1987,True,www.bengaluruurbanengg127.edu.in,approved
+Bengaluru Urban College of Engineering and Technology (NIRF Rank #128),Karnataka,Bengaluru Urban,Karnataka Technological University,Private Un-Aided,1988,True,www.bengaluruurbanengg128.edu.in,approved
+Bengaluru Urban Engineering College (NIRF Rank #129),Karnataka,Bengaluru Urban,Karnataka Technological University,State Government,1989,True,www.bengaluruurbanengg129.edu.in,approved
+Bengaluru Urban Institute of Engineering and Technology (NIRF Rank #130),Karnataka,Bengaluru Urban,Karnataka Technological University,Private Aided,1990,True,www.bengaluruurbanengg130.edu.in,approved
+Bengaluru Urban School of Engineering (NIRF Rank #131),Karnataka,Bengaluru Urban,Karnataka Technological University,Central Government,1991,True,www.bengaluruurbanengg131.edu.in,approved
+Bengaluru Urban Technological Institute (NIRF Rank #132),Karnataka,Bengaluru Urban,Karnataka Technological University,Private Un-Aided,1992,True,www.bengaluruurbanengg132.edu.in,approved
+Bengaluru Urban Academy of Engineering (NIRF Rank #133),Karnataka,Bengaluru Urban,Karnataka Technological University,State Government,1993,True,www.bengaluruurbanengg133.edu.in,approved
+Mysuru Institute of Technology and Science (NIRF Rank #134),Karnataka,Mysuru,Karnataka Technological University,Private Aided,1994,True,www.mysuruengg134.edu.in,approved
+Mysuru College of Engineering and Technology (NIRF Rank #135),Karnataka,Mysuru,Karnataka Technological University,Central Government,1995,True,www.mysuruengg135.edu.in,approved
+Mysuru Engineering College (NIRF Rank #136),Karnataka,Mysuru,Karnataka Technological University,Private Un-Aided,1996,True,www.mysuruengg136.edu.in,approved
+Mysuru Institute of Engineering and Technology (NIRF Rank #137),Karnataka,Mysuru,Karnataka Technological University,State Government,1997,True,www.mysuruengg137.edu.in,approved
+Mysuru School of Engineering (NIRF Rank #138),Karnataka,Mysuru,Karnataka Technological University,Private Aided,1998,True,www.mysuruengg138.edu.in,approved
+Mysuru Technological Institute (NIRF Rank #139),Karnataka,Mysuru,Karnataka Technological University,Central Government,1999,True,www.mysuruengg139.edu.in,approved
+Mysuru Academy of Engineering (NIRF Rank #140),Karnataka,Mysuru,Karnataka Technological University,Private Un-Aided,2000,True,www.mysuruengg140.edu.in,approved
+Dakshina Kannada Institute of Technology and Science (NIRF Rank #141),Karnataka,Dakshina Kannada,Karnataka Technological University,State Government,2001,True,www.dakshinakannadaengg141.edu.in,approved
+Dakshina Kannada College of Engineering and Technology (NIRF Rank #142),Karnataka,Dakshina Kannada,Karnataka Technological University,Private Aided,2002,True,www.dakshinakannadaengg142.edu.in,approved
+Dakshina Kannada Engineering College (NIRF Rank #143),Karnataka,Dakshina Kannada,Karnataka Technological University,Central Government,2003,True,www.dakshinakannadaengg143.edu.in,approved
+Dakshina Kannada Institute of Engineering and Technology (NIRF Rank #144),Karnataka,Dakshina Kannada,Karnataka Technological University,Private Un-Aided,2004,True,www.dakshinakannadaengg144.edu.in,approved
+Dakshina Kannada School of Engineering (NIRF Rank #145),Karnataka,Dakshina Kannada,Karnataka Technological University,State Government,2005,True,www.dakshinakannadaengg145.edu.in,approved
+Dakshina Kannada Technological Institute (NIRF Rank #146),Karnataka,Dakshina Kannada,Karnataka Technological University,Private Aided,2006,True,www.dakshinakannadaengg146.edu.in,approved
+Dakshina Kannada Academy of Engineering (NIRF Rank #147),Karnataka,Dakshina Kannada,Karnataka Technological University,Central Government,2007,True,www.dakshinakannadaengg147.edu.in,approved
+Belagavi Institute of Technology and Science (NIRF Rank #148),Karnataka,Belagavi,Karnataka Technological University,Private Un-Aided,2008,True,www.belagaviengg148.edu.in,approved
+Belagavi College of Engineering and Technology (NIRF Rank #149),Karnataka,Belagavi,Karnataka Technological University,State Government,2009,True,www.belagaviengg149.edu.in,approved
+Belagavi Engineering College (NIRF Rank #150),Karnataka,Belagavi,Karnataka Technological University,Private Aided,2010,True,www.belagaviengg150.edu.in,approved
+Belagavi Institute of Engineering and Technology (NIRF Rank #151),Karnataka,Belagavi,Karnataka Technological University,Central Government,2011,True,www.belagaviengg151.edu.in,approved
+Belagavi School of Engineering (NIRF Rank #152),Karnataka,Belagavi,Karnataka Technological University,Private Un-Aided,2012,True,www.belagaviengg152.edu.in,approved
+Belagavi Technological Institute (NIRF Rank #153),Karnataka,Belagavi,Karnataka Technological University,State Government,2013,True,www.belagaviengg153.edu.in,approved
+Belagavi Academy of Engineering (NIRF Rank #154),Karnataka,Belagavi,Karnataka Technological University,Private Aided,2014,True,www.belagaviengg154.edu.in,approved
+Udupi Institute of Technology and Science (NIRF Rank #155),Karnataka,Udupi,Karnataka Technological University,Central Government,2015,True,www.udupiengg155.edu.in,approved
+Udupi College of Engineering and Technology (NIRF Rank #156),Karnataka,Udupi,Karnataka Technological University,Private Un-Aided,2016,True,www.udupiengg156.edu.in,approved
+Udupi Engineering College (NIRF Rank #157),Karnataka,Udupi,Karnataka Technological University,State Government,2017,True,www.udupiengg157.edu.in,approved
+Udupi Institute of Engineering and Technology (NIRF Rank #158),Karnataka,Udupi,Karnataka Technological University,Private Aided,2018,True,www.udupiengg158.edu.in,approved
+Udupi School of Engineering (NIRF Rank #159),Karnataka,Udupi,Karnataka Technological University,Central Government,2019,True,www.udupiengg159.edu.in,approved
+Udupi Technological Institute (NIRF Rank #160),Karnataka,Udupi,Karnataka Technological University,Private Un-Aided,1980,True,www.udupiengg160.edu.in,approved
+Udupi Academy of Engineering (NIRF Rank #161),Karnataka,Udupi,Karnataka Technological University,State Government,1981,True,www.udupiengg161.edu.in,approved
+Dharwad Institute of Technology and Science (NIRF Rank #162),Karnataka,Dharwad,Karnataka Technological University,Private Aided,1982,True,www.dharwadengg162.edu.in,approved
+Dharwad College of Engineering and Technology (NIRF Rank #163),Karnataka,Dharwad,Karnataka Technological University,Central Government,1983,True,www.dharwadengg163.edu.in,approved
+Dharwad Engineering College (NIRF Rank #164),Karnataka,Dharwad,Karnataka Technological University,Private Un-Aided,1984,True,www.dharwadengg164.edu.in,approved
+Dharwad Institute of Engineering and Technology (NIRF Rank #165),Karnataka,Dharwad,Karnataka Technological University,State Government,1985,True,www.dharwadengg165.edu.in,approved
+Dharwad School of Engineering (NIRF Rank #166),Karnataka,Dharwad,Karnataka Technological University,Private Aided,1986,True,www.dharwadengg166.edu.in,approved
+Dharwad Technological Institute (NIRF Rank #167),Karnataka,Dharwad,Karnataka Technological University,Central Government,1987,True,www.dharwadengg167.edu.in,approved
+Dharwad Academy of Engineering (NIRF Rank #168),Karnataka,Dharwad,Karnataka Technological University,Private Un-Aided,1988,True,www.dharwadengg168.edu.in,approved
+Mumbai Suburban Institute of Technology and Science (NIRF Rank #169),Maharashtra,Mumbai Suburban,Maharashtra Technological University,State Government,1989,True,www.mumbaisuburbanengg169.edu.in,approved
+Mumbai Suburban College of Engineering and Technology (NIRF Rank #170),Maharashtra,Mumbai Suburban,Maharashtra Technological University,Private Aided,1990,True,www.mumbaisuburbanengg170.edu.in,approved
+Mumbai Suburban Engineering College (NIRF Rank #171),Maharashtra,Mumbai Suburban,Maharashtra Technological University,Central Government,1991,True,www.mumbaisuburbanengg171.edu.in,approved
+Mumbai Suburban Institute of Engineering and Technology (NIRF Rank #172),Maharashtra,Mumbai Suburban,Maharashtra Technological University,Private Un-Aided,1992,True,www.mumbaisuburbanengg172.edu.in,approved
+Mumbai Suburban School of Engineering (NIRF Rank #173),Maharashtra,Mumbai Suburban,Maharashtra Technological University,State Government,1993,True,www.mumbaisuburbanengg173.edu.in,approved
+Mumbai Suburban Technological Institute (NIRF Rank #174),Maharashtra,Mumbai Suburban,Maharashtra Technological University,Private Aided,1994,True,www.mumbaisuburbanengg174.edu.in,approved
+Mumbai Suburban Academy of Engineering (NIRF Rank #175),Maharashtra,Mumbai Suburban,Maharashtra Technological University,Central Government,1995,True,www.mumbaisuburbanengg175.edu.in,approved
+Pune Institute of Technology and Science (NIRF Rank #176),Maharashtra,Pune,Maharashtra Technological University,Private Un-Aided,1996,True,www.puneengg176.edu.in,approved
+Pune College of Engineering and Technology (NIRF Rank #177),Maharashtra,Pune,Maharashtra Technological University,State Government,1997,True,www.puneengg177.edu.in,approved
+Pune Engineering College (NIRF Rank #178),Maharashtra,Pune,Maharashtra Technological University,Private Aided,1998,True,www.puneengg178.edu.in,approved
+Pune Institute of Engineering and Technology (NIRF Rank #179),Maharashtra,Pune,Maharashtra Technological University,Central Government,1999,True,www.puneengg179.edu.in,approved
+Pune School of Engineering (NIRF Rank #180),Maharashtra,Pune,Maharashtra Technological University,Private Un-Aided,2000,True,www.puneengg180.edu.in,approved
+Pune Technological Institute (NIRF Rank #181),Maharashtra,Pune,Maharashtra Technological University,State Government,2001,True,www.puneengg181.edu.in,approved
+Pune Academy of Engineering (NIRF Rank #182),Maharashtra,Pune,Maharashtra Technological University,Private Aided,2002,True,www.puneengg182.edu.in,approved
+Nagpur Institute of Technology and Science (NIRF Rank #183),Maharashtra,Nagpur,Maharashtra Technological University,Central Government,2003,True,www.nagpurengg183.edu.in,approved
+Nagpur College of Engineering and Technology (NIRF Rank #184),Maharashtra,Nagpur,Maharashtra Technological University,Private Un-Aided,2004,True,www.nagpurengg184.edu.in,approved
+Nagpur Engineering College (NIRF Rank #185),Maharashtra,Nagpur,Maharashtra Technological University,State Government,2005,True,www.nagpurengg185.edu.in,approved
+Nagpur Institute of Engineering and Technology (NIRF Rank #186),Maharashtra,Nagpur,Maharashtra Technological University,Private Aided,2006,True,www.nagpurengg186.edu.in,approved
+Nagpur School of Engineering (NIRF Rank #187),Maharashtra,Nagpur,Maharashtra Technological University,Central Government,2007,True,www.nagpurengg187.edu.in,approved
+Nagpur Technological Institute (NIRF Rank #188),Maharashtra,Nagpur,Maharashtra Technological University,Private Un-Aided,2008,True,www.nagpurengg188.edu.in,approved
+Nagpur Academy of Engineering (NIRF Rank #189),Maharashtra,Nagpur,Maharashtra Technological University,State Government,2009,True,www.nagpurengg189.edu.in,approved
+Nashik Institute of Technology and Science (NIRF Rank #190),Maharashtra,Nashik,Maharashtra Technological University,Private Aided,2010,True,www.nashikengg190.edu.in,approved
+Nashik College of Engineering and Technology (NIRF Rank #191),Maharashtra,Nashik,Maharashtra Technological University,Central Government,2011,True,www.nashikengg191.edu.in,approved
+Nashik Engineering College (NIRF Rank #192),Maharashtra,Nashik,Maharashtra Technological University,Private Un-Aided,2012,True,www.nashikengg192.edu.in,approved
+Nashik Institute of Engineering and Technology (NIRF Rank #193),Maharashtra,Nashik,Maharashtra Technological University,State Government,2013,True,www.nashikengg193.edu.in,approved
+Nashik School of Engineering (NIRF Rank #194),Maharashtra,Nashik,Maharashtra Technological University,Private Aided,2014,True,www.nashikengg194.edu.in,approved
+Nashik Technological Institute (NIRF Rank #195),Maharashtra,Nashik,Maharashtra Technological University,Central Government,2015,True,www.nashikengg195.edu.in,approved
+Nashik Academy of Engineering (NIRF Rank #196),Maharashtra,Nashik,Maharashtra Technological University,Private Un-Aided,2016,True,www.nashikengg196.edu.in,approved
+Aurangabad Institute of Technology and Science (NIRF Rank #197),Maharashtra,Aurangabad,Maharashtra Technological University,State Government,2017,True,www.aurangabadengg197.edu.in,approved
+Aurangabad College of Engineering and Technology (NIRF Rank #198),Maharashtra,Aurangabad,Maharashtra Technological University,Private Aided,2018,True,www.aurangabadengg198.edu.in,approved
+Aurangabad Engineering College (NIRF Rank #199),Maharashtra,Aurangabad,Maharashtra Technological University,Central Government,2019,True,www.aurangabadengg199.edu.in,approved
+Aurangabad Institute of Engineering and Technology (NIRF Rank #200),Maharashtra,Aurangabad,Maharashtra Technological University,Private Un-Aided,1980,True,www.aurangabadengg200.edu.in,approved
+Aurangabad School of Engineering (NIRF Rank #201),Maharashtra,Aurangabad,Maharashtra Technological University,State Government,1981,True,www.aurangabadengg201.edu.in,approved
+Aurangabad Technological Institute (NIRF Rank #202),Maharashtra,Aurangabad,Maharashtra Technological University,Private Aided,1982,True,www.aurangabadengg202.edu.in,approved
+Aurangabad Academy of Engineering (NIRF Rank #203),Maharashtra,Aurangabad,Maharashtra Technological University,Central Government,1983,True,www.aurangabadengg203.edu.in,approved
+Thane Institute of Technology and Science (NIRF Rank #204),Maharashtra,Thane,Maharashtra Technological University,Private Un-Aided,1984,True,www.thaneengg204.edu.in,approved
+Thane College of Engineering and Technology (NIRF Rank #205),Maharashtra,Thane,Maharashtra Technological University,State Government,1985,True,www.thaneengg205.edu.in,approved
+Thane Engineering College (NIRF Rank #206),Maharashtra,Thane,Maharashtra Technological University,Private Aided,1986,True,www.thaneengg206.edu.in,approved
+Thane Institute of Engineering and Technology (NIRF Rank #207),Maharashtra,Thane,Maharashtra Technological University,Central Government,1987,True,www.thaneengg207.edu.in,approved
+Thane School of Engineering (NIRF Rank #208),Maharashtra,Thane,Maharashtra Technological University,Private Un-Aided,1988,True,www.thaneengg208.edu.in,approved
+Thane Technological Institute (NIRF Rank #209),Maharashtra,Thane,Maharashtra Technological University,State Government,1989,True,www.thaneengg209.edu.in,approved
+Thane Academy of Engineering (NIRF Rank #210),Maharashtra,Thane,Maharashtra Technological University,Private Aided,1990,True,www.thaneengg210.edu.in,approved
+South Delhi Institute of Technology and Science (NIRF Rank #211),Delhi,South Delhi,Delhi Technological University,Central Government,1991,True,www.southdelhiengg211.edu.in,approved
+South Delhi College of Engineering and Technology (NIRF Rank #212),Delhi,South Delhi,Delhi Technological University,Private Un-Aided,1992,True,www.southdelhiengg212.edu.in,approved
+South Delhi Engineering College (NIRF Rank #213),Delhi,South Delhi,Delhi Technological University,State Government,1993,True,www.southdelhiengg213.edu.in,approved
+South Delhi Institute of Engineering and Technology (NIRF Rank #214),Delhi,South Delhi,Delhi Technological University,Private Aided,1994,True,www.southdelhiengg214.edu.in,approved
+South Delhi School of Engineering (NIRF Rank #215),Delhi,South Delhi,Delhi Technological University,Central Government,1995,True,www.southdelhiengg215.edu.in,approved
+South Delhi Technological Institute (NIRF Rank #216),Delhi,South Delhi,Delhi Technological University,Private Un-Aided,1996,True,www.southdelhiengg216.edu.in,approved
+South Delhi Academy of Engineering (NIRF Rank #217),Delhi,South Delhi,Delhi Technological University,State Government,1997,True,www.southdelhiengg217.edu.in,approved
+North Delhi Institute of Technology and Science (NIRF Rank #218),Delhi,North Delhi,Delhi Technological University,Private Aided,1998,True,www.northdelhiengg218.edu.in,approved
+North Delhi College of Engineering and Technology (NIRF Rank #219),Delhi,North Delhi,Delhi Technological University,Central Government,1999,True,www.northdelhiengg219.edu.in,approved
+North Delhi Engineering College (NIRF Rank #220),Delhi,North Delhi,Delhi Technological University,Private Un-Aided,2000,True,www.northdelhiengg220.edu.in,approved
+North Delhi Institute of Engineering and Technology (NIRF Rank #221),Delhi,North Delhi,Delhi Technological University,State Government,2001,True,www.northdelhiengg221.edu.in,approved
+North Delhi School of Engineering (NIRF Rank #222),Delhi,North Delhi,Delhi Technological University,Private Aided,2002,True,www.northdelhiengg222.edu.in,approved
+North Delhi Technological Institute (NIRF Rank #223),Delhi,North Delhi,Delhi Technological University,Central Government,2003,True,www.northdelhiengg223.edu.in,approved
+North Delhi Academy of Engineering (NIRF Rank #224),Delhi,North Delhi,Delhi Technological University,Private Un-Aided,2004,True,www.northdelhiengg224.edu.in,approved
+New Delhi Institute of Technology and Science (NIRF Rank #225),Delhi,New Delhi,Delhi Technological University,State Government,2005,True,www.newdelhiengg225.edu.in,approved
+New Delhi College of Engineering and Technology (NIRF Rank #226),Delhi,New Delhi,Delhi Technological University,Private Aided,2006,True,www.newdelhiengg226.edu.in,approved
+New Delhi Engineering College (NIRF Rank #227),Delhi,New Delhi,Delhi Technological University,Central Government,2007,True,www.newdelhiengg227.edu.in,approved
+New Delhi Institute of Engineering and Technology (NIRF Rank #228),Delhi,New Delhi,Delhi Technological University,Private Un-Aided,2008,True,www.newdelhiengg228.edu.in,approved
+New Delhi School of Engineering (NIRF Rank #229),Delhi,New Delhi,Delhi Technological University,State Government,2009,True,www.newdelhiengg229.edu.in,approved
+New Delhi Technological Institute (NIRF Rank #230),Delhi,New Delhi,Delhi Technological University,Private Aided,2010,True,www.newdelhiengg230.edu.in,approved
+New Delhi Academy of Engineering (NIRF Rank #231),Delhi,New Delhi,Delhi Technological University,Central Government,2011,True,www.newdelhiengg231.edu.in,approved
+South West Delhi Institute of Technology and Science (NIRF Rank #232),Delhi,South West Delhi,Delhi Technological University,Private Un-Aided,2012,True,www.southwestdelhiengg232.edu.in,approved
+South West Delhi College of Engineering and Technology (NIRF Rank #233),Delhi,South West Delhi,Delhi Technological University,State Government,2013,True,www.southwestdelhiengg233.edu.in,approved
+South West Delhi Engineering College (NIRF Rank #234),Delhi,South West Delhi,Delhi Technological University,Private Aided,2014,True,www.southwestdelhiengg234.edu.in,approved
+South West Delhi Institute of Engineering and Technology (NIRF Rank #235),Delhi,South West Delhi,Delhi Technological University,Central Government,2015,True,www.southwestdelhiengg235.edu.in,approved
+South West Delhi School of Engineering (NIRF Rank #236),Delhi,South West Delhi,Delhi Technological University,Private Un-Aided,2016,True,www.southwestdelhiengg236.edu.in,approved
+South West Delhi Technological Institute (NIRF Rank #237),Delhi,South West Delhi,Delhi Technological University,State Government,2017,True,www.southwestdelhiengg237.edu.in,approved
+South West Delhi Academy of Engineering (NIRF Rank #238),Delhi,South West Delhi,Delhi Technological University,Private Aided,2018,True,www.southwestdelhiengg238.edu.in,approved
+North West Delhi Institute of Technology and Science (NIRF Rank #239),Delhi,North West Delhi,Delhi Technological University,Central Government,2019,True,www.northwestdelhiengg239.edu.in,approved
+North West Delhi College of Engineering and Technology (NIRF Rank #240),Delhi,North West Delhi,Delhi Technological University,Private Un-Aided,1980,True,www.northwestdelhiengg240.edu.in,approved
+North West Delhi Engineering College (NIRF Rank #241),Delhi,North West Delhi,Delhi Technological University,State Government,1981,True,www.northwestdelhiengg241.edu.in,approved
+North West Delhi Institute of Engineering and Technology (NIRF Rank #242),Delhi,North West Delhi,Delhi Technological University,Private Aided,1982,True,www.northwestdelhiengg242.edu.in,approved
+North West Delhi School of Engineering (NIRF Rank #243),Delhi,North West Delhi,Delhi Technological University,Central Government,1983,True,www.northwestdelhiengg243.edu.in,approved
+North West Delhi Technological Institute (NIRF Rank #244),Delhi,North West Delhi,Delhi Technological University,Private Un-Aided,1984,True,www.northwestdelhiengg244.edu.in,approved
+North West Delhi Academy of Engineering (NIRF Rank #245),Delhi,North West Delhi,Delhi Technological University,State Government,1985,True,www.northwestdelhiengg245.edu.in,approved
+Gautam Buddha Nagar Institute of Technology and Science (NIRF Rank #246),Uttar Pradesh,Gautam Buddha Nagar,Uttar Pradesh Technological University,Private Aided,1986,True,www.gautambuddhanagarengg246.edu.in,approved
+Gautam Buddha Nagar College of Engineering and Technology (NIRF Rank #247),Uttar Pradesh,Gautam Buddha Nagar,Uttar Pradesh Technological University,Central Government,1987,True,www.gautambuddhanagarengg247.edu.in,approved
+Gautam Buddha Nagar Engineering College (NIRF Rank #248),Uttar Pradesh,Gautam Buddha Nagar,Uttar Pradesh Technological University,Private Un-Aided,1988,True,www.gautambuddhanagarengg248.edu.in,approved
+Gautam Buddha Nagar Institute of Engineering and Technology (NIRF Rank #249),Uttar Pradesh,Gautam Buddha Nagar,Uttar Pradesh Technological University,State Government,1989,True,www.gautambuddhanagarengg249.edu.in,approved
+Gautam Buddha Nagar School of Engineering (NIRF Rank #250),Uttar Pradesh,Gautam Buddha Nagar,Uttar Pradesh Technological University,Private Aided,1990,True,www.gautambuddhanagarengg250.edu.in,approved
+Gautam Buddha Nagar Technological Institute (NIRF Rank #251),Uttar Pradesh,Gautam Buddha Nagar,Uttar Pradesh Technological University,Central Government,1991,True,www.gautambuddhanagarengg251.edu.in,approved
+Gautam Buddha Nagar Academy of Engineering (NIRF Rank #252),Uttar Pradesh,Gautam Buddha Nagar,Uttar Pradesh Technological University,Private Un-Aided,1992,True,www.gautambuddhanagarengg252.edu.in,approved
+Ghaziabad Institute of Technology and Science (NIRF Rank #253),Uttar Pradesh,Ghaziabad,Uttar Pradesh Technological University,State Government,1993,True,www.ghaziabadengg253.edu.in,approved
+Ghaziabad College of Engineering and Technology (NIRF Rank #254),Uttar Pradesh,Ghaziabad,Uttar Pradesh Technological University,Private Aided,1994,True,www.ghaziabadengg254.edu.in,approved
+Ghaziabad Engineering College (NIRF Rank #255),Uttar Pradesh,Ghaziabad,Uttar Pradesh Technological University,Central Government,1995,True,www.ghaziabadengg255.edu.in,approved
+Ghaziabad Institute of Engineering and Technology (NIRF Rank #256),Uttar Pradesh,Ghaziabad,Uttar Pradesh Technological University,Private Un-Aided,1996,True,www.ghaziabadengg256.edu.in,approved
+Ghaziabad School of Engineering (NIRF Rank #257),Uttar Pradesh,Ghaziabad,Uttar Pradesh Technological University,State Government,1997,True,www.ghaziabadengg257.edu.in,approved
+Ghaziabad Technological Institute (NIRF Rank #258),Uttar Pradesh,Ghaziabad,Uttar Pradesh Technological University,Private Aided,1998,True,www.ghaziabadengg258.edu.in,approved
+Ghaziabad Academy of Engineering (NIRF Rank #259),Uttar Pradesh,Ghaziabad,Uttar Pradesh Technological University,Central Government,1999,True,www.ghaziabadengg259.edu.in,approved
+Kanpur Nagar Institute of Technology and Science (NIRF Rank #260),Uttar Pradesh,Kanpur Nagar,Uttar Pradesh Technological University,Private Un-Aided,2000,True,www.kanpurnagarengg260.edu.in,approved
+Kanpur Nagar College of Engineering and Technology (NIRF Rank #261),Uttar Pradesh,Kanpur Nagar,Uttar Pradesh Technological University,State Government,2001,True,www.kanpurnagarengg261.edu.in,approved
+Kanpur Nagar Engineering College (NIRF Rank #262),Uttar Pradesh,Kanpur Nagar,Uttar Pradesh Technological University,Private Aided,2002,True,www.kanpurnagarengg262.edu.in,approved
+Kanpur Nagar Institute of Engineering and Technology (NIRF Rank #263),Uttar Pradesh,Kanpur Nagar,Uttar Pradesh Technological University,Central Government,2003,True,www.kanpurnagarengg263.edu.in,approved
+Kanpur Nagar School of Engineering (NIRF Rank #264),Uttar Pradesh,Kanpur Nagar,Uttar Pradesh Technological University,Private Un-Aided,2004,True,www.kanpurnagarengg264.edu.in,approved
+Kanpur Nagar Technological Institute (NIRF Rank #265),Uttar Pradesh,Kanpur Nagar,Uttar Pradesh Technological University,State Government,2005,True,www.kanpurnagarengg265.edu.in,approved
+Kanpur Nagar Academy of Engineering (NIRF Rank #266),Uttar Pradesh,Kanpur Nagar,Uttar Pradesh Technological University,Private Aided,2006,True,www.kanpurnagarengg266.edu.in,approved
+Varanasi Institute of Technology and Science (NIRF Rank #267),Uttar Pradesh,Varanasi,Uttar Pradesh Technological University,Central Government,2007,True,www.varanasiengg267.edu.in,approved
+Varanasi College of Engineering and Technology (NIRF Rank #268),Uttar Pradesh,Varanasi,Uttar Pradesh Technological University,Private Un-Aided,2008,True,www.varanasiengg268.edu.in,approved
+Varanasi Engineering College (NIRF Rank #269),Uttar Pradesh,Varanasi,Uttar Pradesh Technological University,State Government,2009,True,www.varanasiengg269.edu.in,approved
+Varanasi Institute of Engineering and Technology (NIRF Rank #270),Uttar Pradesh,Varanasi,Uttar Pradesh Technological University,Private Aided,2010,True,www.varanasiengg270.edu.in,approved
+Varanasi School of Engineering (NIRF Rank #271),Uttar Pradesh,Varanasi,Uttar Pradesh Technological University,Central Government,2011,True,www.varanasiengg271.edu.in,approved
+Varanasi Technological Institute (NIRF Rank #272),Uttar Pradesh,Varanasi,Uttar Pradesh Technological University,Private Un-Aided,2012,True,www.varanasiengg272.edu.in,approved
+Varanasi Academy of Engineering (NIRF Rank #273),Uttar Pradesh,Varanasi,Uttar Pradesh Technological University,State Government,2013,True,www.varanasiengg273.edu.in,approved
+Lucknow Institute of Technology and Science (NIRF Rank #274),Uttar Pradesh,Lucknow,Uttar Pradesh Technological University,Private Aided,2014,True,www.lucknowengg274.edu.in,approved
+Lucknow College of Engineering and Technology (NIRF Rank #275),Uttar Pradesh,Lucknow,Uttar Pradesh Technological University,Central Government,2015,True,www.lucknowengg275.edu.in,approved
+Lucknow Engineering College (NIRF Rank #276),Uttar Pradesh,Lucknow,Uttar Pradesh Technological University,Private Un-Aided,2016,True,www.lucknowengg276.edu.in,approved
+Lucknow Institute of Engineering and Technology (NIRF Rank #277),Uttar Pradesh,Lucknow,Uttar Pradesh Technological University,State Government,2017,True,www.lucknowengg277.edu.in,approved
+Lucknow School of Engineering (NIRF Rank #278),Uttar Pradesh,Lucknow,Uttar Pradesh Technological University,Private Aided,2018,True,www.lucknowengg278.edu.in,approved
+Lucknow Technological Institute (NIRF Rank #279),Uttar Pradesh,Lucknow,Uttar Pradesh Technological University,Central Government,2019,True,www.lucknowengg279.edu.in,approved
+Lucknow Academy of Engineering (NIRF Rank #280),Uttar Pradesh,Lucknow,Uttar Pradesh Technological University,Private Un-Aided,1980,True,www.lucknowengg280.edu.in,approved
+Allahabad Institute of Technology and Science (NIRF Rank #281),Uttar Pradesh,Allahabad,Uttar Pradesh Technological University,State Government,1981,True,www.allahabadengg281.edu.in,approved
+Allahabad College of Engineering and Technology (NIRF Rank #282),Uttar Pradesh,Allahabad,Uttar Pradesh Technological University,Private Aided,1982,True,www.allahabadengg282.edu.in,approved
+Allahabad Engineering College (NIRF Rank #283),Uttar Pradesh,Allahabad,Uttar Pradesh Technological University,Central Government,1983,True,www.allahabadengg283.edu.in,approved
+Allahabad Institute of Engineering and Technology (NIRF Rank #284),Uttar Pradesh,Allahabad,Uttar Pradesh Technological University,Private Un-Aided,1984,True,www.allahabadengg284.edu.in,approved
+Allahabad School of Engineering (NIRF Rank #285),Uttar Pradesh,Allahabad,Uttar Pradesh Technological University,State Government,1985,True,www.allahabadengg285.edu.in,approved
+Allahabad Technological Institute (NIRF Rank #286),Uttar Pradesh,Allahabad,Uttar Pradesh Technological University,Private Aided,1986,True,www.allahabadengg286.edu.in,approved
+Allahabad Academy of Engineering (NIRF Rank #287),Uttar Pradesh,Allahabad,Uttar Pradesh Technological University,Central Government,1987,True,www.allahabadengg287.edu.in,approved
+Kolkata Institute of Technology and Science (NIRF Rank #288),West Bengal,Kolkata,West Bengal Technological University,Private Un-Aided,1988,True,www.kolkataengg288.edu.in,approved
+Kolkata College of Engineering and Technology (NIRF Rank #289),West Bengal,Kolkata,West Bengal Technological University,State Government,1989,True,www.kolkataengg289.edu.in,approved
+Kolkata Engineering College (NIRF Rank #290),West Bengal,Kolkata,West Bengal Technological University,Private Aided,1990,True,www.kolkataengg290.edu.in,approved
+Kolkata Institute of Engineering and Technology (NIRF Rank #291),West Bengal,Kolkata,West Bengal Technological University,Central Government,1991,True,www.kolkataengg291.edu.in,approved
+Kolkata School of Engineering (NIRF Rank #292),West Bengal,Kolkata,West Bengal Technological University,Private Un-Aided,1992,True,www.kolkataengg292.edu.in,approved
+Kolkata Technological Institute (NIRF Rank #293),West Bengal,Kolkata,West Bengal Technological University,State Government,1993,True,www.kolkataengg293.edu.in,approved
+Kolkata Academy of Engineering (NIRF Rank #294),West Bengal,Kolkata,West Bengal Technological University,Private Aided,1994,True,www.kolkataengg294.edu.in,approved
+Paschim Medinipur Institute of Technology and Science (NIRF Rank #295),West Bengal,Paschim Medinipur,West Bengal Technological University,Central Government,1995,True,www.paschimmedinipurengg295.edu.in,approved
+Paschim Medinipur College of Engineering and Technology (NIRF Rank #296),West Bengal,Paschim Medinipur,West Bengal Technological University,Private Un-Aided,1996,True,www.paschimmedinipurengg296.edu.in,approved
+Paschim Medinipur Engineering College (NIRF Rank #297),West Bengal,Paschim Medinipur,West Bengal Technological University,State Government,1997,True,www.paschimmedinipurengg297.edu.in,approved
+Paschim Medinipur Institute of Engineering and Technology (NIRF Rank #298),West Bengal,Paschim Medinipur,West Bengal Technological University,Private Aided,1998,True,www.paschimmedinipurengg298.edu.in,approved
+Paschim Medinipur School of Engineering (NIRF Rank #299),West Bengal,Paschim Medinipur,West Bengal Technological University,Central Government,1999,True,www.paschimmedinipurengg299.edu.in,approved
+Paschim Medinipur Technological Institute (NIRF Rank #300),West Bengal,Paschim Medinipur,West Bengal Technological University,Private Un-Aided,2000,True,www.paschimmedinipurengg300.edu.in,approved
+Paschim Medinipur Academy of Engineering (NIRF Rank #301),West Bengal,Paschim Medinipur,West Bengal Technological University,State Government,2001,True,www.paschimmedinipurengg301.edu.in,approved
+Howrah Institute of Technology and Science (NIRF Rank #302),West Bengal,Howrah,West Bengal Technological University,Private Aided,2002,True,www.howrahengg302.edu.in,approved
+Howrah College of Engineering and Technology (NIRF Rank #303),West Bengal,Howrah,West Bengal Technological University,Central Government,2003,True,www.howrahengg303.edu.in,approved
+Howrah Engineering College (NIRF Rank #304),West Bengal,Howrah,West Bengal Technological University,Private Un-Aided,2004,True,www.howrahengg304.edu.in,approved
+Howrah Institute of Engineering and Technology (NIRF Rank #305),West Bengal,Howrah,West Bengal Technological University,State Government,2005,True,www.howrahengg305.edu.in,approved
+Howrah School of Engineering (NIRF Rank #306),West Bengal,Howrah,West Bengal Technological University,Private Aided,2006,True,www.howrahengg306.edu.in,approved
+Howrah Technological Institute (NIRF Rank #307),West Bengal,Howrah,West Bengal Technological University,Central Government,2007,True,www.howrahengg307.edu.in,approved
+Howrah Academy of Engineering (NIRF Rank #308),West Bengal,Howrah,West Bengal Technological University,Private Un-Aided,2008,True,www.howrahengg308.edu.in,approved
+North 24 Parganas Institute of Technology and Science (NIRF Rank #309),West Bengal,North 24 Parganas,West Bengal Technological University,State Government,2009,True,www.north24parganasengg309.edu.in,approved
+North 24 Parganas College of Engineering and Technology (NIRF Rank #310),West Bengal,North 24 Parganas,West Bengal Technological University,Private Aided,2010,True,www.north24parganasengg310.edu.in,approved
+North 24 Parganas Engineering College (NIRF Rank #311),West Bengal,North 24 Parganas,West Bengal Technological University,Central Government,2011,True,www.north24parganasengg311.edu.in,approved
+North 24 Parganas Institute of Engineering and Technology (NIRF Rank #312),West Bengal,North 24 Parganas,West Bengal Technological University,Private Un-Aided,2012,True,www.north24parganasengg312.edu.in,approved
+North 24 Parganas School of Engineering (NIRF Rank #313),West Bengal,North 24 Parganas,West Bengal Technological University,State Government,2013,True,www.north24parganasengg313.edu.in,approved
+North 24 Parganas Technological Institute (NIRF Rank #314),West Bengal,North 24 Parganas,West Bengal Technological University,Private Aided,2014,True,www.north24parganasengg314.edu.in,approved
+North 24 Parganas Academy of Engineering (NIRF Rank #315),West Bengal,North 24 Parganas,West Bengal Technological University,Central Government,2015,True,www.north24parganasengg315.edu.in,approved
+Nadia Institute of Technology and Science (NIRF Rank #316),West Bengal,Nadia,West Bengal Technological University,Private Un-Aided,2016,True,www.nadiaengg316.edu.in,approved
+Nadia College of Engineering and Technology (NIRF Rank #317),West Bengal,Nadia,West Bengal Technological University,State Government,2017,True,www.nadiaengg317.edu.in,approved
+Nadia Engineering College (NIRF Rank #318),West Bengal,Nadia,West Bengal Technological University,Private Aided,2018,True,www.nadiaengg318.edu.in,approved
+Nadia Institute of Engineering and Technology (NIRF Rank #319),West Bengal,Nadia,West Bengal Technological University,Central Government,2019,True,www.nadiaengg319.edu.in,approved
+Nadia School of Engineering (NIRF Rank #320),West Bengal,Nadia,West Bengal Technological University,Private Un-Aided,1980,True,www.nadiaengg320.edu.in,approved
+Nadia Technological Institute (NIRF Rank #321),West Bengal,Nadia,West Bengal Technological University,State Government,1981,True,www.nadiaengg321.edu.in,approved
+Nadia Academy of Engineering (NIRF Rank #322),West Bengal,Nadia,West Bengal Technological University,Private Aided,1982,True,www.nadiaengg322.edu.in,approved
+Ahmadabad Institute of Technology and Science (NIRF Rank #323),Gujarat,Ahmadabad,Gujarat Technological University,Central Government,1983,True,www.ahmadabadengg323.edu.in,approved
+Ahmadabad College of Engineering and Technology (NIRF Rank #324),Gujarat,Ahmadabad,Gujarat Technological University,Private Un-Aided,1984,True,www.ahmadabadengg324.edu.in,approved
+Ahmadabad Engineering College (NIRF Rank #325),Gujarat,Ahmadabad,Gujarat Technological University,State Government,1985,True,www.ahmadabadengg325.edu.in,approved
+Ahmadabad Institute of Engineering and Technology (NIRF Rank #326),Gujarat,Ahmadabad,Gujarat Technological University,Private Aided,1986,True,www.ahmadabadengg326.edu.in,approved
+Ahmadabad School of Engineering (NIRF Rank #327),Gujarat,Ahmadabad,Gujarat Technological University,Central Government,1987,True,www.ahmadabadengg327.edu.in,approved
+Ahmadabad Technological Institute (NIRF Rank #328),Gujarat,Ahmadabad,Gujarat Technological University,Private Un-Aided,1988,True,www.ahmadabadengg328.edu.in,approved
+Ahmadabad Academy of Engineering (NIRF Rank #329),Gujarat,Ahmadabad,Gujarat Technological University,State Government,1989,True,www.ahmadabadengg329.edu.in,approved
+Gandhinagar Institute of Technology and Science (NIRF Rank #330),Gujarat,Gandhinagar,Gujarat Technological University,Private Aided,1990,True,www.gandhinagarengg330.edu.in,approved
+Gandhinagar College of Engineering and Technology (NIRF Rank #331),Gujarat,Gandhinagar,Gujarat Technological University,Central Government,1991,True,www.gandhinagarengg331.edu.in,approved
+Gandhinagar Engineering College (NIRF Rank #332),Gujarat,Gandhinagar,Gujarat Technological University,Private Un-Aided,1992,True,www.gandhinagarengg332.edu.in,approved
+Gandhinagar Institute of Engineering and Technology (NIRF Rank #333),Gujarat,Gandhinagar,Gujarat Technological University,State Government,1993,True,www.gandhinagarengg333.edu.in,approved
+Gandhinagar School of Engineering (NIRF Rank #334),Gujarat,Gandhinagar,Gujarat Technological University,Private Aided,1994,True,www.gandhinagarengg334.edu.in,approved
+Gandhinagar Technological Institute (NIRF Rank #335),Gujarat,Gandhinagar,Gujarat Technological University,Central Government,1995,True,www.gandhinagarengg335.edu.in,approved
+Gandhinagar Academy of Engineering (NIRF Rank #336),Gujarat,Gandhinagar,Gujarat Technological University,Private Un-Aided,1996,True,www.gandhinagarengg336.edu.in,approved
+Surat Institute of Technology and Science (NIRF Rank #337),Gujarat,Surat,Gujarat Technological University,State Government,1997,True,www.suratengg337.edu.in,approved
+Surat College of Engineering and Technology (NIRF Rank #338),Gujarat,Surat,Gujarat Technological University,Private Aided,1998,True,www.suratengg338.edu.in,approved
+Surat Engineering College (NIRF Rank #339),Gujarat,Surat,Gujarat Technological University,Central Government,1999,True,www.suratengg339.edu.in,approved
+Surat Institute of Engineering and Technology (NIRF Rank #340),Gujarat,Surat,Gujarat Technological University,Private Un-Aided,2000,True,www.suratengg340.edu.in,approved
+Surat School of Engineering (NIRF Rank #341),Gujarat,Surat,Gujarat Technological University,State Government,2001,True,www.suratengg341.edu.in,approved
+Surat Technological Institute (NIRF Rank #342),Gujarat,Surat,Gujarat Technological University,Private Aided,2002,True,www.suratengg342.edu.in,approved
+Surat Academy of Engineering (NIRF Rank #343),Gujarat,Surat,Gujarat Technological University,Central Government,2003,True,www.suratengg343.edu.in,approved
+Vadodara Institute of Technology and Science (NIRF Rank #344),Gujarat,Vadodara,Gujarat Technological University,Private Un-Aided,2004,True,www.vadodaraengg344.edu.in,approved
+Vadodara College of Engineering and Technology (NIRF Rank #345),Gujarat,Vadodara,Gujarat Technological University,State Government,2005,True,www.vadodaraengg345.edu.in,approved
+Vadodara Engineering College (NIRF Rank #346),Gujarat,Vadodara,Gujarat Technological University,Private Aided,2006,True,www.vadodaraengg346.edu.in,approved
+Vadodara Institute of Engineering and Technology (NIRF Rank #347),Gujarat,Vadodara,Gujarat Technological University,Central Government,2007,True,www.vadodaraengg347.edu.in,approved
+Vadodara School of Engineering (NIRF Rank #348),Gujarat,Vadodara,Gujarat Technological University,Private Un-Aided,2008,True,www.vadodaraengg348.edu.in,approved
+Vadodara Technological Institute (NIRF Rank #349),Gujarat,Vadodara,Gujarat Technological University,State Government,2009,True,www.vadodaraengg349.edu.in,approved
+Vadodara Academy of Engineering (NIRF Rank #350),Gujarat,Vadodara,Gujarat Technological University,Private Aided,2010,True,www.vadodaraengg350.edu.in,approved
+Rajkot Institute of Technology and Science (NIRF Rank #351),Gujarat,Rajkot,Gujarat Technological University,Central Government,2011,True,www.rajkotengg351.edu.in,approved
+Rajkot College of Engineering and Technology (NIRF Rank #352),Gujarat,Rajkot,Gujarat Technological University,Private Un-Aided,2012,True,www.rajkotengg352.edu.in,approved
+Rajkot Engineering College (NIRF Rank #353),Gujarat,Rajkot,Gujarat Technological University,State Government,2013,True,www.rajkotengg353.edu.in,approved
+Rajkot Institute of Engineering and Technology (NIRF Rank #354),Gujarat,Rajkot,Gujarat Technological University,Private Aided,2014,True,www.rajkotengg354.edu.in,approved
+Rajkot School of Engineering (NIRF Rank #355),Gujarat,Rajkot,Gujarat Technological University,Central Government,2015,True,www.rajkotengg355.edu.in,approved
+Rajkot Technological Institute (NIRF Rank #356),Gujarat,Rajkot,Gujarat Technological University,Private Un-Aided,2016,True,www.rajkotengg356.edu.in,approved
+Rajkot Academy of Engineering (NIRF Rank #357),Gujarat,Rajkot,Gujarat Technological University,State Government,2017,True,www.rajkotengg357.edu.in,approved
+Jaipur Institute of Technology and Science (NIRF Rank #358),Rajasthan,Jaipur,Rajasthan Technological University,Private Aided,2018,True,www.jaipurengg358.edu.in,approved
+Jaipur College of Engineering and Technology (NIRF Rank #359),Rajasthan,Jaipur,Rajasthan Technological University,Central Government,2019,True,www.jaipurengg359.edu.in,approved
+Jaipur Engineering College (NIRF Rank #360),Rajasthan,Jaipur,Rajasthan Technological University,Private Un-Aided,1980,True,www.jaipurengg360.edu.in,approved
+Jaipur Institute of Engineering and Technology (NIRF Rank #361),Rajasthan,Jaipur,Rajasthan Technological University,State Government,1981,True,www.jaipurengg361.edu.in,approved
+Jaipur School of Engineering (NIRF Rank #362),Rajasthan,Jaipur,Rajasthan Technological University,Private Aided,1982,True,www.jaipurengg362.edu.in,approved
+Jaipur Technological Institute (NIRF Rank #363),Rajasthan,Jaipur,Rajasthan Technological University,Central Government,1983,True,www.jaipurengg363.edu.in,approved
+Jaipur Academy of Engineering (NIRF Rank #364),Rajasthan,Jaipur,Rajasthan Technological University,Private Un-Aided,1984,True,www.jaipurengg364.edu.in,approved
+Kota Institute of Technology and Science (NIRF Rank #365),Rajasthan,Kota,Rajasthan Technological University,State Government,1985,True,www.kotaengg365.edu.in,approved
+Kota College of Engineering and Technology (NIRF Rank #366),Rajasthan,Kota,Rajasthan Technological University,Private Aided,1986,True,www.kotaengg366.edu.in,approved
+Kota Engineering College (NIRF Rank #367),Rajasthan,Kota,Rajasthan Technological University,Central Government,1987,True,www.kotaengg367.edu.in,approved
+Kota Institute of Engineering and Technology (NIRF Rank #368),Rajasthan,Kota,Rajasthan Technological University,Private Un-Aided,1988,True,www.kotaengg368.edu.in,approved
+Kota School of Engineering (NIRF Rank #369),Rajasthan,Kota,Rajasthan Technological University,State Government,1989,True,www.kotaengg369.edu.in,approved
+Kota Technological Institute (NIRF Rank #370),Rajasthan,Kota,Rajasthan Technological University,Private Aided,1990,True,www.kotaengg370.edu.in,approved
+Kota Academy of Engineering (NIRF Rank #371),Rajasthan,Kota,Rajasthan Technological University,Central Government,1991,True,www.kotaengg371.edu.in,approved
+Jodhpur Institute of Technology and Science (NIRF Rank #372),Rajasthan,Jodhpur,Rajasthan Technological University,Private Un-Aided,1992,True,www.jodhpurengg372.edu.in,approved
+Jodhpur College of Engineering and Technology (NIRF Rank #373),Rajasthan,Jodhpur,Rajasthan Technological University,State Government,1993,True,www.jodhpurengg373.edu.in,approved
+Jodhpur Engineering College (NIRF Rank #374),Rajasthan,Jodhpur,Rajasthan Technological University,Private Aided,1994,True,www.jodhpurengg374.edu.in,approved
+Jodhpur Institute of Engineering and Technology (NIRF Rank #375),Rajasthan,Jodhpur,Rajasthan Technological University,Central Government,1995,True,www.jodhpurengg375.edu.in,approved
+Jodhpur School of Engineering (NIRF Rank #376),Rajasthan,Jodhpur,Rajasthan Technological University,Private Un-Aided,1996,True,www.jodhpurengg376.edu.in,approved
+Jodhpur Technological Institute (NIRF Rank #377),Rajasthan,Jodhpur,Rajasthan Technological University,State Government,1997,True,www.jodhpurengg377.edu.in,approved
+Jodhpur Academy of Engineering (NIRF Rank #378),Rajasthan,Jodhpur,Rajasthan Technological University,Private Aided,1998,True,www.jodhpurengg378.edu.in,approved
+Jhunjhunu Institute of Technology and Science (NIRF Rank #379),Rajasthan,Jhunjhunu,Rajasthan Technological University,Central Government,1999,True,www.jhunjhunuengg379.edu.in,approved
+Jhunjhunu College of Engineering and Technology (NIRF Rank #380),Rajasthan,Jhunjhunu,Rajasthan Technological University,Private Un-Aided,2000,True,www.jhunjhunuengg380.edu.in,approved
+Jhunjhunu Engineering College (NIRF Rank #381),Rajasthan,Jhunjhunu,Rajasthan Technological University,State Government,2001,True,www.jhunjhunuengg381.edu.in,approved
+Jhunjhunu Institute of Engineering and Technology (NIRF Rank #382),Rajasthan,Jhunjhunu,Rajasthan Technological University,Private Aided,2002,True,www.jhunjhunuengg382.edu.in,approved
+Jhunjhunu School of Engineering (NIRF Rank #383),Rajasthan,Jhunjhunu,Rajasthan Technological University,Central Government,2003,True,www.jhunjhunuengg383.edu.in,approved
+Jhunjhunu Technological Institute (NIRF Rank #384),Rajasthan,Jhunjhunu,Rajasthan Technological University,Private Un-Aided,2004,True,www.jhunjhunuengg384.edu.in,approved
+Jhunjhunu Academy of Engineering (NIRF Rank #385),Rajasthan,Jhunjhunu,Rajasthan Technological University,State Government,2005,True,www.jhunjhunuengg385.edu.in,approved
+Udaipur Institute of Technology and Science (NIRF Rank #386),Rajasthan,Udaipur,Rajasthan Technological University,Private Aided,2006,True,www.udaipurengg386.edu.in,approved
+Udaipur College of Engineering and Technology (NIRF Rank #387),Rajasthan,Udaipur,Rajasthan Technological University,Central Government,2007,True,www.udaipurengg387.edu.in,approved
+Udaipur Engineering College (NIRF Rank #388),Rajasthan,Udaipur,Rajasthan Technological University,Private Un-Aided,2008,True,www.udaipurengg388.edu.in,approved
+Udaipur Institute of Engineering and Technology (NIRF Rank #389),Rajasthan,Udaipur,Rajasthan Technological University,State Government,2009,True,www.udaipurengg389.edu.in,approved
+Udaipur School of Engineering (NIRF Rank #390),Rajasthan,Udaipur,Rajasthan Technological University,Private Aided,2010,True,www.udaipurengg390.edu.in,approved
+Udaipur Technological Institute (NIRF Rank #391),Rajasthan,Udaipur,Rajasthan Technological University,Central Government,2011,True,www.udaipurengg391.edu.in,approved
+Udaipur Academy of Engineering (NIRF Rank #392),Rajasthan,Udaipur,Rajasthan Technological University,Private Un-Aided,2012,True,www.udaipurengg392.edu.in,approved
+Patiala Institute of Technology and Science (NIRF Rank #393),Punjab,Patiala,Punjab Technological University,State Government,2013,True,www.patialaengg393.edu.in,approved
+Patiala College of Engineering and Technology (NIRF Rank #394),Punjab,Patiala,Punjab Technological University,Private Aided,2014,True,www.patialaengg394.edu.in,approved
+Patiala Engineering College (NIRF Rank #395),Punjab,Patiala,Punjab Technological University,Central Government,2015,True,www.patialaengg395.edu.in,approved
+Patiala Institute of Engineering and Technology (NIRF Rank #396),Punjab,Patiala,Punjab Technological University,Private Un-Aided,2016,True,www.patialaengg396.edu.in,approved
+Patiala School of Engineering (NIRF Rank #397),Punjab,Patiala,Punjab Technological University,State Government,2017,True,www.patialaengg397.edu.in,approved
+Patiala Technological Institute (NIRF Rank #398),Punjab,Patiala,Punjab Technological University,Private Aided,2018,True,www.patialaengg398.edu.in,approved
+Patiala Academy of Engineering (NIRF Rank #399),Punjab,Patiala,Punjab Technological University,Central Government,2019,True,www.patialaengg399.edu.in,approved
+Ludhiana Institute of Technology and Science (NIRF Rank #400),Punjab,Ludhiana,Punjab Technological University,Private Un-Aided,1980,True,www.ludhianaengg400.edu.in,approved
+Ludhiana College of Engineering and Technology (NIRF Rank #401),Punjab,Ludhiana,Punjab Technological University,State Government,1981,True,www.ludhianaengg401.edu.in,approved
+Ludhiana Engineering College (NIRF Rank #402),Punjab,Ludhiana,Punjab Technological University,Private Aided,1982,True,www.ludhianaengg402.edu.in,approved
+Ludhiana Institute of Engineering and Technology (NIRF Rank #403),Punjab,Ludhiana,Punjab Technological University,Central Government,1983,True,www.ludhianaengg403.edu.in,approved
+Ludhiana School of Engineering (NIRF Rank #404),Punjab,Ludhiana,Punjab Technological University,Private Un-Aided,1984,True,www.ludhianaengg404.edu.in,approved
+Ludhiana Technological Institute (NIRF Rank #405),Punjab,Ludhiana,Punjab Technological University,State Government,1985,True,www.ludhianaengg405.edu.in,approved
+Ludhiana Academy of Engineering (NIRF Rank #406),Punjab,Ludhiana,Punjab Technological University,Private Aided,1986,True,www.ludhianaengg406.edu.in,approved
+Jalandhar Institute of Technology and Science (NIRF Rank #407),Punjab,Jalandhar,Punjab Technological University,Central Government,1987,True,www.jalandharengg407.edu.in,approved
+Jalandhar College of Engineering and Technology (NIRF Rank #408),Punjab,Jalandhar,Punjab Technological University,Private Un-Aided,1988,True,www.jalandharengg408.edu.in,approved
+Jalandhar Engineering College (NIRF Rank #409),Punjab,Jalandhar,Punjab Technological University,State Government,1989,True,www.jalandharengg409.edu.in,approved
+Jalandhar Institute of Engineering and Technology (NIRF Rank #410),Punjab,Jalandhar,Punjab Technological University,Private Aided,1990,True,www.jalandharengg410.edu.in,approved
+Jalandhar School of Engineering (NIRF Rank #411),Punjab,Jalandhar,Punjab Technological University,Central Government,1991,True,www.jalandharengg411.edu.in,approved
+Jalandhar Technological Institute (NIRF Rank #412),Punjab,Jalandhar,Punjab Technological University,Private Un-Aided,1992,True,www.jalandharengg412.edu.in,approved
+Jalandhar Academy of Engineering (NIRF Rank #413),Punjab,Jalandhar,Punjab Technological University,State Government,1993,True,www.jalandharengg413.edu.in,approved
+Mohali Institute of Technology and Science (NIRF Rank #414),Punjab,Mohali,Punjab Technological University,Private Aided,1994,True,www.mohaliengg414.edu.in,approved
+Mohali College of Engineering and Technology (NIRF Rank #415),Punjab,Mohali,Punjab Technological University,Central Government,1995,True,www.mohaliengg415.edu.in,approved
+Mohali Engineering College (NIRF Rank #416),Punjab,Mohali,Punjab Technological University,Private Un-Aided,1996,True,www.mohaliengg416.edu.in,approved
+Mohali Institute of Engineering and Technology (NIRF Rank #417),Punjab,Mohali,Punjab Technological University,State Government,1997,True,www.mohaliengg417.edu.in,approved
+Mohali School of Engineering (NIRF Rank #418),Punjab,Mohali,Punjab Technological University,Private Aided,1998,True,www.mohaliengg418.edu.in,approved
+Mohali Technological Institute (NIRF Rank #419),Punjab,Mohali,Punjab Technological University,Central Government,1999,True,www.mohaliengg419.edu.in,approved
+Mohali Academy of Engineering (NIRF Rank #420),Punjab,Mohali,Punjab Technological University,Private Un-Aided,2000,True,www.mohaliengg420.edu.in,approved
+Amritsar Institute of Technology and Science (NIRF Rank #421),Punjab,Amritsar,Punjab Technological University,State Government,2001,True,www.amritsarengg421.edu.in,approved
+Amritsar College of Engineering and Technology (NIRF Rank #422),Punjab,Amritsar,Punjab Technological University,Private Aided,2002,True,www.amritsarengg422.edu.in,approved
+Amritsar Engineering College (NIRF Rank #423),Punjab,Amritsar,Punjab Technological University,Central Government,2003,True,www.amritsarengg423.edu.in,approved
+Amritsar Institute of Engineering and Technology (NIRF Rank #424),Punjab,Amritsar,Punjab Technological University,Private Un-Aided,2004,True,www.amritsarengg424.edu.in,approved
+Amritsar School of Engineering (NIRF Rank #425),Punjab,Amritsar,Punjab Technological University,State Government,2005,True,www.amritsarengg425.edu.in,approved
+Amritsar Technological Institute (NIRF Rank #426),Punjab,Amritsar,Punjab Technological University,Private Aided,2006,True,www.amritsarengg426.edu.in,approved
+Amritsar Academy of Engineering (NIRF Rank #427),Punjab,Amritsar,Punjab Technological University,Central Government,2007,True,www.amritsarengg427.edu.in,approved
+Ernakulam Institute of Technology and Science (NIRF Rank #428),Kerala,Ernakulam,Kerala Technological University,Private Un-Aided,2008,True,www.ernakulamengg428.edu.in,approved
+Ernakulam College of Engineering and Technology (NIRF Rank #429),Kerala,Ernakulam,Kerala Technological University,State Government,2009,True,www.ernakulamengg429.edu.in,approved
+Ernakulam Engineering College (NIRF Rank #430),Kerala,Ernakulam,Kerala Technological University,Private Aided,2010,True,www.ernakulamengg430.edu.in,approved
+Ernakulam Institute of Engineering and Technology (NIRF Rank #431),Kerala,Ernakulam,Kerala Technological University,Central Government,2011,True,www.ernakulamengg431.edu.in,approved
+Ernakulam School of Engineering (NIRF Rank #432),Kerala,Ernakulam,Kerala Technological University,Private Un-Aided,2012,True,www.ernakulamengg432.edu.in,approved
+Ernakulam Technological Institute (NIRF Rank #433),Kerala,Ernakulam,Kerala Technological University,State Government,2013,True,www.ernakulamengg433.edu.in,approved
+Ernakulam Academy of Engineering (NIRF Rank #434),Kerala,Ernakulam,Kerala Technological University,Private Aided,2014,True,www.ernakulamengg434.edu.in,approved
+Trivandrum Institute of Technology and Science (NIRF Rank #435),Kerala,Trivandrum,Kerala Technological University,Central Government,2015,True,www.trivandrumengg435.edu.in,approved
+Trivandrum College of Engineering and Technology (NIRF Rank #436),Kerala,Trivandrum,Kerala Technological University,Private Un-Aided,2016,True,www.trivandrumengg436.edu.in,approved
+Trivandrum Engineering College (NIRF Rank #437),Kerala,Trivandrum,Kerala Technological University,State Government,2017,True,www.trivandrumengg437.edu.in,approved
+Trivandrum Institute of Engineering and Technology (NIRF Rank #438),Kerala,Trivandrum,Kerala Technological University,Private Aided,2018,True,www.trivandrumengg438.edu.in,approved
+Trivandrum School of Engineering (NIRF Rank #439),Kerala,Trivandrum,Kerala Technological University,Central Government,2019,True,www.trivandrumengg439.edu.in,approved
+Trivandrum Technological Institute (NIRF Rank #440),Kerala,Trivandrum,Kerala Technological University,Private Un-Aided,1980,True,www.trivandrumengg440.edu.in,approved
+Trivandrum Academy of Engineering (NIRF Rank #441),Kerala,Trivandrum,Kerala Technological University,State Government,1981,True,www.trivandrumengg441.edu.in,approved
+Kozhikode Institute of Technology and Science (NIRF Rank #442),Kerala,Kozhikode,Kerala Technological University,Private Aided,1982,True,www.kozhikodeengg442.edu.in,approved
+Kozhikode College of Engineering and Technology (NIRF Rank #443),Kerala,Kozhikode,Kerala Technological University,Central Government,1983,True,www.kozhikodeengg443.edu.in,approved
+Kozhikode Engineering College (NIRF Rank #444),Kerala,Kozhikode,Kerala Technological University,Private Un-Aided,1984,True,www.kozhikodeengg444.edu.in,approved
+Kozhikode Institute of Engineering and Technology (NIRF Rank #445),Kerala,Kozhikode,Kerala Technological University,State Government,1985,True,www.kozhikodeengg445.edu.in,approved
+Kozhikode School of Engineering (NIRF Rank #446),Kerala,Kozhikode,Kerala Technological University,Private Aided,1986,True,www.kozhikodeengg446.edu.in,approved
+Kozhikode Technological Institute (NIRF Rank #447),Kerala,Kozhikode,Kerala Technological University,Central Government,1987,True,www.kozhikodeengg447.edu.in,approved
+Kozhikode Academy of Engineering (NIRF Rank #448),Kerala,Kozhikode,Kerala Technological University,Private Un-Aided,1988,True,www.kozhikodeengg448.edu.in,approved
+Kollam Institute of Technology and Science (NIRF Rank #449),Kerala,Kollam,Kerala Technological University,State Government,1989,True,www.kollamengg449.edu.in,approved
+Kollam College of Engineering and Technology (NIRF Rank #450),Kerala,Kollam,Kerala Technological University,Private Aided,1990,True,www.kollamengg450.edu.in,approved
+Kollam Engineering College (NIRF Rank #451),Kerala,Kollam,Kerala Technological University,Central Government,1991,True,www.kollamengg451.edu.in,approved
+Kollam Institute of Engineering and Technology (NIRF Rank #452),Kerala,Kollam,Kerala Technological University,Private Un-Aided,1992,True,www.kollamengg452.edu.in,approved
+Kollam School of Engineering (NIRF Rank #453),Kerala,Kollam,Kerala Technological University,State Government,1993,True,www.kollamengg453.edu.in,approved
+Kollam Technological Institute (NIRF Rank #454),Kerala,Kollam,Kerala Technological University,Private Aided,1994,True,www.kollamengg454.edu.in,approved
+Kollam Academy of Engineering (NIRF Rank #455),Kerala,Kollam,Kerala Technological University,Central Government,1995,True,www.kollamengg455.edu.in,approved
+Thrissur Institute of Technology and Science (NIRF Rank #456),Kerala,Thrissur,Kerala Technological University,Private Un-Aided,1996,True,www.thrissurengg456.edu.in,approved
+Thrissur College of Engineering and Technology (NIRF Rank #457),Kerala,Thrissur,Kerala Technological University,State Government,1997,True,www.thrissurengg457.edu.in,approved
+Thrissur Engineering College (NIRF Rank #458),Kerala,Thrissur,Kerala Technological University,Private Aided,1998,True,www.thrissurengg458.edu.in,approved
+Thrissur Institute of Engineering and Technology (NIRF Rank #459),Kerala,Thrissur,Kerala Technological University,Central Government,1999,True,www.thrissurengg459.edu.in,approved
+Thrissur School of Engineering (NIRF Rank #460),Kerala,Thrissur,Kerala Technological University,Private Un-Aided,2000,True,www.thrissurengg460.edu.in,approved
+Thrissur Technological Institute (NIRF Rank #461),Kerala,Thrissur,Kerala Technological University,State Government,2001,True,www.thrissurengg461.edu.in,approved
+Thrissur Academy of Engineering (NIRF Rank #462),Kerala,Thrissur,Kerala Technological University,Private Aided,2002,True,www.thrissurengg462.edu.in,approved
+Bhopal Institute of Technology and Science (NIRF Rank #463),Madhya Pradesh,Bhopal,Madhya Pradesh Technological University,Central Government,2003,True,www.bhopalengg463.edu.in,approved
+Bhopal College of Engineering and Technology (NIRF Rank #464),Madhya Pradesh,Bhopal,Madhya Pradesh Technological University,Private Un-Aided,2004,True,www.bhopalengg464.edu.in,approved
+Bhopal Engineering College (NIRF Rank #465),Madhya Pradesh,Bhopal,Madhya Pradesh Technological University,State Government,2005,True,www.bhopalengg465.edu.in,approved
+Bhopal Institute of Engineering and Technology (NIRF Rank #466),Madhya Pradesh,Bhopal,Madhya Pradesh Technological University,Private Aided,2006,True,www.bhopalengg466.edu.in,approved
+Bhopal School of Engineering (NIRF Rank #467),Madhya Pradesh,Bhopal,Madhya Pradesh Technological University,Central Government,2007,True,www.bhopalengg467.edu.in,approved
+Bhopal Technological Institute (NIRF Rank #468),Madhya Pradesh,Bhopal,Madhya Pradesh Technological University,Private Un-Aided,2008,True,www.bhopalengg468.edu.in,approved
+Bhopal Academy of Engineering (NIRF Rank #469),Madhya Pradesh,Bhopal,Madhya Pradesh Technological University,State Government,2009,True,www.bhopalengg469.edu.in,approved
+Indore Institute of Technology and Science (NIRF Rank #470),Madhya Pradesh,Indore,Madhya Pradesh Technological University,Private Aided,2010,True,www.indoreengg470.edu.in,approved
+Indore College of Engineering and Technology (NIRF Rank #471),Madhya Pradesh,Indore,Madhya Pradesh Technological University,Central Government,2011,True,www.indoreengg471.edu.in,approved
+Indore Engineering College (NIRF Rank #472),Madhya Pradesh,Indore,Madhya Pradesh Technological University,Private Un-Aided,2012,True,www.indoreengg472.edu.in,approved
+Indore Institute of Engineering and Technology (NIRF Rank #473),Madhya Pradesh,Indore,Madhya Pradesh Technological University,State Government,2013,True,www.indoreengg473.edu.in,approved
+Indore School of Engineering (NIRF Rank #474),Madhya Pradesh,Indore,Madhya Pradesh Technological University,Private Aided,2014,True,www.indoreengg474.edu.in,approved
+Indore Technological Institute (NIRF Rank #475),Madhya Pradesh,Indore,Madhya Pradesh Technological University,Central Government,2015,True,www.indoreengg475.edu.in,approved
+Indore Academy of Engineering (NIRF Rank #476),Madhya Pradesh,Indore,Madhya Pradesh Technological University,Private Un-Aided,2016,True,www.indoreengg476.edu.in,approved
+Gwalior Institute of Technology and Science (NIRF Rank #477),Madhya Pradesh,Gwalior,Madhya Pradesh Technological University,State Government,2017,True,www.gwaliorengg477.edu.in,approved
+Gwalior College of Engineering and Technology (NIRF Rank #478),Madhya Pradesh,Gwalior,Madhya Pradesh Technological University,Private Aided,2018,True,www.gwaliorengg478.edu.in,approved
+Gwalior Engineering College (NIRF Rank #479),Madhya Pradesh,Gwalior,Madhya Pradesh Technological University,Central Government,2019,True,www.gwaliorengg479.edu.in,approved
+Gwalior Institute of Engineering and Technology (NIRF Rank #480),Madhya Pradesh,Gwalior,Madhya Pradesh Technological University,Private Un-Aided,1980,True,www.gwaliorengg480.edu.in,approved
+Gwalior School of Engineering (NIRF Rank #481),Madhya Pradesh,Gwalior,Madhya Pradesh Technological University,State Government,1981,True,www.gwaliorengg481.edu.in,approved
+Gwalior Technological Institute (NIRF Rank #482),Madhya Pradesh,Gwalior,Madhya Pradesh Technological University,Private Aided,1982,True,www.gwaliorengg482.edu.in,approved
+Gwalior Academy of Engineering (NIRF Rank #483),Madhya Pradesh,Gwalior,Madhya Pradesh Technological University,Central Government,1983,True,www.gwaliorengg483.edu.in,approved
+Jabalpur Institute of Technology and Science (NIRF Rank #484),Madhya Pradesh,Jabalpur,Madhya Pradesh Technological University,Private Un-Aided,1984,True,www.jabalpurengg484.edu.in,approved
+Jabalpur College of Engineering and Technology (NIRF Rank #485),Madhya Pradesh,Jabalpur,Madhya Pradesh Technological University,State Government,1985,True,www.jabalpurengg485.edu.in,approved
+Jabalpur Engineering College (NIRF Rank #486),Madhya Pradesh,Jabalpur,Madhya Pradesh Technological University,Private Aided,1986,True,www.jabalpurengg486.edu.in,approved
+Jabalpur Institute of Engineering and Technology (NIRF Rank #487),Madhya Pradesh,Jabalpur,Madhya Pradesh Technological University,Central Government,1987,True,www.jabalpurengg487.edu.in,approved
+Jabalpur School of Engineering (NIRF Rank #488),Madhya Pradesh,Jabalpur,Madhya Pradesh Technological University,Private Un-Aided,1988,True,www.jabalpurengg488.edu.in,approved
+Jabalpur Technological Institute (NIRF Rank #489),Madhya Pradesh,Jabalpur,Madhya Pradesh Technological University,State Government,1989,True,www.jabalpurengg489.edu.in,approved
+Jabalpur Academy of Engineering (NIRF Rank #490),Madhya Pradesh,Jabalpur,Madhya Pradesh Technological University,Private Aided,1990,True,www.jabalpurengg490.edu.in,approved
+Khurda Institute of Technology and Science (NIRF Rank #491),Odisha,Khurda,Odisha Technological University,Central Government,1991,True,www.khurdaengg491.edu.in,approved
+Khurda College of Engineering and Technology (NIRF Rank #492),Odisha,Khurda,Odisha Technological University,Private Un-Aided,1992,True,www.khurdaengg492.edu.in,approved
+Khurda Engineering College (NIRF Rank #493),Odisha,Khurda,Odisha Technological University,State Government,1993,True,www.khurdaengg493.edu.in,approved
+Khurda Institute of Engineering and Technology (NIRF Rank #494),Odisha,Khurda,Odisha Technological University,Private Aided,1994,True,www.khurdaengg494.edu.in,approved
+Khurda School of Engineering (NIRF Rank #495),Odisha,Khurda,Odisha Technological University,Central Government,1995,True,www.khurdaengg495.edu.in,approved
+Khurda Technological Institute (NIRF Rank #496),Odisha,Khurda,Odisha Technological University,Private Un-Aided,1996,True,www.khurdaengg496.edu.in,approved
+Khurda Academy of Engineering (NIRF Rank #497),Odisha,Khurda,Odisha Technological University,State Government,1997,True,www.khurdaengg497.edu.in,approved
+Sundargarh Institute of Technology and Science (NIRF Rank #498),Odisha,Sundargarh,Odisha Technological University,Private Aided,1998,True,www.sundargarhengg498.edu.in,approved
+Sundargarh College of Engineering and Technology (NIRF Rank #499),Odisha,Sundargarh,Odisha Technological University,Central Government,1999,True,www.sundargarhengg499.edu.in,approved
+Sundargarh Engineering College (NIRF Rank #500),Odisha,Sundargarh,Odisha Technological University,Private Un-Aided,2000,True,www.sundargarhengg500.edu.in,approved
+Sundargarh Institute of Engineering and Technology (NIRF Rank #501),Odisha,Sundargarh,Odisha Technological University,State Government,2001,True,www.sundargarhengg501.edu.in,approved
+Sundargarh School of Engineering (NIRF Rank #502),Odisha,Sundargarh,Odisha Technological University,Private Aided,2002,True,www.sundargarhengg502.edu.in,approved
+Sundargarh Technological Institute (NIRF Rank #503),Odisha,Sundargarh,Odisha Technological University,Central Government,2003,True,www.sundargarhengg503.edu.in,approved
+Sundargarh Academy of Engineering (NIRF Rank #504),Odisha,Sundargarh,Odisha Technological University,Private Un-Aided,2004,True,www.sundargarhengg504.edu.in,approved
+Cuttack Institute of Technology and Science (NIRF Rank #505),Odisha,Cuttack,Odisha Technological University,State Government,2005,True,www.cuttackengg505.edu.in,approved
+Cuttack College of Engineering and Technology (NIRF Rank #506),Odisha,Cuttack,Odisha Technological University,Private Aided,2006,True,www.cuttackengg506.edu.in,approved
+Cuttack Engineering College (NIRF Rank #507),Odisha,Cuttack,Odisha Technological University,Central Government,2007,True,www.cuttackengg507.edu.in,approved
+Cuttack Institute of Engineering and Technology (NIRF Rank #508),Odisha,Cuttack,Odisha Technological University,Private Un-Aided,2008,True,www.cuttackengg508.edu.in,approved
+Cuttack School of Engineering (NIRF Rank #509),Odisha,Cuttack,Odisha Technological University,State Government,2009,True,www.cuttackengg509.edu.in,approved
+Cuttack Technological Institute (NIRF Rank #510),Odisha,Cuttack,Odisha Technological University,Private Aided,2010,True,www.cuttackengg510.edu.in,approved
+Cuttack Academy of Engineering (NIRF Rank #511),Odisha,Cuttack,Odisha Technological University,Central Government,2011,True,www.cuttackengg511.edu.in,approved
+Gurugram Institute of Technology and Science (NIRF Rank #512),Haryana,Gurugram,Haryana Technological University,Private Un-Aided,2012,True,www.gurugramengg512.edu.in,approved
+Gurugram College of Engineering and Technology (NIRF Rank #513),Haryana,Gurugram,Haryana Technological University,State Government,2013,True,www.gurugramengg513.edu.in,approved
+Gurugram Engineering College (NIRF Rank #514),Haryana,Gurugram,Haryana Technological University,Private Aided,2014,True,www.gurugramengg514.edu.in,approved
+Gurugram Institute of Engineering and Technology (NIRF Rank #515),Haryana,Gurugram,Haryana Technological University,Central Government,2015,True,www.gurugramengg515.edu.in,approved
+Gurugram School of Engineering (NIRF Rank #516),Haryana,Gurugram,Haryana Technological University,Private Un-Aided,2016,True,www.gurugramengg516.edu.in,approved
+Gurugram Technological Institute (NIRF Rank #517),Haryana,Gurugram,Haryana Technological University,State Government,2017,True,www.gurugramengg517.edu.in,approved
+Gurugram Academy of Engineering (NIRF Rank #518),Haryana,Gurugram,Haryana Technological University,Private Aided,2018,True,www.gurugramengg518.edu.in,approved
+Faridabad Institute of Technology and Science (NIRF Rank #519),Haryana,Faridabad,Haryana Technological University,Central Government,2019,True,www.faridabadengg519.edu.in,approved
+Faridabad College of Engineering and Technology (NIRF Rank #520),Haryana,Faridabad,Haryana Technological University,Private Un-Aided,1980,True,www.faridabadengg520.edu.in,approved
+Faridabad Engineering College (NIRF Rank #521),Haryana,Faridabad,Haryana Technological University,State Government,1981,True,www.faridabadengg521.edu.in,approved
+Faridabad Institute of Engineering and Technology (NIRF Rank #522),Haryana,Faridabad,Haryana Technological University,Private Aided,1982,True,www.faridabadengg522.edu.in,approved
+Faridabad School of Engineering (NIRF Rank #523),Haryana,Faridabad,Haryana Technological University,Central Government,1983,True,www.faridabadengg523.edu.in,approved
+Faridabad Technological Institute (NIRF Rank #524),Haryana,Faridabad,Haryana Technological University,Private Un-Aided,1984,True,www.faridabadengg524.edu.in,approved
+Faridabad Academy of Engineering (NIRF Rank #525),Haryana,Faridabad,Haryana Technological University,State Government,1985,True,www.faridabadengg525.edu.in,approved
+Sonipat Institute of Technology and Science (NIRF Rank #526),Haryana,Sonipat,Haryana Technological University,Private Aided,1986,True,www.sonipatengg526.edu.in,approved
+Sonipat College of Engineering and Technology (NIRF Rank #527),Haryana,Sonipat,Haryana Technological University,Central Government,1987,True,www.sonipatengg527.edu.in,approved
+Sonipat Engineering College (NIRF Rank #528),Haryana,Sonipat,Haryana Technological University,Private Un-Aided,1988,True,www.sonipatengg528.edu.in,approved
+Sonipat Institute of Engineering and Technology (NIRF Rank #529),Haryana,Sonipat,Haryana Technological University,State Government,1989,True,www.sonipatengg529.edu.in,approved
+Sonipat School of Engineering (NIRF Rank #530),Haryana,Sonipat,Haryana Technological University,Private Aided,1990,True,www.sonipatengg530.edu.in,approved
+Sonipat Technological Institute (NIRF Rank #531),Haryana,Sonipat,Haryana Technological University,Central Government,1991,True,www.sonipatengg531.edu.in,approved
+Sonipat Academy of Engineering (NIRF Rank #532),Haryana,Sonipat,Haryana Technological University,Private Un-Aided,1992,True,www.sonipatengg532.edu.in,approved
+Kurukshetra Institute of Technology and Science (NIRF Rank #533),Haryana,Kurukshetra,Haryana Technological University,State Government,1993,True,www.kurukshetraengg533.edu.in,approved
+Kurukshetra College of Engineering and Technology (NIRF Rank #534),Haryana,Kurukshetra,Haryana Technological University,Private Aided,1994,True,www.kurukshetraengg534.edu.in,approved
+Kurukshetra Engineering College (NIRF Rank #535),Haryana,Kurukshetra,Haryana Technological University,Central Government,1995,True,www.kurukshetraengg535.edu.in,approved
+Kurukshetra Institute of Engineering and Technology (NIRF Rank #536),Haryana,Kurukshetra,Haryana Technological University,Private Un-Aided,1996,True,www.kurukshetraengg536.edu.in,approved
+Kurukshetra School of Engineering (NIRF Rank #537),Haryana,Kurukshetra,Haryana Technological University,State Government,1997,True,www.kurukshetraengg537.edu.in,approved
+Kurukshetra Technological Institute (NIRF Rank #538),Haryana,Kurukshetra,Haryana Technological University,Private Aided,1998,True,www.kurukshetraengg538.edu.in,approved
+Kurukshetra Academy of Engineering (NIRF Rank #539),Haryana,Kurukshetra,Haryana Technological University,Central Government,1999,True,www.kurukshetraengg539.edu.in,approved
+Patna Institute of Technology and Science (NIRF Rank #540),Bihar,Patna,Bihar Technological University,Private Un-Aided,2000,True,www.patnaengg540.edu.in,approved
+Patna College of Engineering and Technology (NIRF Rank #541),Bihar,Patna,Bihar Technological University,State Government,2001,True,www.patnaengg541.edu.in,approved
+Patna Engineering College (NIRF Rank #542),Bihar,Patna,Bihar Technological University,Private Aided,2002,True,www.patnaengg542.edu.in,approved
+Patna Institute of Engineering and Technology (NIRF Rank #543),Bihar,Patna,Bihar Technological University,Central Government,2003,True,www.patnaengg543.edu.in,approved
+Patna School of Engineering (NIRF Rank #544),Bihar,Patna,Bihar Technological University,Private Un-Aided,2004,True,www.patnaengg544.edu.in,approved
+Patna Technological Institute (NIRF Rank #545),Bihar,Patna,Bihar Technological University,State Government,2005,True,www.patnaengg545.edu.in,approved
+Patna Academy of Engineering (NIRF Rank #546),Bihar,Patna,Bihar Technological University,Private Aided,2006,True,www.patnaengg546.edu.in,approved
+Gaya Institute of Technology and Science (NIRF Rank #547),Bihar,Gaya,Bihar Technological University,Central Government,2007,True,www.gayaengg547.edu.in,approved
+Gaya College of Engineering and Technology (NIRF Rank #548),Bihar,Gaya,Bihar Technological University,Private Un-Aided,2008,True,www.gayaengg548.edu.in,approved
+Gaya Engineering College (NIRF Rank #549),Bihar,Gaya,Bihar Technological University,State Government,2009,True,www.gayaengg549.edu.in,approved
+Gaya Institute of Engineering and Technology (NIRF Rank #550),Bihar,Gaya,Bihar Technological University,Private Aided,2010,True,www.gayaengg550.edu.in,approved
+Gaya School of Engineering (NIRF Rank #551),Bihar,Gaya,Bihar Technological University,Central Government,2011,True,www.gayaengg551.edu.in,approved
+Gaya Technological Institute (NIRF Rank #552),Bihar,Gaya,Bihar Technological University,Private Un-Aided,2012,True,www.gayaengg552.edu.in,approved
+Gaya Academy of Engineering (NIRF Rank #553),Bihar,Gaya,Bihar Technological University,State Government,2013,True,www.gayaengg553.edu.in,approved
+Muzaffarpur Institute of Technology and Science (NIRF Rank #554),Bihar,Muzaffarpur,Bihar Technological University,Private Aided,2014,True,www.muzaffarpurengg554.edu.in,approved
+Muzaffarpur College of Engineering and Technology (NIRF Rank #555),Bihar,Muzaffarpur,Bihar Technological University,Central Government,2015,True,www.muzaffarpurengg555.edu.in,approved
+Muzaffarpur Engineering College (NIRF Rank #556),Bihar,Muzaffarpur,Bihar Technological University,Private Un-Aided,2016,True,www.muzaffarpurengg556.edu.in,approved
+Muzaffarpur Institute of Engineering and Technology (NIRF Rank #557),Bihar,Muzaffarpur,Bihar Technological University,State Government,2017,True,www.muzaffarpurengg557.edu.in,approved
+Muzaffarpur School of Engineering (NIRF Rank #558),Bihar,Muzaffarpur,Bihar Technological University,Private Aided,2018,True,www.muzaffarpurengg558.edu.in,approved
+Muzaffarpur Technological Institute (NIRF Rank #559),Bihar,Muzaffarpur,Bihar Technological University,Central Government,2019,True,www.muzaffarpurengg559.edu.in,approved
+Muzaffarpur Academy of Engineering (NIRF Rank #560),Bihar,Muzaffarpur,Bihar Technological University,Private Un-Aided,1980,True,www.muzaffarpurengg560.edu.in,approved
