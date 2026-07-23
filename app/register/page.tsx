@@ -404,6 +404,7 @@ export default function RegisterPage() {
         photo_url: photoUrl,
         class_of: parseInt(form.class_of, 10),
         stream: finalStream,
+
         personal_email: form.personal_email.trim() || null,
         phone_country_code: form.phone_number.trim() ? form.phone_country_code : null,
         phone_number: form.phone_number.trim() || null,
@@ -1279,86 +1280,72 @@ function SuccessScreen() {
     <main className="container container--narrow">
       <div className="card fade-up" style={{ textAlign: 'center' }}>
         <div className="success-icon">
-  <span>✓</span>
-</div>
+          <span>✓</span>
+        </div>
 
-<h1 className="success-title">
-  Registration Successful
-</h1>
+        <h1 className="success-title">
+          Registration Successful
+        </h1>
 
-<p className="success-subtitle">
-  Welcome to the Veveaham Alumni Network.
-</p>
+        <p className="success-subtitle">
+          Welcome to the Veveaham Alumni Network.
+        </p>
 
-<p className="subtitle">
-  Your profile has been submitted successfully and is awaiting admin approval.
-  <br />
-  You can log in anytime using your username and password.
-</p>
-
-<div className="success-next">
-  <h3>What happens next?</h3>
-
-  <div className="next-item">
-    <span>1.</span> Your profile will be reviewed by an administrator.
-  </div>
-
-  <div className="next-item">
-    <span>2.</span> Once approved, you'll appear in the alumni directory.
-  </div>
-
-  <div className="next-item">
-    <span>3.</span> You can log in anytime using your username and password.
-  </div>
-</div>
-        <div className="success-login">
-  <a className="success-login-btn" href="/login">
-    Continue to Login →
-  </a>
-</div>
+        <p className="subtitle">
+          Your profile has been submitted successfully and is awaiting admin approval.
+          <br />
+          You can log in anytime using your username and password.
+        </p>
 
         <hr style={{ border: 'none', borderBottom: '1px solid var(--border)', margin: '28px 0 20px' }} />
 
         <h3 style={{ marginBottom: 4 }}>Help grow the alumni network</h3>
 
-<p className="hint" style={{ marginBottom: 14 }}>
-  Invite your classmates and help build a stronger alumni community.
-</p>
+        <p className="hint" style={{ marginBottom: 14 }}>
+          Invite your classmates and help build a stronger alumni community.
+        </p>
 
         <div className="share-row">
+          <div className="share-link">
+            🔗 Alumni Invite Link
+          </div>
 
-  <div className="share-link">
-    🔗 Alumni Invite Link
-  </div>
+          <button
+            type="button"
+            onClick={copyLink}
+            className="btn btn--ghost"
+          >
+            <span className="btn__inner">
+              {copied ? '✓ Copied' : 'Copy Link'}
+            </span>
+          </button>
+        </div>
 
-  <button
-    type="button"
-    onClick={copyLink}
-    className="btn btn--ghost"
-  >
-    <span className="btn__inner">
-      {copied ? '✓ Copied' : 'Copy Link'}
-    </span>
-  </button>
+        <div className="chips" style={{ justifyContent: 'center', marginBottom: 24 }}>
+          <a className="btn btn--ghost" href={whatsapp} target="_blank" rel="noopener noreferrer">🟢 WhatsApp</a>
+          <a className="btn btn--ghost" href={email}>✉️ Email</a>
+        </div>
 
-</div>
+        <div className="success-next">
+          <h3>What happens next?</h3>
 
-        <div className="chips" style={{ justifyContent: 'center' }}>
-          <a
-  className="btn btn--ghost"
-  href={whatsapp}
-  target="_blank"
-  rel="noopener noreferrer"
->
-  🟢 WhatsApp
-</a>
+          <div className="next-item">
+            <span>1.</span> Your profile will be reviewed by an administrator.
+          </div>
 
-<a
-  className="btn btn--ghost"
-  href={email}
->
-  ✉️ Email
-</a>
+          <div className="next-item">
+            <span>2.</span> Once approved, you'll appear in the alumni directory.
+          </div>
+
+          <div className="next-item">
+            <span>3.</span> You can log in anytime using your username and password.
+          </div>
+        </div>
+
+        <div className="success-login">
+          <a className="success-login-btn" href="/login">
+            Continue to Login →
+          </a>
         </div>
       </div>
     </main>

@@ -67,12 +67,37 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [actionError, setActionError] = useState('');
+  // Values already promoted to real options via field_options, grouped by
+  // category - used to hide the "+ Add as option" button once something's
+  // already been added, without needing a full page refresh.
+  const [existingTags, setExistingTags] = useState<Record<string, Set<string>>>({});
+
+  function markTagAdded(category: string, value: string) {
+    setExistingTags((prev) => {
+      const next = { ...prev };
+      next[category] = new Set(next[category] ? [...next[category], value] : [value]);
+      return next;
+    });
+  }
+
+  async function loadExistingTags() {
+    const { data } = await supabase.from('field_options').select('category, value');
+    if (data) {
+      const grouped: Record<string, Set<string>> = {};
+      for (const row of data as { category: string; value: string }[]) {
+        if (!grouped[row.category]) grouped[row.category] = new Set();
+        grouped[row.category].add(row.value);
+      }
+      setExistingTags(grouped);
+    }
+  }
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!session) { router.replace('/login'); return; }
       setCheckingAuth(false);
       loadAll();
+      loadExistingTags();
     });
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       if (!session) router.replace('/login');
@@ -228,8 +253,8 @@ export default function AdminPage() {
           ) : (
             pending.map((person) => (
               <div key={person.id} className="card" style={{ marginBottom: 18 }}>
-                <PersonHeader person={person} />
-                <PersonDetails person={person} />
+                <PersonHeader person={person} existingTags={existingTags} onTagAdded={markTagAdded} />
+                <PersonDetails person={person} existingTags={existingTags} onTagAdded={markTagAdded} />
                 <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
                   <button type="button" onClick={() => handleApprove(person.id)} className="btn btn--primary">
                     <span className="btn__inner">✓ Approve</span>
@@ -341,7 +366,13 @@ export default function AdminPage() {
 
 /* ----- Shared sub-components --------------------------------------------- */
 
-function PersonHeader({ person }: { person: AlumniRow }) {
+function PersonHeader({
+  person, existingTags, onTagAdded,
+}: {
+  person: AlumniRow;
+  existingTags?: Record<string, Set<string>>;
+  onTagAdded?: (category: string, value: string) => void;
+}) {
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 14 }}>
       <div>
@@ -349,6 +380,9 @@ function PersonHeader({ person }: { person: AlumniRow }) {
         <p className="subtitle" style={{ margin: 0, fontSize: '0.86rem' }}>
           {person.username && <><strong>@{person.username}</strong> · </>}
           Class of {person.class_of} · {person.stream}
+          {onTagAdded && existingTags && (
+            <AddTagButton category="stream" value={person.stream} existingTags={existingTags} onAdded={onTagAdded} />
+          )}
           {person.school_name && <> · {person.school_name}</>}
         </p>
       </div>
@@ -361,21 +395,38 @@ function PersonHeader({ person }: { person: AlumniRow }) {
   );
 }
 
-function PersonDetails({ person }: { person: AlumniRow }) {
+function PersonDetails({
+  person, existingTags, onTagAdded,
+}: {
+  person: AlumniRow;
+  existingTags?: Record<string, Set<string>>;
+  onTagAdded?: (category: string, value: string) => void;
+}) {
+  const showTagButtons = !!(existingTags && onTagAdded);
   return (
     <div className="a-card__rows" style={{ marginTop: 14 }}>
       <p className="a-row" style={{ margin: '4px 0' }}>
-        <strong>Degree:</strong>&nbsp;{person.degree || '—'}&nbsp;&nbsp;
+        <strong>Degree:</strong>&nbsp;{person.degree || '—'}
+        {showTagButtons && person.degree && (
+          <AddTagButton category="degree" value={person.degree} existingTags={existingTags!} onAdded={onTagAdded!} />
+        )}
+        &nbsp;&nbsp;
         <strong>Branch:</strong>&nbsp;{person.branch || '—'}&nbsp;&nbsp;
         <strong>Field:</strong>&nbsp;{person.field || '—'}
       </p>
       <p className="a-row" style={{ margin: '4px 0' }}>
         <strong>Admission:</strong>&nbsp;{person.admission_route}
+        {showTagButtons && person.admission_route && (
+          <AddTagButton category="admission_route" value={person.admission_route} existingTags={existingTags!} onAdded={onTagAdded!} />
+        )}
         {person.admission_rank ? ` (Rank: ${person.admission_rank})` : ''}
         {person.board_marks ? ` (${person.board_marks}%)` : ''}
       </p>
       <p className="a-row" style={{ margin: '4px 0' }}>
         <strong>Status:</strong>&nbsp;{person.current_status}
+        {showTagButtons && person.current_status && (
+          <AddTagButton category="current_status" value={person.current_status} existingTags={existingTags!} onAdded={onTagAdded!} />
+        )}
         {person.currently_at ? ` — ${person.designation || ''} at ${person.currently_at}` : ''}
       </p>
       {person.linkedin_url && (
@@ -391,5 +442,48 @@ function PersonDetails({ person }: { person: AlumniRow }) {
         Private — Email: {person.personal_email || '—'} | Phone: {person.phone_country_code}{person.phone_number || '—'}
       </p>
     </div>
+  );
+}
+// A small pill button shown next to a field's value when that value is a
+// free-typed "Other" answer (not in KNOWN_VALUES and not already promoted).
+// One click inserts it into field_options so it becomes a real, selectable
+// option on the registration/profile forms from then on.
+function AddTagButton({
+  category, value, existingTags, onAdded,
+}: {
+  category: string;
+  value: string;
+  existingTags: Record<string, Set<string>>;
+  onAdded: (category: string, value: string) => void;
+}) {
+  const [state, setState] = useState<'idle' | 'saving' | 'done' | 'error'>('idle');
+
+  const isKnown =
+    !value ||
+    (KNOWN_VALUES[category] ?? []).includes(value) ||
+    existingTags[category]?.has(value);
+
+  if (isKnown) return null;
+
+  async function handleAdd() {
+    setState('saving');
+    const { error } = await supabase
+      .from('field_options')
+      .upsert({ category, value }, { onConflict: 'category,value', ignoreDuplicates: true });
+    if (error) { setState('error'); return; }
+    setState('done');
+    onAdded(category, value);
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={handleAdd}
+      disabled={state === 'saving' || state === 'done'}
+      className={`tag-add-btn${state === 'done' ? ' tag-add-btn--done' : ''}`}
+      title={`Make "${value}" a selectable option on the registration form`}
+    >
+      {state === 'done' ? '✓ Added' : state === 'saving' ? 'Adding…' : state === 'error' ? 'Try again' : `+ Add as option`}
+    </button>
   );
 }
