@@ -1307,25 +1307,24 @@ function SuccessScreen() {
 
         <div className="share-row">
           <div className="share-link">
-            🔗 Alumni Invite Link
+            🔗 Your Alumni Invite Link
           </div>
 
-          <button
-            type="button"
-            onClick={copyLink}
-            className="btn btn--ghost"
-          >
-            <span className="btn__inner">
-              {copied ? '✓ Copied' : 'Copy Link'}
-            </span>
-          </button>
-        </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <button
+              type="button"
+              onClick={copyLink}
+              className="btn btn--ghost"
+            >
+              <span className="btn__inner">
+                {copied ? '✓ Copied' : 'Copy Link'}
+              </span>
+            </button>
 
-        <div style={{ display: 'flex', justifyContent: 'center', gap: 14, marginBottom: 24 }}>
-          
             <a className="icon-share-btn" href={whatsapp} target="_blank" rel="noopener noreferrer" aria-label="Share on WhatsApp" title="Share on WhatsApp"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2 22l5.25-1.38c1.45.79 3.08 1.21 4.79 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.816 9.816 0 0012.04 2zm0 1.67c2.24 0 4.35.87 5.93 2.45a8.24 8.24 0 012.42 5.85c0 4.55-3.7 8.25-8.35 8.25a8.3 8.3 0 01-4.24-1.16l-.3-.18-3.12.82.83-3.04-.2-.31a8.18 8.18 0 01-1.27-4.4c0-4.55 3.7-8.25 8.3-8.28zm-4.6 4.7c-.17 0-.45.06-.68.32-.23.26-.9.88-.9 2.14 0 1.26.92 2.48 1.05 2.65.13.17 1.8 2.86 4.42 3.9 2.18.87 2.62.7 3.1.65.47-.04 1.5-.61 1.72-1.2.21-.59.21-1.1.15-1.2-.06-.11-.24-.17-.5-.3-.26-.13-1.5-.74-1.74-.82-.23-.09-.4-.13-.57.13-.17.26-.65.82-.8 1-.15.17-.29.19-.55.06-.26-.13-1.09-.4-2.07-1.28-.77-.68-1.28-1.53-1.43-1.79-.15-.26-.02-.4.11-.53.12-.12.26-.31.39-.47.13-.15.17-.26.26-.43.09-.17.04-.33-.02-.46-.06-.13-.57-1.4-.79-1.9-.2-.5-.42-.43-.57-.44l-.48-.01z"/></svg></a>
-          <a className="icon-share-btn" href={email} aria-label="Share via Email" title="Share via Email"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="2" /><path d="m22 6-10 7L2 6" /></svg></a>
-        </div>
+            <a className="icon-share-btn" href={email} aria-label="Share via Email" title="Share via Email"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="2" /><path d="m22 6-10 7L2 6" /></svg></a>
+          </div>
+        </div> 
 
         <div className="success-next">
           <h3>What happens next?</h3>
