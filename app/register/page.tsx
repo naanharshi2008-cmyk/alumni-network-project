@@ -15,8 +15,6 @@ interface FormState {
   class_of: string;
   stream: string;
   stream_other: string;
-  school_board: string;
-  school_board_other: string;
   personal_email: string;
   phone_country_code: string;
   phone_number: string;
@@ -73,8 +71,6 @@ const initialForm: FormState = {
   class_of: '',
   stream: 'Bio-Maths',
   stream_other: '',
-  school_board: 'State Board',
-  school_board_other: '',
   personal_email: '',
   phone_country_code: '+91',
   phone_number: '',
@@ -113,7 +109,6 @@ const ROUTES = [
   'JEE Main', 'JEE Advanced', 'NEET', 'CUET', 'BITSAT', 'VITEEE', 'SRMJEEE',
   'COMEDK', 'KCET', 'MHT-CET', 'WBJEE', 'KEAM', 'CLAT', 'Other'
 ];
-const SCHOOL_BOARDS = ['State Board', 'CBSE', 'ICSE', 'Other'];
 const STATUSES = ['Studying UG', 'Studying PG', 'Higher Studies', 'Working', 'Entrepreneur', 'Preparing', 'On Break', 'Other'];
 const DEGREES = ['BTech', 'BE', 'BSc', 'MBBS', 'BCom', 'BA', 'BArch', 'LLB', 'BBA', 'BCA'];
 const COUNTRY_CODES = ['+91', '+1', '+44', '+61', '+971', '+65', '+49', '+33', '+81', '+86'];
@@ -132,6 +127,7 @@ export default function RegisterPage() {
   const submitLockRef = useRef(false);
 
   const [orgOptions, setOrgOptions] = useState<string[]>(commonOrganizations);
+  const [tagOptions, setTagOptions] = useState<Record<string, string[]>>({});
 
   // Optional "add now" sections -- collapsed by default so the form stays
   // quick; people can also add these later from their profile instead.
@@ -173,7 +169,19 @@ export default function RegisterPage() {
       }
     })();
   }, []);
-
+  useEffect(() => {
+  if (!isSupabaseConfigured) return;
+  (async () => {
+    const { data } = await supabase.from('field_options').select('category, value');
+    if (data) {
+      const grouped: Record<string, string[]> = {};
+      for (const row of data as { category: string; value: string }[]) {
+        (grouped[row.category] ??= []).push(row.value);
+      }
+      setTagOptions(grouped);
+    }
+  })();
+}, []);
   function update<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
@@ -372,7 +380,6 @@ export default function RegisterPage() {
 
       // Map values
       const finalStream = form.stream === 'Other' && form.stream_other.trim() ? form.stream_other.trim() : form.stream;
-      const finalSchoolBoard = form.school_board === 'Other' && form.school_board_other.trim() ? form.school_board_other.trim() : form.school_board;
       const finalDegree = form.degree === 'Other' && form.degree_other.trim() ? form.degree_other.trim() : form.degree;
       const finalField = form.field === 'Other' && form.field_other.trim() ? form.field_other.trim() : form.field;
 
@@ -397,7 +404,6 @@ export default function RegisterPage() {
         photo_url: photoUrl,
         class_of: parseInt(form.class_of, 10),
         stream: finalStream,
-        school_board: finalSchoolBoard,
         personal_email: form.personal_email.trim() || null,
         phone_country_code: form.phone_number.trim() ? form.phone_country_code : null,
         phone_number: form.phone_number.trim() || null,
@@ -615,18 +621,6 @@ function StepYou({ form, update }: StepProps) {
           otherValue={form.stream_other}
           onOtherChange={(v) => update('stream_other', v)}
           otherPlaceholder="Please specify your stream"
-        />
-      </div>
-
-      <div className="field">
-        <label>School board</label>
-        <OtherAwareChips
-          options={SCHOOL_BOARDS}
-          value={form.school_board}
-          onChange={(v) => update('school_board', v)}
-          otherValue={form.school_board_other}
-          onOtherChange={(v) => update('school_board_other', v)}
-          otherPlaceholder="Please specify your board"
         />
       </div>
     </>

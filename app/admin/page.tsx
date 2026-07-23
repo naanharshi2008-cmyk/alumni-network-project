@@ -45,6 +45,18 @@ const FIELD_LABELS: Record<string, string> = {
   current_status: 'Status', admission_route: 'Admission Route',
   admission_rank: 'Rank', board_marks: 'Board Marks', board_cutoff: 'Cutoff',
   message_1: 'Advice', linkedin_url: 'LinkedIn',
+};// The fixed options the registration form ships with, per field. Anything a
+// pending person submitted that ISN'T in this list (and hasn't already been
+// promoted via field_options) is a free-typed "Other" value, so we show a
+// button next to it letting staff turn it into a real option going forward.
+const KNOWN_VALUES: Record<string, string[]> = {
+  stream: ['Bio-Maths', 'CS-Maths', 'Commerce (Business & Finance)', 'Other'],
+  degree: ['BTech', 'BE', 'BSc', 'MBBS', 'BCom', 'BA', 'BArch', 'LLB', 'BBA', 'BCA', 'Other'],
+  admission_route: [
+    'JEE Main', 'JEE Advanced', 'NEET', 'CUET', 'BITSAT', 'VITEEE', 'SRMJEEE',
+    'COMEDK', 'KCET', 'MHT-CET', 'WBJEE', 'KEAM', 'CLAT', 'Other', 'Board Marks', 'Direct',
+  ],
+  current_status: ['Studying UG', 'Studying PG', 'Higher Studies', 'Working', 'Entrepreneur', 'Preparing', 'On Break', 'Other'],
 };
 
 export default function AdminPage() {

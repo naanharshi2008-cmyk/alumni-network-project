@@ -106,12 +106,12 @@ function normalizeProfile(raw: any): AlumnusData {
 }
 
 const CURRENT_YEAR = new Date().getFullYear();
-const STREAMS = ['Bio-Maths', 'CS-Maths', 'Commerce (Business & Finance)', 'Other'];
+const STREAMS = ['Bio-Maths', 'CS-Maths', 'Business & Finance', 'Other'];
 const ROUTES = [
   'JEE Main', 'JEE Advanced', 'NEET', 'CUET', 'BITSAT', 'VITEEE', 'SRMJEEE',
   'COMEDK', 'KCET', 'MHT-CET', 'WBJEE', 'KEAM', 'CLAT', 'Board Marks', 'Other'
 ];
-const SCHOOL_BOARDS = ['State Board', 'CBSE', 'ICSE', 'Other'];
+const SCHOOL_BOARDS = ['State Board', 'CBSE'];
 const STATUSES = ['Studying UG', 'Studying PG', 'Working', 'Entrepreneur', 'Preparing', 'On Break', 'Other'];
 const DEGREES = ['BTech', 'BE', 'BSc', 'MBBS', 'BCom', 'BA', 'BArch', 'LLB', 'BBA', 'BCA'];
 const COUNTRY_CODES = ['+91', '+1', '+44', '+61', '+971', '+65', '+49', '+33', '+81', '+86'];
