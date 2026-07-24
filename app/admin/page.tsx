@@ -544,7 +544,6 @@ export default function AdminPage() {
               );
             })
           )}
-)}
 
           {adminColleges.length > 0 && (
             <div className="card" style={{ marginBottom: 18, padding: '16px 20px' }}>
