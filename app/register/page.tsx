@@ -1068,7 +1068,7 @@ function CollegeSearchField({ value, onChange }: { value: string; onChange: (v: 
       const { data } = await supabase
         .from('colleges')
         .select('id, name, state')
-        .ilike('name', `%${query}%`)
+        .or(`name.ilike.%${query}%,short_names.ilike.%${query}%`)
         .order('name')
         .limit(12);
       setResults(data ?? []);

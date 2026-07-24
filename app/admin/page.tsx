@@ -14,6 +14,7 @@ type AlumniRow = {
   stream: string;
   school_board: string | null;
   college_name_raw: string | null;
+  college_id: string | null;
   degree: string | null;
   branch: string | null;
   field: string | null;
@@ -37,7 +38,7 @@ type AlumniRow = {
   created_at: string;
 };
 
-type Tab = 'registrations' | 'edits';
+type Tab = 'registrations' | 'edits' | 'colleges';
 
 type HigherStudyRow = {
   id: string;
@@ -113,6 +114,32 @@ export default function AdminPage() {
       setExistingTags(grouped);
     }
   }
+  const [unmatchedColleges, setUnmatchedColleges] = useState<{ key: string; display: string; alumniIds: string[] }[]>([]);
+
+  async function loadUnmatchedColleges() {
+    const { data } = await supabase
+      .from('alumni')
+      .select('id, college_name_raw')
+      .is('college_id', null)
+      .not('college_name_raw', 'is', null);
+    if (data) {
+      const groups: Record<string, { display: string; alumniIds: string[] }> = {};
+      for (const row of data as { id: string; college_name_raw: string }[]) {
+        const key = (row.college_name_raw || '').trim().toLowerCase();
+        if (!key) continue;
+        if (!groups[key]) groups[key] = { display: row.college_name_raw.trim(), alumniIds: [] };
+        groups[key].alumniIds.push(row.id);
+      }
+      const list = Object.entries(groups).map(([key, v]) => ({ key, display: v.display, alumniIds: v.alumniIds }));
+      list.sort((a, b) => b.alumniIds.length - a.alumniIds.length);
+      setUnmatchedColleges(list);
+    }
+  }
+
+  function removeResolvedGroup(key: string) {
+    setUnmatchedColleges((prev) => prev.filter((g) => g.key !== key));
+  }
+  
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -120,6 +147,7 @@ export default function AdminPage() {
       setCheckingAuth(false);
       loadAll();
       loadExistingTags();
+      loadUnmatchedColleges();
     });
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       if (!session) router.replace('/login');
@@ -277,6 +305,14 @@ export default function AdminPage() {
           ✏️ Pending Edits
           <span style={{ opacity: 0.7, marginLeft: 6 }}>{pendingEdits.length}</span>
         </button>
+        <button
+          type="button"
+          className={`chip${tab === 'colleges' ? ' chip--active' : ''}`}
+          onClick={() => setTab('colleges')}
+        >
+          🏫 Unmatched Colleges
+          <span style={{ opacity: 0.7, marginLeft: 6 }}>{unmatchedColleges.length}</span>
+        </button>
       </div>
 
       {actionError && (
@@ -307,6 +343,7 @@ export default function AdminPage() {
                   onTagAdded={markTagAdded}
                   higherStudies={higherStudiesMap[person.id]}
                   workExperience={workExperienceMap[person.id]}
+                  
                 />
                 <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
                   <button type="button" onClick={() => handleApprove(person.id)} className="btn btn--primary">
@@ -413,6 +450,28 @@ export default function AdminPage() {
           )}
         </div>
       )}
+
+      {/* ===== Tab: Unmatched Colleges ===== */}
+      {tab === 'colleges' && (
+        <div className="stagger">
+          {unmatchedColleges.length === 0 ? (
+            <div className="card empty">
+              <span className="empty__emoji">🏫</span>
+              <p style={{ margin: 0 }}>No unmatched colleges right now - nice and tidy.</p>
+            </div>
+          ) : (
+            unmatchedColleges.map((group) => (
+              <UnmatchedCollegeRow
+                key={group.key}
+                groupKey={group.key}
+                display={group.display}
+                alumniIds={group.alumniIds}
+                onResolved={removeResolvedGroup}
+              />
+            ))
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -447,7 +506,6 @@ function PersonHeader({
     </div>
   );
 }
-
 function PersonDetails({
   person, existingTags, onTagAdded, higherStudies, workExperience,
 }: {
@@ -457,10 +515,17 @@ function PersonDetails({
   higherStudies?: HigherStudyRow[];
   workExperience?: WorkExperienceRow[];
 }) {
+
+
   const showTagButtons = !!(existingTags && onTagAdded);
   return (
     <div className="a-card__rows" style={{ marginTop: 14 }}>
       <p className="a-row" style={{ margin: '4px 0' }}>
+        <strong>College:</strong>&nbsp;{person.college_name_raw || '—'}
+        {person.college_name_raw && (
+          <AddCollegeButton alumniId={person.id} collegeName={person.college_name_raw} hasMatch={!!person.college_id} />
+        )}
+        &nbsp;&nbsp;
         <strong>Degree:</strong>&nbsp;{person.degree || '—'}
         {showTagButtons && person.degree && (
           <AddTagButton category="degree" value={person.degree} existingTags={existingTags!} onAdded={onTagAdded!} />
@@ -522,6 +587,123 @@ function PersonDetails({
     </div>
   );
 }
+function UnmatchedCollegeRow({
+  groupKey, display, alumniIds, onResolved,
+}: {
+  groupKey: string;
+  display: string;
+  alumniIds: string[];
+  onResolved: (key: string) => void;
+}) {
+  const [mode, setMode] = useState<'idle' | 'editing' | 'saving' | 'error'>('idle');
+  const [draft, setDraft] = useState(display);
+
+  async function handleSave() {
+    const finalName = draft.trim();
+    if (!finalName) return;
+    setMode('saving');
+    const { data, error } = await supabase.from('colleges').insert({ name: finalName }).select().single();
+    if (error || !data) { setMode('error'); return; }
+    const { error: updateError } = await supabase.from('alumni').update({ college_id: data.id }).in('id', alumniIds);
+    if (updateError) { setMode('error'); return; }
+    onResolved(groupKey);
+  }
+
+  return (
+    <div className="card" style={{ marginBottom: 14, padding: '16px 20px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}>
+        <div>
+          <p style={{ margin: 0, fontSize: '1.02rem', fontWeight: 700 }}>{display}</p>
+          <p style={{ margin: '2px 0 0', fontSize: '0.82rem', color: 'var(--text-faint)' }}>
+            Typed by {alumniIds.length} student{alumniIds.length === 1 ? '' : 's'}
+          </p>
+        </div>
+
+        {mode === 'idle' && (
+          <button type="button" onClick={() => setMode('editing')} className="btn btn--ghost">
+            <span className="btn__inner">✎ Correct &amp; add for all</span>
+          </button>
+        )}
+
+        {(mode === 'editing' || mode === 'saving' || mode === 'error') && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <input
+              type="text"
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              disabled={mode === 'saving'}
+              style={{
+                fontSize: '0.88rem', padding: '7px 12px', borderRadius: 'var(--r-sm)',
+                border: '1px solid var(--border-strong)', background: 'var(--surface-2)', color: 'var(--text)',
+                width: 260,
+              }}
+            />
+            <button type="button" onClick={handleSave} disabled={mode === 'saving'} className="btn btn--primary">
+              <span className="btn__inner">{mode === 'saving' ? 'Saving…' : mode === 'error' ? 'Try again' : '✓ Save for all'}</span>
+            </button>
+            <button type="button" onClick={() => { setMode('idle'); setDraft(display); }} className="btn btn--neutral">
+              <span className="btn__inner">Cancel</span>
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+function AddCollegeButton({ alumniId, collegeName, hasMatch }: { alumniId: string; collegeName: string; hasMatch: boolean }) {
+  const [mode, setMode] = useState<'idle' | 'editing' | 'saving' | 'done' | 'error'>('idle');
+  const [draft, setDraft] = useState(collegeName);
+
+  if (hasMatch || !collegeName) return null;
+
+  async function handleSave() {
+    const finalName = draft.trim();
+    if (!finalName) return;
+    setMode('saving');
+    const { data, error } = await supabase.from('colleges').insert({ name: finalName }).select().single();
+    if (error || !data) { setMode('error'); return; }
+    await supabase.from('alumni').update({ college_id: data.id }).eq('id', alumniId);
+    setMode('done');
+  }
+
+  if (mode === 'done') {
+    return <span className="tag-add-btn tag-add-btn--done">✓ Added as "{draft}"</span>;
+  }
+
+  if (mode === 'editing' || mode === 'saving' || mode === 'error') {
+    return (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginLeft: 8 }}>
+        <input
+          type="text"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          disabled={mode === 'saving'}
+          style={{
+            fontSize: '0.8rem', padding: '3px 8px', borderRadius: 'var(--r-sm)',
+            border: '1px solid var(--border-strong)', background: 'var(--surface-2)', color: 'var(--text)',
+            width: 220,
+          }}
+        />
+        <button type="button" onClick={handleSave} disabled={mode === 'saving'} className="tag-add-btn">
+          {mode === 'saving' ? 'Saving…' : mode === 'error' ? 'Try again' : '✓ Save'}
+        </button>
+        <button type="button" onClick={() => { setMode('idle'); setDraft(collegeName); }} className="tag-add-btn">
+          Cancel
+        </button>
+      </span>
+    );
+  }
+
+  return (
+    <button type="button" onClick={() => setMode('editing')} className="tag-add-btn" title={`Correct and add "${collegeName}" to the colleges list`}>
+      ✎ Correct &amp; add
+    </button>
+  );
+}
+
+
+
+
 // A small pill button shown next to a field's value when that value is a
 // free-typed "Other" answer (not in KNOWN_VALUES and not already promoted).
 // One click inserts it into field_options so it becomes a real, selectable
