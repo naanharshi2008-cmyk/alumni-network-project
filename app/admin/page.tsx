@@ -810,6 +810,40 @@ function AddCollegeButton({ alumniId, collegeName, hasMatch }: { alumniId: strin
     </button>
   );
 }
+function TagDeleteChip({
+  category, value, onDeleted,
+}: {
+  category: string;
+  value: string;
+  onDeleted: () => void;
+}) {
+  const [state, setState] = useState<'idle' | 'deleting' | 'error'>('idle');
+
+  async function handleDelete() {
+    setState('deleting');
+    const { error } = await supabase.from('field_options').delete().eq('category', category).eq('value', value);
+    if (error) { setState('error'); return; }
+    onDeleted();
+  }
+
+  return (
+    <span className="tag-add-btn" style={{ borderStyle: 'solid' }}>
+      {value}
+      <button
+        type="button"
+        onClick={handleDelete}
+        disabled={state === 'deleting'}
+        title={`Remove "${value}" from the options list`}
+        style={{
+          background: 'transparent', border: 'none', color: 'inherit', cursor: 'pointer',
+          padding: 0, marginLeft: 4, fontSize: '0.9em', lineHeight: 1,
+        }}
+      >
+        {state === 'deleting' ? '…' : state === 'error' ? '⚠' : '✕'}
+      </button>
+    </span>
+  );
+}
 
 
 
