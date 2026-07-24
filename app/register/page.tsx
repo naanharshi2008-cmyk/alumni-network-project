@@ -105,7 +105,7 @@ const CURRENT_YEAR = new Date().getFullYear();
 // personal email. Must match the same constant used in app/login/page.tsx.
 const ALUMNI_LOGIN_DOMAIN = 'veveaham-alumni-network.com';
 const STEPS = ['Account', 'You', 'Studies', 'Now', 'Advice'];
-const STREAMS = ['Bio-Maths', 'CS-Maths', 'Commerce (Business & Finance)', 'Other'];
+const STREAMS = ['Bio-Maths', 'CS-Maths', 'Business & Finance', 'Other'];
 const ROUTES = [
   'JEE Main', 'JEE Advanced', 'NEET', 'CUET', 'BITSAT', 'VITEEE', 'SRMJEEE',
   'COMEDK', 'KCET', 'MHT-CET', 'WBJEE', 'KEAM', 'CLAT', 'Other'
@@ -114,6 +114,13 @@ const STATUSES = ['Studying UG', 'Studying PG', 'Higher Studies', 'Working', 'En
 const DEGREES = ['BTech', 'BE', 'BSc', 'MBBS', 'BCom', 'BA', 'BArch', 'LLB', 'BBA', 'BCA'];
 const COUNTRY_CODES = ['+91', '+1', '+44', '+61', '+971', '+65', '+49', '+33', '+81', '+86'];
 const SCHOOLS = ['Veveaham Hr. Sec. School', 'Veveaham Prime Academy'];
+function withTags(base: string[], tags?: string[]): string[] {
+  if (!tags || tags.length === 0) return base;
+  const hasOther = base.includes('Other');
+  const core = base.filter((o) => o !== 'Other');
+  const merged = Array.from(new Set([...core, ...tags]));
+  return hasOther ? [...merged, 'Other'] : merged;
+}
 
 export default function RegisterPage() {
   const [form, setForm] = useState<FormState>(initialForm);
@@ -171,18 +178,19 @@ export default function RegisterPage() {
     })();
   }, []);
   useEffect(() => {
-  if (!isSupabaseConfigured) return;
-  (async () => {
-    const { data } = await supabase.from('field_options').select('category, value');
-    if (data) {
-      const grouped: Record<string, string[]> = {};
-      for (const row of data as { category: string; value: string }[]) {
-        (grouped[row.category] ??= []).push(row.value);
+    if (!isSupabaseConfigured) return;
+    (async () => {
+      const { data } = await supabase.from('field_options').select('category, value');
+      if (data) {
+        const grouped: Record<string, string[]> = {};
+        for (const row of data as { category: string; value: string }[]) {
+          (grouped[row.category] ??= []).push(row.value);
+        }
+        setTagOptions(grouped);
       }
-      setTagOptions(grouped);
-    }
-  })();
-}, []);
+    })();
+  }, []);
+  
   function update<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
@@ -516,13 +524,14 @@ export default function RegisterPage() {
         <form onSubmit={handleFormSubmit}>
           <div key={step} className="fade-up">
             {step === 0 && <StepAccount form={form} update={update} />}
-            {step === 1 && <StepYou form={form} update={update} />}
-            {step === 2 && <StepStudies form={form} update={update} />}
+            {step === 1 && <StepYou form={form} update={update} tagOptions={tagOptions} />}
+            {step === 2 && <StepStudies form={form} update={update} tagOptions={tagOptions} />}
             {step === 3 && (
               <StepNow
                 form={form}
                 update={update}
                 orgOptions={orgOptions}
+                tagOptions={tagOptions}
                 showHigherStudies={showHigherStudies}
                 setShowHigherStudies={setShowHigherStudies}
                 higherStudies={higherStudies}
@@ -599,7 +608,7 @@ function StepAccount({ form, update }: StepProps) {
   );
 }
 
-function StepYou({ form, update }: StepProps) {
+function StepYou({ form, update, tagOptions }: StepProps & { tagOptions: Record<string, string[]> }) {
   return (
     <>
       <h2 className="step-title">Tell us about you 👋</h2>
@@ -617,7 +626,7 @@ function StepYou({ form, update }: StepProps) {
       <div className="field">
         <label>Stream at school</label>
         <OtherAwareChips
-          options={STREAMS}
+          options={withTags(STREAMS, tagOptions.stream)}
           value={form.stream}
           onChange={(v) => update('stream', v)}
           otherValue={form.stream_other}
@@ -629,7 +638,7 @@ function StepYou({ form, update }: StepProps) {
   );
 }
 
-function StepStudies({ form, update }: StepProps) {
+function StepStudies({ form, update, tagOptions }: StepProps & { tagOptions: Record<string, string[]> }) {
   return (
     <>
       <h2 className="step-title">What did you study? 🎓</h2>
@@ -660,7 +669,7 @@ function StepStudies({ form, update }: StepProps) {
         <label>Degree</label>
         <OtherAwareSelect
           label="Degree"
-          options={DEGREES}
+          options={withTags(DEGREES, tagOptions.degree)}
           value={form.degree}
           onChange={(v) => update('degree', v)}
           otherValue={form.degree_other}
@@ -693,7 +702,7 @@ function StepStudies({ form, update }: StepProps) {
           <div className="field" style={{ marginTop: 14 }}>
             <OtherAwareSelect
               label="Entrance Exam"
-              options={ROUTES.filter((r) => r !== 'Other')}
+              options={withTags(ROUTES, tagOptions.admission_route).filter((r) => r !== 'Other')}
               value={form.admission_route}
               onChange={(v) => update('admission_route', v)}
               otherValue={form.admission_route_other}
@@ -738,10 +747,10 @@ function StepStudies({ form, update }: StepProps) {
 }
 
 function StepNow({
-  form, update, orgOptions,
+  form, update, orgOptions, tagOptions,
   showHigherStudies, setShowHigherStudies, higherStudies, updateHigherStudy, addHigherStudy, removeHigherStudy,
   showWorkExperience, setShowWorkExperience, workExperience, updateWorkExperience, addWorkExperience, removeWorkExperience,
-}: StepProps & { orgOptions: string[] } & OptionalSectionsProps) { 
+}: StepProps & { orgOptions: string[]; tagOptions: Record<string, string[]> } & OptionalSectionsProps) {
   return (
     <>
       <h2 className="step-title">What are you up to now? 💼</h2>
@@ -751,7 +760,7 @@ function StepNow({
         <label>Current status</label>
         <select value={form.current_status} onChange={(e) => update('current_status', e.target.value)}>
           <option value="" disabled hidden>Select your current status</option>
-          {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+          {withTags(STATUSES, tagOptions.current_status).map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
         {form.current_status === 'Other' && (
           <FloatingField
