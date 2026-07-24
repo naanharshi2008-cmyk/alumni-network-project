@@ -66,7 +66,26 @@ const FIELD_LABELS: Record<string, string> = {
   current_status: 'Status', admission_route: 'Admission Route',
   admission_rank: 'Rank', board_marks: 'Board Marks', board_cutoff: 'Cutoff',
   message_1: 'Advice', linkedin_url: 'LinkedIn',
-};// The fixed options the registration form ships with, per field. Anything a
+};
+// Small words that stay lowercase in title case (unless they're the very
+// first word) - e.g. "Indian Institute of Science Education and Research".
+const TITLE_CASE_MINOR_WORDS = new Set(['a', 'an', 'and', 'as', 'at', 'but', 'by', 'for', 'in', 'nor', 'of', 'on', 'or', 'the', 'to', 'with']);
+
+function toTitleCase(text: string): string {
+  return text
+    .split(/(\s+)/) // keep whitespace groups so multiple spaces survive
+    .map((chunk, i) => {
+      if (/^\s+$/.test(chunk) || chunk === '') return chunk;
+      const lowerChunk = chunk.toLowerCase();
+      if (i !== 0 && TITLE_CASE_MINOR_WORDS.has(lowerChunk)) return lowerChunk;
+      return chunk
+        .split('-') // capitalize each side of hyphenated words too, e.g. "Jean-Paul"
+        .map((part) => (part ? part.charAt(0).toUpperCase() + part.slice(1).toLowerCase() : part))
+        .join('-');
+    })
+    .join('');
+}
+// The fixed options the registration form ships with, per field. Anything a
 // pending person submitted that ISN'T in this list (and hasn't already been
 // promoted via field_options) is a free-typed "Other" value, so we show a
 // button next to it letting staff turn it into a real option going forward.
@@ -608,22 +627,24 @@ function PersonDetails({
   const showTagButtons = !!(existingTags && onTagAdded);
   return (
     <div className="a-card__rows" style={{ marginTop: 14 }}>
+      <div className="a-row" style={{ margin: '4px 0', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px 22px' }}>
+        <span>
+          <strong>College:</strong>&nbsp;{person.college_name_raw || '—'}
+          {person.college_name_raw && (
+            <AddCollegeButton alumniId={person.id} collegeName={person.college_name_raw} hasMatch={!!person.college_id} />
+          )}
+        </span>
+        <span>
+          <strong>Degree:</strong>&nbsp;{person.degree || '—'}
+          {showTagButtons && person.degree && (
+            <AddTagButton category="degree" value={person.degree} existingTags={existingTags!} onAdded={onTagAdded!} />
+          )}
+        </span>
+        <span><strong>Branch:</strong>&nbsp;{person.branch || '—'}</span>
+        <span><strong>Field:</strong>&nbsp;{person.field || '—'}</span>
+      </div>
       <p className="a-row" style={{ margin: '4px 0' }}>
-        <strong>College:</strong>&nbsp;{person.college_name_raw || '—'}
-        {person.college_name_raw && (
-          <AddCollegeButton alumniId={person.id} collegeName={person.college_name_raw} hasMatch={!!person.college_id} />
-        )}
-        &nbsp;&nbsp;
-        <strong>Degree:</strong>&nbsp;{person.degree || '—'}
-        {showTagButtons && person.degree && (
-          <AddTagButton category="degree" value={person.degree} existingTags={existingTags!} onAdded={onTagAdded!} />
-        )}
-        &nbsp;&nbsp;
-        <strong>Branch:</strong>&nbsp;{person.branch || '—'}&nbsp;&nbsp;
-        <strong>Field:</strong>&nbsp;{person.field || '—'}
-      </p>
-      <p className="a-row" style={{ margin: '4px 0' }}>
-        <strong>Admission:</strong>&nbsp;{person.admission_route}
+        <strong>Admission through:</strong>&nbsp;{person.admission_route}
         {showTagButtons && person.admission_route && (
           <AddTagButton category="admission_route" value={person.admission_route} existingTags={existingTags!} onAdded={onTagAdded!} />
         )}
@@ -687,7 +708,7 @@ function UnmatchedCollegeRow({
   const [draft, setDraft] = useState(display);
 
   async function handleSave() {
-    const finalName = draft.trim();
+    const finalName = toTitleCase(draft.trim());
     if (!finalName) return;
     setMode('saving');
     const { data, error } = await supabase.from('colleges').insert({ name: finalName, added_by_admin: true }).select().single();
@@ -806,7 +827,7 @@ function AddCollegeButton({ alumniId, collegeName, hasMatch }: { alumniId: strin
   if (hasMatch || !collegeName) return null;
 
   async function handleSave() {
-    const finalName = draft.trim();
+    const finalName = toTitleCase(draft.trim());
     if (!finalName) return;
     setMode('saving');
     const { data, error } = await supabase.from('colleges').insert({ name: finalName, added_by_admin: true }).select().single();
