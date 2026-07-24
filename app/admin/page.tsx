@@ -38,7 +38,7 @@ type AlumniRow = {
   created_at: string;
 };
 
-type Tab = 'registrations' | 'edits' | 'colleges';
+type Tab = 'registrations' | 'edits' | 'colleges' | 'tags';
 
 type HigherStudyRow = {
   id: string;
@@ -79,7 +79,13 @@ const KNOWN_VALUES: Record<string, string[]> = {
   ],
   current_status: ['Studying UG', 'Studying PG', 'Higher Studies', 'Working', 'Entrepreneur', 'Preparing', 'On Break', 'Other'],
 };
-
+// Friendly section headers for the "Manage Tags" tab.
+const TAG_CATEGORY_LABELS: Record<string, string> = {
+  stream: 'Stream',
+  degree: 'Degree',
+  admission_route: 'Entrance Exam',
+  current_status: 'Current Status',
+};
 export default function AdminPage() {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>('registrations');
@@ -99,6 +105,17 @@ export default function AdminPage() {
     setExistingTags((prev) => {
       const next = { ...prev };
       next[category] = new Set(next[category] ? [...next[category], value] : [value]);
+      return next;
+    });
+  }
+  function removeTagLocally(category: string, value: string) {
+    setExistingTags((prev) => {
+      const next = { ...prev };
+      if (next[category]) {
+        const updated = new Set(next[category]);
+        updated.delete(value);
+        next[category] = updated;
+      }
       return next;
     });
   }
@@ -313,6 +330,16 @@ export default function AdminPage() {
           🏫 Unmatched Colleges
           <span style={{ opacity: 0.7, marginLeft: 6 }}>{unmatchedColleges.length}</span>
         </button>
+        <button
+          type="button"
+          className={`chip${tab === 'tags' ? ' chip--active' : ''}`}
+          onClick={() => setTab('tags')}
+        >
+          🏷 Manage Tags
+          <span style={{ opacity: 0.7, marginLeft: 6 }}>
+            {Object.values(existingTags).reduce((sum, s) => sum + s.size, 0)}
+          </span>
+        </button>
       </div>
 
       {actionError && (
@@ -469,6 +496,38 @@ export default function AdminPage() {
                 onResolved={removeResolvedGroup}
               />
             ))
+          )}
+</div>
+      )}
+
+      {/* ===== Tab: Manage Tags ===== */}
+      {tab === 'tags' && (
+        <div className="stagger">
+          {Object.entries(existingTags).every(([, values]) => values.size === 0) ? (
+            <div className="card empty">
+              <span className="empty__emoji">🏷</span>
+              <p style={{ margin: 0 }}>No admin-added tags yet.</p>
+            </div>
+          ) : (
+            Object.entries(TAG_CATEGORY_LABELS).map(([category, label]) => {
+              const values = Array.from(existingTags[category] ?? []).sort();
+              if (values.length === 0) return null;
+              return (
+                <div key={category} className="card" style={{ marginBottom: 18, padding: '16px 20px' }}>
+                  <h3 style={{ margin: '0 0 12px 0', fontSize: '1rem' }}>{label}</h3>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                    {values.map((value) => (
+                      <TagDeleteChip
+                        key={value}
+                        category={category}
+                        value={value}
+                        onDeleted={() => removeTagLocally(category, value)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              );
+            })
           )}
         </div>
       )}
