@@ -156,6 +156,20 @@ export default function AdminPage() {
   function removeResolvedGroup(key: string) {
     setUnmatchedColleges((prev) => prev.filter((g) => g.key !== key));
   }
+  const [adminColleges, setAdminColleges] = useState<{ id: string; name: string; state: string | null }[]>([]);
+
+  async function loadAdminColleges() {
+    const { data } = await supabase
+      .from('colleges')
+      .select('id, name, state')
+      .eq('added_by_admin', true)
+      .order('name');
+    if (data) setAdminColleges(data);
+  }
+
+  function removeAdminCollegeLocally(id: string) {
+    setAdminColleges((prev) => prev.filter((c) => c.id !== id));
+  }
   
 
   useEffect(() => {
@@ -165,6 +179,7 @@ export default function AdminPage() {
       loadAll();
       loadExistingTags();
       loadUnmatchedColleges();
+      loadAdminColleges();
     });
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       if (!session) router.replace('/login');
@@ -529,6 +544,21 @@ export default function AdminPage() {
               );
             })
           )}
+)}
+
+          {adminColleges.length > 0 && (
+            <div className="card" style={{ marginBottom: 18, padding: '16px 20px' }}>
+              <h3 style={{ margin: '0 0 12px 0', fontSize: '1rem' }}>Colleges (Admin-Added)</h3>
+              <p style={{ margin: '0 0 12px 0', fontSize: '0.82rem', color: 'var(--text-faint)' }}>
+                Only colleges added through this admin panel show up here - the original bulk-imported list isn't editable from this screen.
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {adminColleges.map((c) => (
+                  <CollegeDeleteRow key={c.id} id={c.id} name={c.name} onDeleted={() => removeAdminCollegeLocally(c.id)} />
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -661,7 +691,7 @@ function UnmatchedCollegeRow({
     const finalName = draft.trim();
     if (!finalName) return;
     setMode('saving');
-    const { data, error } = await supabase.from('colleges').insert({ name: finalName }).select().single();
+    const { data, error } = await supabase.from('colleges').insert({ name: finalName, added_by_admin: true }).select().single();
     if (error || !data) { setMode('error'); return; }
     const { error: updateError } = await supabase.from('alumni').update({ college_id: data.id }).in('id', alumniIds);
     if (updateError) { setMode('error'); return; }
@@ -780,7 +810,7 @@ function AddCollegeButton({ alumniId, collegeName, hasMatch }: { alumniId: strin
     const finalName = draft.trim();
     if (!finalName) return;
     setMode('saving');
-    const { data, error } = await supabase.from('colleges').insert({ name: finalName }).select().single();
+    const { data, error } = await supabase.from('colleges').insert({ name: finalName, added_by_admin: true }).select().single();
     if (error || !data) { setMode('error'); return; }
     await supabase.from('alumni').update({ college_id: data.id }).eq('id', alumniId);
     setMode('done');
@@ -808,6 +838,63 @@ function AddCollegeButton({ alumniId, collegeName, hasMatch }: { alumniId: strin
     <button type="button" onClick={() => setMode('editing')} className="tag-add-btn" title={`Correct and add "${collegeName}" to the colleges list`}>
       ✎ Correct &amp; add
     </button>
+  );
+}
+function CollegeDeleteRow({
+  id, name, onDeleted,
+}: {
+  id: string;
+  name: string;
+  onDeleted: () => void;
+}) {
+  const [confirming, setConfirming] = useState(false);
+  const [state, setState] = useState<'idle' | 'deleting' | 'error'>('idle');
+
+  async function handleConfirmDelete() {
+    setState('deleting');
+    const { error: unlinkError } = await supabase.from('alumni').update({ college_id: null }).eq('college_id', id);
+    if (unlinkError) { setState('error'); return; }
+    const { error: deleteError } = await supabase.from('colleges').delete().eq('id', id);
+    if (deleteError) { setState('error'); return; }
+    onDeleted();
+  }
+
+  return (
+    <div style={{
+      border: '1px solid var(--border-strong)', borderRadius: 'var(--r-sm)',
+      padding: '10px 14px',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: '0.92rem' }}>{name}</span>
+        {!confirming && (
+          <button type="button" onClick={() => setConfirming(true)} className="tag-add-btn" title="Delete this college">
+            🗑 Delete
+          </button>
+        )}
+      </div>
+
+      {confirming && (
+        <div style={{
+          marginTop: 10, background: 'var(--danger-bg)', border: '1px solid var(--danger-border)',
+          color: 'var(--danger-ink)', padding: '12px 14px', borderRadius: 'var(--r-sm)', fontSize: '0.85rem',
+        }}>
+          <p style={{ margin: '0 0 10px 0' }}>
+            This will permanently delete <strong>"{name}"</strong> and remove it from any student profiles currently
+            linked to it (they'll go back to showing no college until re-corrected). This can't be undone.
+          </p>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button type="button" onClick={handleConfirmDelete} disabled={state === 'deleting'} className="btn btn--neutral">
+              <span className="btn__inner">
+                {state === 'deleting' ? 'Deleting…' : state === 'error' ? 'Try again' : `Yes, delete "${name}"`}
+              </span>
+            </button>
+            <button type="button" onClick={() => { setConfirming(false); setState('idle'); }} disabled={state === 'deleting'} className="btn btn--ghost">
+              <span className="btn__inner">Cancel</span>
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 function TagDeleteChip({
