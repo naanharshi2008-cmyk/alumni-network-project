@@ -627,17 +627,7 @@ function UnmatchedCollegeRow({
 
         {(mode === 'editing' || mode === 'saving' || mode === 'error') && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <input
-              type="text"
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              disabled={mode === 'saving'}
-              style={{
-                fontSize: '0.88rem', padding: '7px 12px', borderRadius: 'var(--r-sm)',
-                border: '1px solid var(--border-strong)', background: 'var(--surface-2)', color: 'var(--text)',
-                width: 260,
-              }}
-            />
+            <CollegeAutocompleteInput value={draft} onChange={setDraft} disabled={mode === 'saving'} />
             <button type="button" onClick={handleSave} disabled={mode === 'saving'} className="btn btn--primary">
               <span className="btn__inner">{mode === 'saving' ? 'Saving…' : mode === 'error' ? 'Try again' : '✓ Save for all'}</span>
             </button>
@@ -647,6 +637,77 @@ function UnmatchedCollegeRow({
           </div>
         )}
       </div>
+    </div>
+  );
+}
+// A small text input with a live dropdown of matching colleges as you type,
+// used inside both the per-person and bulk college correctors so staff can
+// link to an existing college instead of accidentally creating a near-
+// duplicate row.
+function CollegeAutocompleteInput({
+  value, onChange, disabled,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  disabled?: boolean;
+}) {
+  const [results, setResults] = useState<{ id: string; name: string; state: string | null }[]>([]);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    const query = value.trim();
+    if (query.length < 3) { setResults([]); return; }
+    const t = setTimeout(async () => {
+      const { data } = await supabase
+        .from('colleges')
+        .select('id, name, state')
+        .or(`name.ilike.%${query}%,short_names.ilike.%${query}%`)
+        .order('name')
+        .limit(8);
+      setResults(data ?? []);
+    }, 300);
+    return () => clearTimeout(t);
+  }, [value]);
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => { onChange(e.target.value); setOpen(true); }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        disabled={disabled}
+        style={{
+          fontSize: '0.88rem', padding: '7px 12px', borderRadius: 'var(--r-sm)',
+          border: '1px solid var(--border-strong)', background: 'var(--surface-2)', color: 'var(--text)',
+          width: 260,
+        }}
+      />
+      {open && value.trim().length >= 3 && results.length > 0 && (
+        <div style={{
+          position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 4,
+          background: 'var(--surface-2)', border: '1px solid var(--border-strong)',
+          borderRadius: 'var(--r-sm)', maxHeight: 200, overflowY: 'auto', zIndex: 30,
+          boxShadow: '0 12px 30px rgba(0,0,0,0.4)',
+        }}>
+          {results.map((r) => (
+            <button
+              key={r.id}
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => { onChange(r.name); setOpen(false); }}
+              style={{
+                display: 'block', width: '100%', textAlign: 'left', padding: '8px 12px',
+                background: 'transparent', border: 'none', borderBottom: '1px solid rgba(255,255,255,0.06)',
+                color: 'var(--text)', cursor: 'pointer', fontSize: '0.85rem',
+              }}
+            >
+              {r.name}{r.state && <span style={{ color: 'var(--text-faint)', fontSize: '0.75rem' }}> — {r.state}</span>}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -673,17 +734,7 @@ function AddCollegeButton({ alumniId, collegeName, hasMatch }: { alumniId: strin
   if (mode === 'editing' || mode === 'saving' || mode === 'error') {
     return (
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginLeft: 8 }}>
-        <input
-          type="text"
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          disabled={mode === 'saving'}
-          style={{
-            fontSize: '0.8rem', padding: '3px 8px', borderRadius: 'var(--r-sm)',
-            border: '1px solid var(--border-strong)', background: 'var(--surface-2)', color: 'var(--text)',
-            width: 220,
-          }}
-        />
+        <CollegeAutocompleteInput value={draft} onChange={setDraft} disabled={mode === 'saving'} />
         <button type="button" onClick={handleSave} disabled={mode === 'saving'} className="tag-add-btn">
           {mode === 'saving' ? 'Saving…' : mode === 'error' ? 'Try again' : '✓ Save'}
         </button>
