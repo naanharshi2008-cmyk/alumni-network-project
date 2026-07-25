@@ -78,18 +78,18 @@ function Footer() {
       </div>
 
       <div className="footer__bottom">
-  <span>© {year} Veveaham Alumni. All rights reserved.</span>
+        <span>© {year} Veveaham Alumni. All rights reserved.</span>
 
-  <div className="footer__credits">
-    <span className="footer__special">
-      concept by Elancheran R S  • UI/UX Design by Vaibhavsawroop
-    </span>
+        <div className="footer__credits">
+          <span className="footer__special">
+            concept by Elancheran R S • UI/UX Design by Vaibhavsawroop
+          </span>
 
-    <span>
-      Built with <span className="footer__heart">♥</span> by the alumni community.
-    </span>
-  </div>
-</div>
+          <span className="footer__built">
+            Built with <span className="footer__heart">♥</span> by the alumni community.
+          </span>
+        </div>
+      </div>
     </footer>
   );
 }

@@ -164,7 +164,8 @@ p { line-height: 1.6; }
   max-width: 1120px; margin: 30px auto 0; padding-top: 20px;
   border-top: 1px solid var(--border);
   color: var(--text-faint); font-size: 0.8rem;
-  display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px;
+  display: flex; flex-direction: column; align-items: flex-start;
+  text-align: left; gap: 6px;
 }
 .footer__heart { color: var(--emerald); }
 
@@ -944,11 +945,15 @@ textarea { min-height: 84px; resize: vertical; }
 .footer__credits {
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: flex-start;
+  text-align: left;
   gap: 4px;
 }
-
 .footer__special {
-  font-size: 0.82rem;
-  opacity: 0.7;
+  font-size: 0.78rem;
+  opacity: 0.55;
 }
+.footer__built {
+  opacity: 0.85;
+}
+
