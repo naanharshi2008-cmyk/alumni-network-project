@@ -78,9 +78,18 @@ function Footer() {
       </div>
 
       <div className="footer__bottom">
-        <span>© {year} Veveaham Alumni. All rights reserved.</span>
-        <span>Built with <span className="footer__heart">♥</span> by the alumni community.</span>
-      </div>
+  <span>© {year} Veveaham Alumni. All rights reserved.</span>
+
+  <div className="footer__credits">
+    <span>
+      Built with <span className="footer__heart">♥</span> by the alumni community.
+    </span>
+
+    <span className="footer__special">
+      Project idea by X • UI/UX Design by Y
+    </span>
+  </div>
+</div>
     </footer>
   );
 }
