@@ -122,6 +122,27 @@ function withTags(base: string[], tags?: string[]): string[] {
   return hasOther ? [...merged, 'Other'] : merged;
 }
 
+// Small words that stay lowercase in title case (unless they're the very
+// first word) - e.g. "Indian Institute of Science Education and Research".
+// Auto-applied to free-typed "Other" answers and college names on submit,
+// so a student typing "bsms" or "iiser tvm" ends up stored as "Bsms" /
+// "Iiser Tvm" instead of showing up all-lowercase for everyone else to see.
+const TITLE_CASE_MINOR_WORDS = new Set(['a', 'an', 'and', 'as', 'at', 'but', 'by', 'for', 'in', 'nor', 'of', 'on', 'or', 'the', 'to', 'with']);
+
+function toTitleCase(text: string): string {
+  return text
+    .split(/(\s+)/)
+    .map((chunk, i) => {
+      if (/^\s+$/.test(chunk) || chunk === '') return chunk;
+      const lowerChunk = chunk.toLowerCase();
+      if (i !== 0 && TITLE_CASE_MINOR_WORDS.has(lowerChunk)) return lowerChunk;
+      return chunk
+        .split('-')
+        .map((part) => (part ? part.charAt(0).toUpperCase() + part.slice(1).toLowerCase() : part))
+        .join('-');
+    })
+    .join('');
+}
 export default function RegisterPage() {
   const [form, setForm] = useState<FormState>(initialForm);
   const [step, setStep] = useState(0);
@@ -375,7 +396,7 @@ export default function RegisterPage() {
       // doesn't match, we keep the raw text so admin can review and match
       // or add it manually later.
       let collegeId: string | number | null = null;
-      const typedCollege = form.college_name.trim();
+      const typedCollege = toTitleCase(form.college_name.trim());
       if (typedCollege) {
         const { data: existing } = await supabase
           .from('colleges')
@@ -388,20 +409,20 @@ export default function RegisterPage() {
       }
 
       // Map values
-      const finalStream = form.stream === 'Other' && form.stream_other.trim() ? form.stream_other.trim() : form.stream;
-      const finalDegree = form.degree === 'Other' && form.degree_other.trim() ? form.degree_other.trim() : form.degree;
-      const finalField = form.field === 'Other' && form.field_other.trim() ? form.field_other.trim() : form.field;
+      const finalStream = form.stream === 'Other' && form.stream_other.trim() ? toTitleCase(form.stream_other.trim()) : form.stream;
+      const finalDegree = form.degree === 'Other' && form.degree_other.trim() ? toTitleCase(form.degree_other.trim()) : form.degree;
+      const finalField = form.field === 'Other' && form.field_other.trim() ? toTitleCase(form.field_other.trim()) : form.field;
 
       let finalRoute = 'Direct';
       if (form.admission_mode === 'Entrance Exam') {
-        finalRoute = form.admission_route === 'Other' && form.admission_route_other.trim() ? form.admission_route_other.trim() : form.admission_route;
+        finalRoute = form.admission_route === 'Other' && form.admission_route_other.trim() ? toTitleCase(form.admission_route_other.trim()) : form.admission_route;
       } else if (form.admission_mode === 'Board Marks') {
         finalRoute = 'Board Marks';
       } else if (form.admission_mode === 'Other') {
-        finalRoute = form.admission_mode_other.trim() || 'Other';
+        finalRoute = toTitleCase(form.admission_mode_other.trim()) || 'Other';
       }
 
-      const finalStatus = form.current_status === 'Other' && form.current_status_other.trim() ? form.current_status_other.trim() : form.current_status;
+      const finalStatus = form.current_status === 'Other' && form.current_status_other.trim() ? toTitleCase(form.current_status_other.trim()) : form.current_status;
 
       // 5. Insert profile row with link to auth user
       const { data: insertedAlumni, error: insErr } = await supabase.from('alumni').insert({

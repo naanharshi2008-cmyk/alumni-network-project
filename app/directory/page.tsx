@@ -16,13 +16,22 @@ import {
 
 /* ── Supabase select strings ─────────────────────────────────────────────── */
 const ALUMNI_SELECT =
-  'id, full_name, username, class_of, stream, degree, branch, field, current_status, currently_at, designation, show_photo, photo_url, linkedin_url, message_1, admission_route, admission_rank, board_marks, colleges(name,state,district,website,university_name,management_type,established_year,is_engineering)';
+  'id, full_name, username, class_of, school_name, stream, degree, branch, field, current_status, currently_at, designation, show_photo, photo_url, linkedin_url, message_1, admission_route, admission_rank, board_marks, colleges(name,state,district,website,university_name,management_type,established_year,is_engineering)';
 
 const COLLEGE_SELECT = 'id, name, state, district, website, university_name, management_type, established_year, is_engineering';
 
 type EnrichedAlumnus = { a: Alumnus; cat: ReturnType<typeof categorize> };
 
 /* ── Batch/year grouping helper ─────────────────────────────────────────── */
+// Display order for schools within each year - Hr. Sec. campus first, then
+// Prime Academy, then anything else (older records / unset) last.
+const SCHOOL_DISPLAY_ORDER = ['Veveaham Hr. Sec. School', 'Veveaham Prime Academy'];
+
+function schoolRank(name: string | null): number {
+  const idx = SCHOOL_DISPLAY_ORDER.indexOf(name ?? '');
+  return idx === -1 ? SCHOOL_DISPLAY_ORDER.length : idx;
+}
+
 function groupByYear(items: EnrichedAlumnus[]): Map<number | null, EnrichedAlumnus[]> {
   const map = new Map<number | null, EnrichedAlumnus[]>();
   for (const item of items) {
@@ -32,6 +41,19 @@ function groupByYear(items: EnrichedAlumnus[]): Map<number | null, EnrichedAlumn
   }
   // Sort descending (most recent first)
   return new Map([...map.entries()].sort((a, b) => (b[0] ?? 0) - (a[0] ?? 0)));
+}
+
+// Within a single year's group, split further by school (Hr. Sec. first,
+// then Prime Academy), so the directory reads "Class of 2024 -> Hr. Sec. ->
+// [cards] -> Prime Academy -> [cards]" instead of everyone mixed together.
+function groupBySchool(items: EnrichedAlumnus[]): [string, EnrichedAlumnus[]][] {
+  const map = new Map<string, EnrichedAlumnus[]>();
+  for (const item of items) {
+    const school = item.a.school_name || 'Other';
+    if (!map.has(school)) map.set(school, []);
+    map.get(school)!.push(item);
+  }
+  return [...map.entries()].sort((a, b) => schoolRank(a[0]) - schoolRank(b[0]));
 }
 
 /* ── College type for the Explorer tab ─────────────────────────────────── */
@@ -257,16 +279,31 @@ export default function DirectoryPage() {
                     <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
                     <span style={{ fontSize: '0.82rem', color: 'var(--text-faint)' }}>{items.length} alumni</span>
                   </div>
-                  <div className="grid stagger" key={`${year}|${active}|${query}`}>
-                    {items.map(({ a, cat }, i) => (
-                      <Card
-                        key={`${a.full_name}-${i}`}
-                        a={a}
-                        accent={cat.accent}
-                        label={cat.label}
-                        emoji={cat.emoji}
-                        onExpand={() => setExpanded({ a, accent: cat.accent, label: cat.label, emoji: cat.emoji })}
-                      />
+                  <div style={{ marginBottom: 8 }}>
+                    {groupBySchool(items).map(([school, schoolItems]) => (
+                      <div key={school} style={{ marginBottom: 24 }}>
+                        <h3 style={{
+                          margin: '0 0 12px 0', fontSize: '0.9rem', fontWeight: 700,
+                          color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: '0.04em',
+                        }}>
+                          🏫 {school}
+                          <span style={{ opacity: 0.7, marginLeft: 8, textTransform: 'none', letterSpacing: 0 }}>
+                            {schoolItems.length}
+                          </span>
+                        </h3>
+                        <div className="grid stagger" key={`${year}|${school}|${active}|${query}`}>
+                          {schoolItems.map(({ a, cat }, i) => (
+                            <Card
+                              key={`${a.full_name}-${i}`}
+                              a={a}
+                              accent={cat.accent}
+                              label={cat.label}
+                              emoji={cat.emoji}
+                              onExpand={() => setExpanded({ a, accent: cat.accent, label: cat.label, emoji: cat.emoji })}
+                            />
+                          ))}
+                        </div>
+                      </div>
                     ))}
                   </div>
                 </div>
@@ -507,7 +544,7 @@ function Card({ a, accent, label, emoji, onExpand }: {
       </span>
 
       <div className="a-card__rows">
-        <Row icon="🏫" label="School">{SCHOOL_NAME}</Row>
+        <Row icon="🏫" label="School">{a.school_name || SCHOOL_NAME}</Row>
         {college && (
           <Row icon="🏛️" label="College">
             <span>{college}</span>
@@ -588,7 +625,7 @@ function ProfileModal({ a, accent, label, emoji, onClose }: {
         <div className="a-modal__section">
           <h4>Education</h4>
           <div className="a-card__rows">
-            <Row icon="🏫" label="School">{SCHOOL_NAME}</Row>
+            <Row icon="🏫" label="School">{a.school_name || SCHOOL_NAME}</Row>
             {college && <Row icon="🏛️" label="College">{college}{collegeDet?.state ? ` · ${collegeDet.state}` : ''}</Row>}
             {dept && <Row icon="🎓" label="Studied">{dept}</Row>}
             {a.admission_route && (

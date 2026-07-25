@@ -81,12 +81,12 @@ function Footer() {
   <span>© {year} Veveaham Alumni. All rights reserved.</span>
 
   <div className="footer__credits">
-    <span>
-      Built with <span className="footer__heart">♥</span> by the alumni community.
+    <span className="footer__special">
+      concept by Elancheran R S  • UI/UX Design by Vaibhavsawroop
     </span>
 
-    <span className="footer__special">
-      Project idea by X • UI/UX Design by Y
+    <span>
+      Built with <span className="footer__heart">♥</span> by the alumni community.
     </span>
   </div>
 </div>
