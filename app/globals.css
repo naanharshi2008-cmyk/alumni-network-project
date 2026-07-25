@@ -951,9 +951,9 @@ textarea { min-height: 84px; resize: vertical; }
 }
 .footer__special {
   font-size: 0.78rem;
-  opacity: 0.5;
+  opacity: 0.9;
 }
 .footer__built {
-  opacity: 0.9;
+  opacity: 0.7;
 }
 
