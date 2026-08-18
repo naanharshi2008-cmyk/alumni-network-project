@@ -2,11 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { supabase, isSupabaseConfigured } from '../lib/supabaseClient';
 import { Alumnus, categorize, collegeNameOf, initialsOf } from '../lib/types';
-
-const SELECT =
-  'full_name, class_of, stream, degree, branch, field, current_status, currently_at, designation, show_photo, photo_url, linkedin_url, message_1, message_2, colleges(name)';
+import { fetchShowcaseAlumni } from '../lib/publicData';
 
 /**
  * A handful of approved alumni, shown as interactive showcase cards on the
@@ -18,16 +15,10 @@ export default function ShowcaseSection() {
   const [rows, setRows] = useState<Alumnus[] | null>(null);
 
   useEffect(() => {
-    if (!isSupabaseConfigured) return;
     let cancelled = false;
     (async () => {
-      const { data } = await supabase
-        .from('alumni')
-        .select(SELECT)
-        .eq('approval_status', 'approved')
-        .order('class_of', { ascending: false })
-        .limit(6);
-      if (!cancelled) setRows((data as unknown as Alumnus[]) ?? []);
+      const data = await fetchShowcaseAlumni(6);
+      if (!cancelled) setRows(data);
     })();
     return () => {
       cancelled = true;

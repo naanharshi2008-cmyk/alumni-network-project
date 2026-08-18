@@ -1,60 +1,94 @@
 # Veveaham Alumni Network
 
-Welcome to the **Veveaham Alumni Network** repository! This is a modern, high-performance Next.js web application built to connect past students, share their journeys, and inspire the next generation. 
+A record of where Veveaham students went after school — which colleges they got
+into, how they got in, and what they are doing now — so current students, parents
+and the public can see real paths and aim at them.
 
-## ✨ Features
+- **Directory** — every approved alumnus, grouped by batch and school.
+- **College Explorer** — the colleges Veveaham seniors actually attend, with the
+  rank or marks each of them got in with, plus their advice.
+- **Registration** — a five-step form; profiles go live only after staff approval.
+- **Admin dashboard** — approve registrations, review profile edits before they
+  publish, and curate the dropdown lists so they grow verified instead of messy.
 
-- **🎓 Seamless Registration:** A beautiful, multi-step registration flow for alumni to submit their academic and professional journeys.
-- **📸 Secure Photo Uploads:** Direct-to-bucket image uploads using Supabase Storage (enforced limits of 5MB & image types).
-- **🔒 Robust Security:** Row Level Security (RLS) ensures that pending profiles are hidden from the public API, protecting user privacy.
-- **🎨 Premium UI/UX:** A bespoke design system featuring an obsidian black canvas, glassmorphism, and a gold/emerald/violet signature gradient.
-- **⚡ Lightning Fast:** Built on the Next.js App Router for optimal server-side rendering and edge compatibility.
+## Tech stack
 
-## 🛠 Tech Stack
+| | |
+|---|---|
+| Framework | Next.js (App Router) + TypeScript |
+| Database, auth, storage | Supabase (PostgreSQL) |
+| Styling | Custom CSS design system (`app/globals.css`) |
+| Email | Resend (optional) |
+| Hosting | Vercel |
 
-- **Framework:** [Next.js](https://nextjs.org/) (App Router)
-- **Language:** TypeScript
-- **Database & Auth:** [Supabase](https://supabase.com/) (PostgreSQL + Storage)
-- **Styling:** Custom CSS Design System
-- **Deployment:** Vercel 
+## Running it locally
 
+```bash
+npm install
+cp .env.local.example .env.local   # then fill in your Supabase values
+npm run dev
+```
 
+`npm run typecheck` type-checks without building; `npm run build` produces the
+production build Vercel runs.
 
+## Database setup
 
--- Security Fix 1: INSERT on alumni (anon can only insert if status is 'pending')
--- This prevents malicious bots from sending approval_status = 'approved'
-CREATE POLICY "Anon can insert pending alumni" 
-ON alumni FOR INSERT 
-TO anon 
-WITH CHECK (approval_status = 'pending');
--- Security Fix 2: SELECT on alumni (anon can only view approved profiles)
--- This protects PII of pending users from being scraped via the API
-CREATE POLICY "Anon can only view approved alumni" 
-ON alumni FOR SELECT 
-TO anon 
-USING (approval_status = 'approved');
--- (Optional) If you have admins, don't forget they need policies too!
--- CREATE POLICY "Admins can do everything" ON alumni FOR ALL TO authenticated USING (true) WITH CHECK (true);
--- ==============================================================================
--- 2. Storage Bucket Security (Photos)
--- ==============================================================================
--- Ensure the bucket exists and RLS is enabled on storage.objects
--- (This assumes your bucket is named 'photos')
--- Drop the old permissive insert policy if it exists
--- DROP POLICY IF EXISTS "Allow public uploads" ON storage.objects;
--- Security Fix 3: Restrict photo uploads by size (5MB max) and type (image/*)
-CREATE POLICY "Restrict photo uploads by size and type"
-ON storage.objects FOR INSERT 
-TO public
-WITH CHECK (
-  bucket_id = 'photos' AND
-  -- Check that size is < 5MB (5242880 bytes)
-  (CASE WHEN metadata IS NOT NULL THEN (metadata->>'size')::int <= 5242880 ELSE false END) AND
-  -- Check that mimetype starts with 'image/'
-  (metadata->>'mimetype' LIKE 'image/%')
-);
+Migrations live in SQL files at the repo root, applied by pasting them into the
+Supabase SQL editor:
 
+- `schema.sql` — the original tables, RLS policies and the `higher_studies` /
+  `work_experience` tables.
+- `migrations/01_additive.sql` — **run this before deploying the current code.**
+  Adds the `public_alumni` view the site reads from, edit-staging, the moderated
+  options queue, the `organizations` table, and the school-name migration.
+  Everything in it is additive, so the currently-live site keeps working.
+- `migrations/02_lockdown.sql` — **run this only after the new code is live.**
+  Revokes anonymous access to the raw `alumni` table, which is what actually
+  closes the leak. Running it early would break the deployed site, because the
+  old code reads that table directly.
 
----
-*Built with ❤️ for the Veveaham Alumni community.*
+Both files end with verification queries. After the second one, run
+`npm run verify:security` and confirm every check passes.
 
+### How privacy is enforced
+
+Row-level security filters *rows*, not *columns*. Reading the `alumni` table
+directly meant anyone with the public anon key could request `personal_email`
+and `phone_number` for every approved profile and get real answers.
+
+So the browser no longer touches that table for public data. It reads
+`public_alumni`, a view that contains only publishable columns, and `anon` has
+had its `SELECT` on `alumni` revoked. Contact details are unreachable rather
+than merely un-displayed. All public reads go through `lib/publicData.ts`.
+
+## Environment variables
+
+See `.env.local.example`. Two things worth knowing:
+
+- Anything named `NEXT_PUBLIC_*` is compiled into the browser bundle. Only the
+  Supabase URL and anon key belong there.
+- `SUPABASE_SERVICE_ROLE_KEY` bypasses row-level security entirely. It is used
+  only inside API routes (`lib/supabaseAdmin.ts`, which is marked `server-only`)
+  and must never gain a `NEXT_PUBLIC_` prefix.
+
+Email notifications and profile deletion degrade gracefully: until their keys
+are set, the site works and simply skips those features.
+
+## Project layout
+
+```
+app/
+  page.tsx              home + showcase
+  directory/            public directory and College Explorer
+  register/             five-step registration wizard
+  profile/              alumni self-service editor
+  admin/                staff dashboard
+  api/                  server routes (admin notify, delete)
+lib/
+  publicData.ts         every public read, via the safe view
+  options.ts            one source of truth for all dropdown lists
+  types.ts              shared types + category mapping
+  supabaseAdmin.ts      service-role client, server only
+scripts/                one-off data imports
+```

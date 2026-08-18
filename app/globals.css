@@ -957,3 +957,259 @@ textarea { min-height: 84px; resize: vertical; }
   opacity: 0.7;
 }
 
+
+/* ==========================================================================
+   Directory: year / school grouping headers
+   ========================================================================== */
+.year-head { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; }
+.year-head__title {
+  margin: 0; font-size: 1.1rem; font-weight: 700;
+  background: var(--grad-text); -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.year-head__rule { flex: 1; height: 1px; background: var(--border); }
+.year-head__count { font-size: 0.82rem; color: var(--text-faint); white-space: nowrap; }
+
+/* Not uppercased: the official school names are long ("Veveaham Matric Higher
+   Secondary School (Boys)"), and setting them in caps made the group headers
+   shout over the cards they label. */
+.school-head {
+  margin: 0 0 12px 0; font-size: 0.92rem; font-weight: 700; color: var(--text-muted);
+  letter-spacing: 0.01em;
+}
+.school-head__count { opacity: 0.65; margin-left: 8px; font-weight: 600; }
+
+/* ==========================================================================
+   Badge size + tone variants
+   ========================================================================== */
+.badge--sm { font-size: 0.75rem; }
+.badge--xs { font-size: 0.72rem; padding: 3px 9px; }
+.badge--ok {
+  color: var(--ok-ink);
+  background: var(--ok-bg);
+  border-color: var(--ok-border);
+}
+
+.avatar--sm { width: 36px; height: 36px; font-size: 1rem; }
+
+/* ==========================================================================
+   College Explorer
+   ========================================================================== */
+.explorer-intro {
+  background: var(--grad-soft); border: 1px solid var(--border);
+  border-radius: var(--r); padding: 20px 24px; margin-bottom: 28px;
+}
+.explorer-intro h2 { margin: 0 0 6px 0; font-size: 1.2rem; }
+
+.chip__sub { opacity: 0.7; font-size: 0.8em; margin-left: 6px; }
+
+.senior-mini {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r-sm); padding: 12px 14px;
+}
+.senior-mini__timeline {
+  margin-top: 8px; display: flex; flex-direction: column; gap: 3px;
+  font-size: 0.79rem; color: var(--text-muted);
+}
+.senior-mini__quote {
+  margin: 8px 0 0; font-size: 0.83rem; color: var(--text-muted);
+  font-style: italic; line-height: 1.5;
+  border-left: 2px solid var(--border-strong); padding-left: 10px;
+}
+
+/* ==========================================================================
+   Profile modal: study / work timelines
+   ========================================================================== */
+.timeline { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 14px; }
+.timeline__item { display: flex; gap: 12px; align-items: flex-start; position: relative; }
+/* Connecting line between consecutive entries. */
+.timeline__item:not(:last-child)::before {
+  content: ''; position: absolute; left: 13px; top: 30px; bottom: -14px;
+  width: 1px; background: var(--border-strong);
+}
+.timeline__dot {
+  flex: 0 0 auto; width: 27px; height: 27px; border-radius: var(--r-full);
+  display: grid; place-items: center; font-size: 0.85rem;
+  background: var(--surface-2); border: 1px solid var(--border-strong);
+}
+.timeline__title { font-weight: 650; font-size: 0.92rem; line-height: 1.35; }
+.timeline__sub { font-size: 0.84rem; color: var(--text-muted); margin-top: 1px; }
+.timeline__years { font-size: 0.78rem; color: var(--text-faint); margin-top: 2px; }
+.timeline__now {
+  margin-left: 8px; font-size: 0.68rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.04em; color: var(--ok-ink);
+  background: var(--ok-bg); border: 1px solid var(--ok-border);
+  border-radius: var(--r-full); padding: 2px 8px; vertical-align: middle;
+}
+
+/* ==========================================================================
+   Modal: college facts block
+   ========================================================================== */
+.college-facts {
+  background: var(--grad-soft); border: 1px solid var(--border);
+  border-radius: var(--r-sm); padding: 14px 16px;
+}
+.college-facts__grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 14px; }
+.college-facts__label {
+  margin: 0; font-size: 0.72rem; color: var(--text-faint);
+  text-transform: uppercase; letter-spacing: 0.05em;
+}
+.college-facts__value { margin: 0; font-size: 0.88rem; }
+@media (max-width: 560px) { .college-facts__grid { grid-template-columns: 1fr; } }
+
+/* ==========================================================================
+   Shared type-ahead (college / organisation search)
+   ========================================================================== */
+.typeahead {
+  position: absolute; top: 100%; left: 0; right: 0; margin-top: 6px;
+  background: var(--surface-2); border: 1px solid var(--border-strong);
+  border-radius: var(--r-sm); max-height: 260px; overflow-y: auto;
+  z-index: 20; box-shadow: var(--shadow);
+}
+.typeahead__msg { padding: 10px 14px; color: var(--text-faint); font-size: 0.85rem; }
+.typeahead__item {
+  display: block; width: 100%; text-align: left; padding: 10px 14px;
+  background: transparent; border: none; border-bottom: 1px solid var(--border);
+  color: var(--text); cursor: pointer; font-size: 0.9rem;
+}
+.typeahead__item:last-child { border-bottom: none; }
+.typeahead__item--on, .typeahead__item:hover { background: rgba(255, 255, 255, 0.06); }
+.typeahead__meta { color: var(--text-faint); font-size: 0.78rem; }
+
+/* ==========================================================================
+   Admin dashboard
+   ========================================================================== */
+.admin-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; margin-bottom: 20px; flex-wrap: wrap;
+}
+
+/* Approved-vs-pending comparison for held profile edits */
+.diff-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+@media (max-width: 640px) { .diff-grid { grid-template-columns: 1fr; } }
+.diff-col { border-radius: var(--r-sm); padding: 12px 14px; }
+.diff-col--old { background: rgba(239, 68, 68, 0.07); border: 1px solid rgba(239, 68, 68, 0.25); }
+.diff-col--new { background: rgba(52, 211, 153, 0.07); border: 1px solid rgba(52, 211, 153, 0.25); }
+.diff-col__title {
+  margin: 0 0 8px 0; font-weight: 700; font-size: 0.8rem;
+  letter-spacing: 0.06em; text-transform: uppercase;
+}
+.diff-col--old .diff-col__title { color: #fca5a5; }
+.diff-col--new .diff-col__title { color: var(--emerald); }
+.diff-label { font-size: 0.75rem; color: var(--text-faint); display: block; }
+.diff-old { font-size: 0.9rem; color: #fca5a5; }
+.diff-new { font-size: 0.9rem; color: var(--emerald); }
+
+.delete-confirm {
+  width: 100%; margin-top: 10px; background: var(--danger-bg);
+  border: 1px solid var(--danger-border); color: var(--danger-ink);
+  padding: 12px 14px; border-radius: var(--r-sm); font-size: 0.85rem;
+}
+
+/* Pending-option review rows */
+.option-row {
+  border: 1px solid var(--border); border-radius: var(--r-sm);
+  padding: 12px 14px; background: var(--surface);
+}
+.option-row__panel { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+.option-row__label {
+  display: block; font-size: 0.8rem; color: var(--text-muted); margin-bottom: 8px;
+}
+.option-row__hint { margin: 8px 0 0; font-size: 0.78rem; color: var(--text-faint); }
+
+.tag-add-btn {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 0.76rem; font-weight: 600; padding: 4px 10px;
+  border-radius: var(--r-full); cursor: pointer;
+  background: transparent; color: var(--text-muted);
+  border: 1px dashed var(--border-strong);
+}
+.tag-add-btn:hover { color: var(--text); border-color: var(--gold); }
+.tag-add-btn:disabled { opacity: 0.5; cursor: default; }
+.tag-add-btn--done { border-style: solid; color: var(--ok-ink); border-color: var(--ok-border); }
+
+/* ==========================================================================
+   Profile: status banner, required marks, repeated entry cards
+   ========================================================================== */
+.status-banner {
+  padding: 14px 16px; border-radius: var(--r-sm); margin-bottom: 20px;
+  color: var(--text); font-size: 0.92rem;
+}
+.status-banner--ok     { background: var(--ok-bg); border: 1px solid var(--ok-border); }
+.status-banner--warn   { background: rgba(242, 195, 78, 0.08); border: 1px solid var(--gold); }
+.status-banner--danger { background: var(--danger-bg); border: 1px solid var(--danger-border); color: var(--danger-ink); }
+
+.req { color: var(--gold); font-weight: 700; }
+
+.entry-card {
+  border: 1px solid var(--border); border-radius: var(--r-sm);
+  padding: 14px; margin-bottom: 12px; background: var(--surface);
+}
+
+.cbox-row { display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 0.9rem; }
+
+/* ==========================================================================
+   Registration form: validation feedback, optional sections, step headers
+   ========================================================================== */
+.step-head { margin-bottom: 20px; }
+.step-head .step-title { margin: 2px 0 4px; outline: none; }
+.step-head .step-title:focus-visible { outline: 2px solid var(--ring); outline-offset: 4px; border-radius: 6px; }
+
+.field__label { display: block; margin-bottom: 8px; font-size: 0.9rem; color: var(--text-muted); }
+.field__error {
+  margin: 6px 0 0; font-size: 0.8rem; color: var(--danger-ink); font-weight: 500;
+}
+/* The tick sits where the reveal button would, so they never collide:
+   password fields are never in a "valid" visual state at the same time. */
+.field__tick {
+  position: absolute; right: 14px; top: 17px;
+  color: var(--emerald); font-weight: 700; font-size: 0.95rem; pointer-events: none;
+}
+.f-field--invalid input,
+.f-field--invalid select { border-color: var(--danger-border); }
+.f-field--valid input { border-color: rgba(52, 211, 153, 0.4); }
+
+.reveal-btn {
+  position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+  background: none; border: 0; cursor: pointer; font-size: 1.1rem;
+  color: var(--text-faint); line-height: 1; padding: 4px;
+}
+
+.opt { font-size: 0.78rem; color: var(--text-faint); font-weight: 500; margin-left: 6px; }
+
+.form-note {
+  margin-top: 14px; font-size: 0.84rem; color: var(--text-faint); line-height: 1.5;
+}
+.step-remaining {
+  margin: 10px 0 0; text-align: center; font-size: 0.8rem; color: var(--text-faint);
+}
+
+/* Collapsed optional blocks, so required questions stand out */
+.opt-section {
+  border: 1px dashed var(--border-strong); border-radius: var(--r-sm);
+  margin: 18px 0; overflow: hidden;
+}
+.opt-section__head {
+  width: 100%; display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; padding: 14px 16px; background: transparent; border: none;
+  color: var(--text); cursor: pointer; text-align: left;
+}
+.opt-section__head:hover { background: rgba(255, 255, 255, 0.03); }
+.opt-section__title { display: block; font-weight: 650; font-size: 0.95rem; }
+.opt-section__caption { display: block; font-size: 0.8rem; color: var(--text-faint); margin-top: 2px; }
+.opt-section__toggle {
+  flex: 0 0 auto; width: 26px; height: 26px; border-radius: var(--r-full);
+  display: grid; place-items: center; font-size: 1.1rem; line-height: 1;
+  border: 1px solid var(--border-strong); color: var(--text-muted);
+}
+.opt-section__body { padding: 0 16px 16px; }
+
+/* Contact block: makes the privacy promise visible at the point of asking */
+.contact-block {
+  margin-top: 24px; padding: 18px; border-radius: var(--r-sm);
+  background: var(--surface); border: 1px solid var(--border);
+}
+.contact-block__title { margin: 0 0 4px; font-size: 1rem; }
+.contact-block__note {
+  margin: 0 0 16px; font-size: 0.82rem; color: var(--text-faint); line-height: 1.5;
+}

@@ -1,9 +1,16 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase, isSupabaseConfigured } from '../../lib/supabaseClient';
-import { commonOrganizations } from '../../lib/commonOrganizations';
+import EntitySearchField from '../../lib/EntitySearchField';
+import { cleanFreeText, cleanProperNoun } from '../../lib/text';
+import { fetchApprovedOptions, fetchOrganizationNames, proposeOption } from '../../lib/publicData';
+import {
+  SCHOOLS, STREAMS, DEGREES, ADMISSION_ROUTES, STATUSES, SCHOOL_BOARDS,
+  COUNTRY_CODES, OTHER_OPTION, LEGACY_STREAM_MAP, officialSchoolName,
+  isInProgressStatus, mergeOptions, splitStoredValue, resolveValue,
+} from '../../lib/options';
 import { CATEGORIES } from '../../lib/types';
 
 interface AlumnusData {
@@ -20,6 +27,7 @@ interface AlumnusData {
   phone_number: string;
   linkedin_url: string;
   college_name: string;
+  college_id: string | null;
   degree: string;
   branch: string;
   field: string;
@@ -30,62 +38,51 @@ interface AlumnusData {
   current_status: string;
   expected_finish_year: string;
   currently_at: string;
+  organization_id: string | null;
   designation: string;
   message_1: string;
   message_2: string;
   photo_url: string | null;
   approval_status: string;
   modification_status: string;
-  original_data: any;
 }
 
-// One row from the "higher_studies" table -- an alumnus can have several of
-// these (PG, PhD, diploma, etc), each with its own finishing year.
 interface HigherStudyEntry {
   id?: string;
-  degree_name: string;
-  institution: string;
-  start_year: string;
-  finish_year: string;
+  degree_name: string; institution: string; start_year: string; finish_year: string;
 }
-
-// One row from the "work_experience" table -- a LinkedIn-style job history
-// entry. is_current means "Present" instead of a fixed end year.
 interface WorkExperienceEntry {
   id?: string;
-  company: string;
-  role: string;
-  start_year: string;
-  end_year: string;
-  is_current: boolean;
+  company: string; role: string; start_year: string; end_year: string; is_current: boolean;
 }
 
 const emptyHigherStudy = (): HigherStudyEntry => ({ degree_name: '', institution: '', start_year: '', finish_year: '' });
 const emptyWorkExperience = (): WorkExperienceEntry => ({ company: '', role: '', start_year: '', end_year: '', is_current: false });
 
-// The database allows most of these fields to be null (many were made
-// optional over time), but every .trim() call in this file assumes a real
-// string. Loading a raw Supabase row straight into state let a null value
-// slip through and crash on save with "Cannot read properties of null
-// (reading 'trim')". This normalizer guarantees every string field really
-// is a string (never null/undefined) the moment data comes in, so nothing
-// downstream needs to guard against null itself.
+const CURRENT_YEAR = new Date().getFullYear();
+
+/**
+ * The DB allows most of these to be null, but every .trim() here assumes a
+ * string. Loading a raw row straight into state used to crash the save with
+ * "Cannot read properties of null (reading 'trim')", so normalise on the way in.
+ */
 function normalizeProfile(raw: any): AlumnusData {
   const str = (v: unknown) => (v === null || v === undefined ? '' : String(v));
   return {
     ...raw,
     full_name: str(raw.full_name),
     username: str(raw.username),
-    school_name: str(raw.school_name),
+    school_name: officialSchoolName(raw.school_name),
     admission_number: str(raw.admission_number),
     class_of: raw.class_of ? String(raw.class_of) : '',
     stream: str(raw.stream),
     school_board: str(raw.school_board),
     personal_email: str(raw.personal_email),
-    phone_country_code: str(raw.phone_country_code),
+    phone_country_code: str(raw.phone_country_code) || '+91',
     phone_number: str(raw.phone_number),
     linkedin_url: str(raw.linkedin_url),
-    college_name: raw.colleges?.name || '',
+    college_name: raw.colleges?.name || str(raw.college_name_raw),
+    college_id: raw.college_id ?? null,
     degree: str(raw.degree),
     branch: str(raw.branch),
     field: str(raw.field),
@@ -96,6 +93,7 @@ function normalizeProfile(raw: any): AlumnusData {
     current_status: str(raw.current_status),
     expected_finish_year: raw.expected_finish_year ? String(raw.expected_finish_year) : '',
     currently_at: str(raw.currently_at),
+    organization_id: raw.organization_id ?? null,
     designation: str(raw.designation),
     message_1: str(raw.message_1),
     message_2: str(raw.message_2),
@@ -105,169 +103,148 @@ function normalizeProfile(raw: any): AlumnusData {
   };
 }
 
-const CURRENT_YEAR = new Date().getFullYear();
-const STREAMS = ['Bio-Maths', 'CS-Maths', 'Business & Finance', 'Other'];
-const ROUTES = [
-  'JEE Main', 'JEE Advanced', 'NEET', 'CUET', 'BITSAT', 'VITEEE', 'SRMJEEE',
-  'COMEDK', 'KCET', 'MHT-CET', 'WBJEE', 'KEAM', 'CLAT', 'Board Marks', 'Other'
-];
-const SCHOOL_BOARDS = ['State Board', 'CBSE'];
-const STATUSES = ['Studying UG', 'Studying PG', 'Working', 'Entrepreneur', 'Preparing', 'On Break', 'Other'];
-const DEGREES = ['BTech', 'BE', 'BSc', 'MBBS', 'BCom', 'BA', 'BArch', 'LLB', 'BBA', 'BCA'];
-const COUNTRY_CODES = ['+91', '+1', '+44', '+61', '+971', '+65', '+49', '+33', '+81', '+86'];
-const SCHOOLS = ['Veveaham Hr. Sec. School', 'Veveaham Prime Academy'];
-
 export default function ProfilePage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  
+
   const [profile, setProfile] = useState<AlumnusData | null>(null);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [higherStudies, setHigherStudies] = useState<HigherStudyEntry[]>([]);
   const [workExperience, setWorkExperience] = useState<WorkExperienceEntry[]>([]);
+  const [orgOptions, setOrgOptions] = useState<string[]>([]);
+  const [tagOptions, setTagOptions] = useState<Record<string, string[]>>({});
 
-  const [orgOptions, setOrgOptions] = useState<string[]>(commonOrganizations);
+  // Free-typed "Other" values, kept beside the dropdown selection. The old
+  // editor had no such box: choosing "Other" stored the literal word "Other"
+  // and wiped whatever the person had actually written.
+  const [others, setOthers] = useState({ stream: '', degree: '', admission_route: '', current_status: '', field: '', school_board: '' });
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session) {
-        router.replace('/login');
-        return;
-      }
-      loadProfile(session.user.id);
+      if (!session) { router.replace('/login'); return; }
+      void loadProfile(session.user.id);
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function loadProfile(userId: string) {
     setLoading(true);
     try {
-      // Load alumni profile
       const { data, error: profileErr } = await supabase
         .from('alumni')
         .select('*, colleges(name)')
         .eq('user_id', userId)
         .maybeSingle();
-
       if (profileErr) throw profileErr;
+      if (!data) { setProfile(null); return; }
 
-      let resolvedId: string | undefined = data?.id;
+      // Anything already staged for review is what the person should see and
+      // keep editing - otherwise their pending changes would look lost.
+      const staged = (data.pending_changes ?? {}) as Record<string, any>;
+      const { higher_studies: stagedStudies, work_experience: stagedWork, ...stagedColumns } = staged;
+      const merged = normalizeProfile({ ...data, ...stagedColumns });
+      setProfile(merged);
 
-      if (!data) {
-        // Fallback search by email
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          const { data: fallbackData } = await supabase
-            .from('alumni')
-            .select('*, colleges(name)')
-            .eq('personal_email', user.email)
-            .maybeSingle();
-          if (fallbackData) {
-            setProfile(normalizeProfile(fallbackData));
-            resolvedId = fallbackData.id;
-          }
-        }
+      setOthers({
+        stream: splitStoredValue(merged.stream, STREAMS, LEGACY_STREAM_MAP).other,
+        degree: splitStoredValue(merged.degree, DEGREES).other,
+        admission_route: splitStoredValue(merged.admission_route, ADMISSION_ROUTES).other,
+        current_status: splitStoredValue(merged.current_status, STATUSES).other,
+        field: splitStoredValue(merged.field, CATEGORIES.map((c) => c.label)).other,
+        school_board: splitStoredValue(merged.school_board, SCHOOL_BOARDS).other,
+      });
+
+      // Timelines: staged version if present, else what's published.
+      if (Array.isArray(stagedStudies)) {
+        setHigherStudies(stagedStudies.map((s: any) => ({
+          degree_name: s.degree_name ?? '', institution: s.institution ?? '',
+          start_year: s.start_year ? String(s.start_year) : '',
+          finish_year: s.finish_year ? String(s.finish_year) : '',
+        })));
       } else {
-        setProfile(normalizeProfile(data));
+        const { data: rows } = await supabase.from('higher_studies').select('*')
+          .eq('alumni_id', data.id).order('finish_year', { ascending: true });
+        setHigherStudies((rows ?? []).map((r: any) => ({
+          id: r.id, degree_name: r.degree_name || '', institution: r.institution || '',
+          start_year: r.start_year ? String(r.start_year) : '',
+          finish_year: r.finish_year ? String(r.finish_year) : '',
+        })));
       }
 
-      // Load their higher-studies and work-experience entries too (these
-      // live in separate tables since one alumnus can have several of each).
-      const alumniId = resolvedId;
-      if (alumniId) {
-        const { data: studiesRows } = await supabase
-          .from('higher_studies')
-          .select('*')
-          .eq('alumni_id', alumniId)
-          .order('finish_year', { ascending: true });
-        if (studiesRows) {
-          setHigherStudies(studiesRows.map((r: any) => ({
-            id: r.id,
-            degree_name: r.degree_name || '',
-            institution: r.institution || '',
-            start_year: r.start_year ? String(r.start_year) : '',
-            finish_year: r.finish_year ? String(r.finish_year) : '',
-          })));
-        }
-
-        const { data: workRows } = await supabase
-          .from('work_experience')
-          .select('*')
-          .eq('alumni_id', alumniId)
-          .order('start_year', { ascending: true });
-        if (workRows) {
-          setWorkExperience(workRows.map((r: any) => ({
-            id: r.id,
-            company: r.company || '',
-            role: r.role || '',
-            start_year: r.start_year ? String(r.start_year) : '',
-            end_year: r.end_year ? String(r.end_year) : '',
-            is_current: !!r.is_current,
-          })));
-        }
+      if (Array.isArray(stagedWork)) {
+        setWorkExperience(stagedWork.map((w: any) => ({
+          company: w.company ?? '', role: w.role ?? '',
+          start_year: w.start_year ? String(w.start_year) : '',
+          end_year: w.end_year ? String(w.end_year) : '', is_current: !!w.is_current,
+        })));
+      } else {
+        const { data: rows } = await supabase.from('work_experience').select('*')
+          .eq('alumni_id', data.id).order('start_year', { ascending: true });
+        setWorkExperience((rows ?? []).map((r: any) => ({
+          id: r.id, company: r.company || '', role: r.role || '',
+          start_year: r.start_year ? String(r.start_year) : '',
+          end_year: r.end_year ? String(r.end_year) : '', is_current: !!r.is_current,
+        })));
       }
 
-      const { data: currentOrgs } = await supabase.from('alumni').select('currently_at').eq('approval_status', 'approved');
-      if (currentOrgs) {
-        const orgs = currentOrgs.map(a => a.currently_at as string).filter(Boolean);
-        setOrgOptions(Array.from(new Set([...commonOrganizations, ...orgs])).sort());
-      }
+      const [orgs, opts] = await Promise.all([fetchOrganizationNames(), fetchApprovedOptions()]);
+      setOrgOptions(orgs);
+      setTagOptions(opts);
     } catch (e) {
       console.error(e);
-      setError('Could not load profile details.');
+      setError('Could not load your profile details.');
     } finally {
       setLoading(false);
     }
   }
 
   function updateField<K extends keyof AlumnusData>(key: K, value: AlumnusData[K]) {
-    if (profile) {
-      setProfile({ ...profile, [key]: value });
-    }
+    setProfile((prev) => (prev ? { ...prev, [key]: value } : prev));
+  }
+  function updateOther(key: keyof typeof others, value: string) {
+    setOthers((prev) => ({ ...prev, [key]: value }));
   }
 
-  function updateHigherStudy(index: number, patch: Partial<HigherStudyEntry>) {
-    setHigherStudies((prev) => prev.map((entry, i) => (i === index ? { ...entry, ...patch } : entry)));
-  }
-  function addHigherStudy() {
-    setHigherStudies((prev) => [...prev, emptyHigherStudy()]);
-  }
-  function removeHigherStudy(index: number) {
-    setHigherStudies((prev) => prev.filter((_, i) => i !== index));
-  }
+  const streamOptions = useMemo(() => mergeOptions(STREAMS, tagOptions.stream), [tagOptions]);
+  const degreeOptions = useMemo(() => mergeOptions(DEGREES, tagOptions.degree), [tagOptions]);
+  const routeOptions = useMemo(() => mergeOptions(ADMISSION_ROUTES, tagOptions.admission_route), [tagOptions]);
+  const statusOptions = useMemo(() => mergeOptions(STATUSES, tagOptions.current_status), [tagOptions]);
+  const fieldOptions = useMemo(
+    () => mergeOptions([...CATEGORIES.map((c) => c.label)], tagOptions.field),
+    [tagOptions],
+  );
 
-  function updateWorkExperience(index: number, patch: Partial<WorkExperienceEntry>) {
-    setWorkExperience((prev) => prev.map((entry, i) => (i === index ? { ...entry, ...patch } : entry)));
-  }
-  function addWorkExperience() {
-    setWorkExperience((prev) => [...prev, emptyWorkExperience()]);
-  }
-  function removeWorkExperience(index: number) {
-    setWorkExperience((prev) => prev.filter((_, i) => i !== index));
-  }
+  const isApproved = profile?.approval_status === 'approved';
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
     if (!profile) return;
-    
     setSaving(true);
     setError('');
     setSuccess('');
 
     try {
+      // Resolve every "Other" selection back to the value we actually store.
+      const finalStream = resolveValue(profile.stream, others.stream);
+      const finalDegree = resolveValue(profile.degree, others.degree);
+      const finalRoute = resolveValue(profile.admission_route, others.admission_route);
+      const finalStatus = resolveValue(profile.current_status, others.current_status);
+      const finalField = resolveValue(profile.field, others.field);
+      const finalBoard = resolveValue(profile.school_board, others.school_board);
+
+      if (!profile.full_name.trim()) throw new Error('Please keep your full name filled in.');
+      if (!profile.personal_email.trim()) throw new Error('Please keep an email address on file.');
+      if (!profile.phone_number.trim()) throw new Error('Please keep a phone number on file.');
+      if (!finalStatus) throw new Error('Please select your current status.');
+
       let photoUrl = profile.photo_url;
-      
-      // Upload new photo if selected
       if (photoFile) {
         const MAX_BYTES = 5 * 1024 * 1024;
-        if (!photoFile.type.startsWith('image/')) {
-          throw new Error('Please upload an image file (JPG, PNG, WEBP...).');
-        }
-        if (photoFile.size > MAX_BYTES) {
-          throw new Error('Photo is too large, please pick one under 5MB.');
-        }
+        if (!photoFile.type.startsWith('image/')) throw new Error('Please upload an image file (JPG, PNG, WEBP…).');
+        if (photoFile.size > MAX_BYTES) throw new Error('Photo is too large, please pick one under 5MB.');
         const extMatch = photoFile.name.match(/\.([a-zA-Z0-9]{1,5})$/);
         const ext = (extMatch?.[1] ?? 'jpg').toLowerCase();
         const safeUsername = profile.username.replace(/[^a-zA-Z0-9-_]/g, '_');
@@ -279,104 +256,112 @@ export default function ProfilePage() {
         photoUrl = supabase.storage.from('photos').getPublicUrl(fileName).data.publicUrl;
       }
 
-      // Look up the college - we no longer create new rows here, same as
-      // registration. See the matching fix in app/register/page.tsx for
-      // the full reasoning (RLS blocked this for regular users anyway).
-      let collegeId: string | number | null = null;
-      const typedCollege = profile.college_name.trim();
+      // Match the typed college against the reference table.
+      let collegeId: string | null = null;
+      const typedCollege = cleanProperNoun(profile.college_name);
       if (typedCollege) {
-        const { data: existing } = await supabase
-          .from('colleges')
-          .select('id')
-          .ilike('name', typedCollege)
-          .maybeSingle();
-        if (existing) {
-          collegeId = existing.id;
-        }
+        const { data: existing } = await supabase.from('colleges').select('id').ilike('name', typedCollege).maybeSingle();
+        if (existing) collegeId = existing.id;
+      }
+      let organizationId: string | null = null;
+      const typedOrg = cleanProperNoun(profile.currently_at);
+      if (typedOrg) {
+        const { data: existing } = await supabase.from('organizations').select('id').ilike('name', typedOrg).maybeSingle();
+        if (existing) organizationId = existing.id;
       }
 
-      // Update in alumni database
-      const updateData: any = {
+      const columns: Record<string, any> = {
         full_name: profile.full_name.trim(),
         school_name: profile.school_name,
-        admission_number: profile.admission_number || null,
+        school_board: finalBoard || null,
+        admission_number: cleanFreeText(profile.admission_number),
         class_of: profile.class_of ? parseInt(profile.class_of, 10) : null,
-        stream: profile.stream,
-        school_board: profile.school_board,
+        stream: finalStream || null,
         personal_email: profile.personal_email.trim(),
         phone_country_code: profile.phone_country_code,
         phone_number: profile.phone_number || null,
         linkedin_url: profile.linkedin_url.trim() || null,
         college_id: collegeId,
-        degree: profile.degree.trim() || null,
-        branch: profile.branch.trim() || null,
-        field: profile.field.trim() || null,
-        admission_route: profile.admission_route,
-        admission_rank: profile.admission_rank.trim() || null,
-        board_marks: profile.board_marks.trim() || null,
-        board_cutoff: profile.board_cutoff.trim() || null,
-        current_status: profile.current_status,
-        expected_finish_year: profile.expected_finish_year ? parseInt(profile.expected_finish_year, 10) : null,
-        currently_at: profile.currently_at.trim() || null,
-        designation: profile.designation.trim() || null,
-        message_1: profile.message_1.trim() || null,
+        college_name_raw: typedCollege,
+        degree: finalDegree || null,
+        branch: cleanProperNoun(profile.branch),
+        field: finalField || null,
+        admission_route: finalRoute || null,
+        admission_rank: cleanFreeText(profile.admission_rank),
+        board_marks: cleanFreeText(profile.board_marks),
+        board_cutoff: cleanFreeText(profile.board_cutoff),
+        current_status: finalStatus,
+        expected_finish_year: isInProgressStatus(finalStatus) && profile.expected_finish_year
+          ? parseInt(profile.expected_finish_year, 10) : null,
+        currently_at: typedOrg,
+        organization_id: organizationId,
+        designation: cleanProperNoun(profile.designation),
+        message_1: cleanFreeText(profile.message_1),
         photo_url: photoUrl,
         show_photo: !!photoUrl,
       };
 
-      // Set modification status to pending if they are already approved
-      if (profile.approval_status === 'approved') {
-        updateData.modification_status = 'pending';
+      const studiesPayload = higherStudies.filter((s) => s.degree_name.trim()).map((s) => ({
+        degree_name: s.degree_name.trim(),
+        institution: cleanProperNoun(s.institution),
+        start_year: s.start_year ? parseInt(s.start_year, 10) : null,
+        finish_year: s.finish_year ? parseInt(s.finish_year, 10) : null,
+      }));
+      const workPayload = workExperience.filter((w) => w.company.trim()).map((w) => ({
+        company: cleanProperNoun(w.company),
+        role: cleanProperNoun(w.role),
+        start_year: w.start_year ? parseInt(w.start_year, 10) : null,
+        end_year: w.is_current ? null : (w.end_year ? parseInt(w.end_year, 10) : null),
+        is_current: w.is_current,
+      }));
+
+      if (isApproved) {
+        // ── Already published: stage, don't publish. ──────────────────────
+        // The live columns stay exactly as they are, so the directory keeps
+        // showing the approved version. This is what makes the "Edits under
+        // review" message true - previously edits went live immediately and
+        // the review step was decorative.
+        const { error: saveErr } = await supabase
+          .from('alumni')
+          .update({
+            pending_changes: { ...columns, higher_studies: studiesPayload, work_experience: workPayload },
+            modification_status: 'pending',
+          })
+          .eq('id', profile.id);
+        if (saveErr) throw saveErr;
+        setSuccess('Saved. Your changes are with an administrator for review — the directory keeps showing your approved profile until then.');
+      } else {
+        // ── Not published yet: write straight through. ────────────────────
+        const { error: saveErr } = await supabase.from('alumni').update(columns).eq('id', profile.id);
+        if (saveErr) throw saveErr;
+
+        await supabase.from('higher_studies').delete().eq('alumni_id', profile.id);
+        if (studiesPayload.length) {
+          await supabase.from('higher_studies').insert(studiesPayload.map((s) => ({ ...s, alumni_id: profile.id })));
+        }
+        await supabase.from('work_experience').delete().eq('alumni_id', profile.id);
+        if (workPayload.length) {
+          await supabase.from('work_experience').insert(workPayload.map((w) => ({ ...w, alumni_id: profile.id })));
+        }
+        setSuccess('Your details have been updated. Your profile is still awaiting its first approval.');
       }
 
-      const { error: saveErr } = await supabase
-        .from('alumni')
-        .update(updateData)
-        .eq('id', profile.id);
+      // Queue any new free-typed values for the admin's option review.
+      if (profile.stream === OTHER_OPTION && others.stream.trim()) void proposeOption('stream', others.stream);
+      if (profile.degree === OTHER_OPTION && others.degree.trim()) void proposeOption('degree', others.degree);
+      if (profile.admission_route === OTHER_OPTION && others.admission_route.trim()) void proposeOption('admission_route', others.admission_route);
+      if (profile.current_status === OTHER_OPTION && others.current_status.trim()) void proposeOption('current_status', others.current_status);
 
-      if (saveErr) throw saveErr;
-
-      // Sync higher-studies and work-experience: simplest safe approach is
-      // to wipe this alumnus's rows and re-insert whatever's in the form
-      // right now. Only entries with the "main" field filled in are kept --
-      // a row someone added and then left blank is just dropped, not saved.
-      await supabase.from('higher_studies').delete().eq('alumni_id', profile.id);
-      const studiesToInsert = higherStudies
-        .filter((s) => s.degree_name.trim())
-        .map((s) => ({
-          alumni_id: profile.id,
-          degree_name: s.degree_name.trim(),
-          institution: s.institution.trim() || null,
-          start_year: s.start_year ? parseInt(s.start_year, 10) : null,
-          finish_year: s.finish_year ? parseInt(s.finish_year, 10) : null,
-        }));
-      if (studiesToInsert.length) {
-        const { error: studiesErr } = await supabase.from('higher_studies').insert(studiesToInsert);
-        if (studiesErr) throw studiesErr;
-      }
-
-      await supabase.from('work_experience').delete().eq('alumni_id', profile.id);
-      const workToInsert = workExperience
-        .filter((w) => w.company.trim())
-        .map((w) => ({
-          alumni_id: profile.id,
-          company: w.company.trim(),
-          role: w.role.trim() || null,
-          start_year: w.start_year ? parseInt(w.start_year, 10) : null,
-          end_year: w.is_current ? null : (w.end_year ? parseInt(w.end_year, 10) : null),
-          is_current: w.is_current,
-        }));
-      if (workToInsert.length) {
-        const { error: workErr } = await supabase.from('work_experience').insert(workToInsert);
-        if (workErr) throw workErr;
-      }
-
-      setSuccess('Your profile modifications have been submitted for review.');
-      setProfile(prev => prev ? { ...prev, ...updateData, photo_url: photoUrl } : null);
+      setProfile((prev) => (prev ? { ...prev, photo_url: photoUrl, modification_status: isApproved ? 'pending' : prev.modification_status } : prev));
       setPhotoFile(null);
     } catch (err) {
       console.error(err);
-      setError(err instanceof Error ? err.message : 'Failed to save changes.');
+      const message = err instanceof Error
+        ? err.message
+        : (err && typeof err === 'object' && 'message' in err)
+          ? String((err as { message: unknown }).message)
+          : 'Failed to save changes.';
+      setError(message);
     } finally {
       setSaving(false);
     }
@@ -388,19 +373,15 @@ export default function ProfilePage() {
   }
 
   if (loading) {
-    return (
-      <div className="container container--narrow">
-        <p className="subtitle">Loading your profile...</p>
-      </div>
-    );
+    return <div className="container container--narrow"><p className="subtitle">Loading your profile…</p></div>;
   }
 
   if (!profile) {
     return (
       <div className="container container--narrow">
         <div className="card" style={{ textAlign: 'center', padding: '40px 20px' }}>
-          <h2>Profile Not Found</h2>
-          <p className="subtitle">We couldn't locate an alumnus record associated with this account.</p>
+          <h2>Profile not found</h2>
+          <p className="subtitle">We couldn&apos;t find an alumni record linked to this account.</p>
           <button type="button" onClick={handleLogout} className="btn btn--neutral" style={{ marginTop: 12 }}>
             <span className="btn__inner">Log Out</span>
           </button>
@@ -409,49 +390,39 @@ export default function ProfilePage() {
     );
   }
 
+  const streamSel = splitStoredValue(profile.stream, streamOptions, LEGACY_STREAM_MAP).selected;
+  const degreeSel = splitStoredValue(profile.degree, degreeOptions).selected;
+  const routeSel = splitStoredValue(profile.admission_route, routeOptions).selected;
+  const statusSel = splitStoredValue(profile.current_status, statusOptions).selected;
+  const fieldSel = splitStoredValue(profile.field, fieldOptions).selected;
+  const boardSel = splitStoredValue(profile.school_board, SCHOOL_BOARDS).selected;
+  const pendingReview = profile.modification_status === 'pending';
+
   return (
     <main className="container container--narrow">
       <div className="card fade-up">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, gap: 12, flexWrap: 'wrap' }}>
           <div>
-            <h1 style={{ fontSize: '1.6rem', margin: 0 }}>My Profile Dashboard</h1>
-            <p className="subtitle" style={{ margin: 0 }}>Manage your alumni network details.</p>
+            <h1 style={{ fontSize: '1.6rem', margin: 0 }}>My Profile</h1>
+            <p className="subtitle" style={{ margin: 0 }}>Keep your journey up to date for the juniors.</p>
           </div>
           <button type="button" onClick={handleLogout} className="btn btn--ghost">
             <span className="btn__inner">Log Out</span>
           </button>
         </div>
 
-        {/* Status indicator */}
-        <div style={{
-          background: profile.approval_status === 'pending' ? 'rgba(242, 195, 78, 0.08)' : 'var(--grad-soft)',
-          border: '1px solid ' + (profile.approval_status === 'pending' ? 'var(--gold)' : 'var(--emerald)'),
-          padding: '14px 16px',
-          borderRadius: 'var(--r-sm)',
-          marginBottom: 20,
-          color: 'var(--text)'
-        }}>
-          <strong>Profile Status: </strong>
-          {profile.approval_status === 'pending' ? (
-            <span style={{ color: 'var(--gold)' }}>Pending Verification Review</span>
-          ) : profile.modification_status === 'pending' ? (
-            <span style={{ color: 'var(--gold)' }}>Edits Under Review (Directory shows last approved version)</span>
-          ) : (
-            <span style={{ color: 'var(--emerald)' }}>Verified & Live on Directory ✨</span>
-          )}
-        </div>
+        <StatusBanner approval={profile.approval_status} pendingReview={pendingReview} />
 
         {error && <div className="alert alert--error" style={{ marginBottom: 18 }}>{error}</div>}
         {success && <div className="alert alert--success" style={{ marginBottom: 18 }}>{success}</div>}
 
         <form onSubmit={handleSave}>
+          {/* Photo */}
           <div className="field" style={{ display: 'flex', alignItems: 'center', gap: 20, marginBottom: 20 }}>
             <div className="avatar" style={{ width: 80, height: 80, fontSize: '2rem' }}>
-              {profile.photo_url ? (
-                <img src={profile.photo_url} alt={profile.full_name} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
-              ) : (
-                profile.full_name.charAt(0)
-              )}
+              {profile.photo_url
+                ? <img src={profile.photo_url} alt="" />
+                : profile.full_name.charAt(0)}
             </div>
             <div>
               <label>Update profile photo</label>
@@ -460,149 +431,176 @@ export default function ProfilePage() {
             </div>
           </div>
 
-          <hr style={{ border: 'none', borderBottom: '1px solid var(--border)', margin: '24px 0' }} />
-
+          <Divider />
           <h3>Basics</h3>
+
           <div className="field">
-            <label>School Name</label>
-            <Chips options={SCHOOLS} value={profile.school_name} onChange={(v) => updateField('school_name', v)} />
+            <label>School</label>
+            <Chips options={[...SCHOOLS]} value={profile.school_name} onChange={(v) => updateField('school_name', v)} />
           </div>
 
-          <FloatingField label="Full name" value={profile.full_name} onChange={(v) => updateField('full_name', v)} />
+          <FloatingField label="Full name" value={profile.full_name} onChange={(v) => updateField('full_name', v)} required />
 
           <div className="two-col">
-            <FloatingField label="Admission number" hint="optional" value={profile.admission_number || ''} onChange={(v) => updateField('admission_number', v)} />
-            <FloatingField label="Graduating year (Class of)" type="number" max={CURRENT_YEAR} value={profile.class_of} onChange={(v) => updateField('class_of', v)} />
+            <FloatingField label="Admission number" hint="optional" value={profile.admission_number} onChange={(v) => updateField('admission_number', v)} />
+            <FloatingField label="Graduating year (Class of)" type="number" max={CURRENT_YEAR} value={profile.class_of} onChange={(v) => updateField('class_of', v)} required />
           </div>
 
-          <div className="field">
-            <label>Stream at school</label>
-            <Chips options={STREAMS} value={STREAMS.includes(profile.stream) ? profile.stream : 'Other'} onChange={(v) => updateField('stream', v)} />
-          </div>
-
-          <div className="field">
-            <label>School board</label>
-            <Chips options={SCHOOL_BOARDS} value={SCHOOL_BOARDS.includes(profile.school_board) ? profile.school_board : 'Other'} onChange={(v) => updateField('school_board', v)} />
-          </div>
-
-          <hr style={{ border: 'none', borderBottom: '1px solid var(--border)', margin: '24px 0' }} />
-
-          <h3>Higher Education</h3>
-          <div className="field">
-            <label>Broad Area of Study</label>
-            <select value={profile.field} onChange={(e) => updateField('field', e.target.value)}>
-              {CATEGORIES.map((c) => <option key={c.key} value={c.label}>{c.emoji} {c.label}</option>)}
-            </select>
-          </div>
-
-          <CollegeSearchField
-            value={profile.college_name}
-            onChange={(v) => updateField('college_name', v)}
+          <SelectWithOther
+            label="Stream at school" options={streamOptions} value={streamSel}
+            onChange={(v) => updateField('stream', v)}
+            otherValue={others.stream} onOtherChange={(v) => updateOther('stream', v)}
           />
 
-          <FloatingField label="Degree" value={profile.degree} onChange={(v) => updateField('degree', v)} />
-          <FloatingField label="Branch / Department" value={profile.branch} onChange={(v) => updateField('branch', v)} />
+          <SelectWithOther
+            label="School board" options={SCHOOL_BOARDS} value={boardSel}
+            onChange={(v) => updateField('school_board', v)}
+            otherValue={others.school_board} onOtherChange={(v) => updateOther('school_board', v)}
+          />
 
-          <div className="field">
-            <label>Admission Route</label>
-            <select value={ROUTES.includes(profile.admission_route) ? profile.admission_route : 'Other'} onChange={(e) => updateField('admission_route', e.target.value)}>
-              {ROUTES.map((r) => <option key={r} value={r}>{r}</option>)}
-            </select>
-          </div>
+          <Divider />
+          <h3>Higher education</h3>
 
-          {profile.admission_route === 'Board Marks' ? (
+          <SelectWithOther
+            label="Broad area of study" options={fieldOptions} value={fieldSel}
+            onChange={(v) => updateField('field', v)}
+            otherValue={others.field} onOtherChange={(v) => updateOther('field', v)}
+            required
+          />
+
+          <EntitySearchField
+            table="colleges"
+            label="College / University"
+            hint="start typing to search"
+            value={profile.college_name}
+            onChange={(v) => updateField('college_name', v)}
+            searchShortNames
+            required
+          />
+
+          <SelectWithOther
+            label="Degree" options={degreeOptions} value={degreeSel}
+            onChange={(v) => updateField('degree', v)}
+            otherValue={others.degree} onOtherChange={(v) => updateOther('degree', v)}
+            required
+          />
+
+          <FloatingField label="Branch / Department" hint="optional" value={profile.branch} onChange={(v) => updateField('branch', v)} />
+
+          <SelectWithOther
+            label="How you got in" options={routeOptions} value={routeSel}
+            onChange={(v) => updateField('admission_route', v)}
+            otherValue={others.admission_route} onOtherChange={(v) => updateOther('admission_route', v)}
+          />
+
+          {routeSel === 'Board Marks' ? (
             <div className="two-col">
-              <FloatingField label="Board Marks (%)" type="number" min={0} max={100} step={0.01} value={profile.board_marks} onChange={(v) => updateField('board_marks', v)} />
-              <FloatingField label="Cutoff" value={profile.board_cutoff} onChange={(v) => updateField('board_cutoff', v)} />
+              <FloatingField label="Board marks (%)" type="number" min={0} max={100} step={0.01} value={profile.board_marks} onChange={(v) => updateField('board_marks', v)} />
+              <FloatingField label="Cutoff" hint="if applicable" value={profile.board_cutoff} onChange={(v) => updateField('board_cutoff', v)} />
             </div>
           ) : (
-            !['Direct', 'Other'].includes(profile.admission_route) && (
-              <FloatingField label="Admission Rank" type="number" min={1} value={profile.admission_rank} onChange={(v) => updateField('admission_rank', v)} />
+            !['Merit / Direct', OTHER_OPTION, ''].includes(routeSel) && (
+              <FloatingField label="Admission rank" hint="optional" type="number" min={1} value={profile.admission_rank} onChange={(v) => updateField('admission_rank', v.replace(/[^\d]/g, ''))} />
             )
           )}
 
-          <hr style={{ border: 'none', borderBottom: '1px solid var(--border)', margin: '24px 0' }} />
-
-          <h3>Higher Studies <span className="hint">optional — add as many as you've done</span></h3>
+          <Divider />
+          <h3>Higher studies <span className="hint">optional — add as many as you&apos;ve done</span></h3>
           {higherStudies.map((entry, i) => (
-            <div key={entry.id ?? `new-${i}`} className="field" style={{ border: '1px solid var(--border)', borderRadius: 'var(--r-sm)', padding: 14, marginBottom: 12 }}>
-              <FloatingField label="Degree" hint="e.g. MS, MBA, PhD" value={entry.degree_name} onChange={(v) => updateHigherStudy(i, { degree_name: v })} />
-              <FloatingField label="Institution" hint="optional" value={entry.institution} onChange={(v) => updateHigherStudy(i, { institution: v })} />
+            <div key={entry.id ?? `new-${i}`} className="entry-card">
+              <FloatingField label="Degree" hint="e.g. MS, MBA, PhD" value={entry.degree_name} onChange={(v) => setHigherStudies((p) => p.map((x, j) => j === i ? { ...x, degree_name: v } : x))} />
+              <FloatingField label="Institution" hint="optional" value={entry.institution} onChange={(v) => setHigherStudies((p) => p.map((x, j) => j === i ? { ...x, institution: v } : x))} />
               <div className="two-col">
-                <FloatingField label="Start year" hint="optional" type="number" value={entry.start_year} onChange={(v) => updateHigherStudy(i, { start_year: v })} />
-                <FloatingField label="Finish year" type="number" value={entry.finish_year} onChange={(v) => updateHigherStudy(i, { finish_year: v })} />
+                <FloatingField label="Start year" hint="optional" type="number" value={entry.start_year} onChange={(v) => setHigherStudies((p) => p.map((x, j) => j === i ? { ...x, start_year: v } : x))} />
+                <FloatingField label="Finish year" hint="optional" type="number" value={entry.finish_year} onChange={(v) => setHigherStudies((p) => p.map((x, j) => j === i ? { ...x, finish_year: v } : x))} />
               </div>
-              <button type="button" onClick={() => removeHigherStudy(i)} className="btn btn--ghost" style={{ marginTop: 8 }}>
+              <button type="button" onClick={() => setHigherStudies((p) => p.filter((_, j) => j !== i))} className="btn btn--ghost" style={{ marginTop: 8 }}>
                 <span className="btn__inner">Remove</span>
               </button>
             </div>
           ))}
-          <button type="button" onClick={addHigherStudy} className="btn btn--ghost btn--block" style={{ marginBottom: 24 }}>
+          <button type="button" onClick={() => setHigherStudies((p) => [...p, emptyHigherStudy()])} className="btn btn--ghost btn--block" style={{ marginBottom: 24 }}>
             <span className="btn__inner">+ Add a degree</span>
           </button>
 
-          <hr style={{ border: 'none', borderBottom: '1px solid var(--border)', margin: '24px 0' }} />
+          <Divider />
+          <h3>Right now</h3>
 
-          <h3>Current Status</h3>
-          <div className="field">
-            <label>What are you up to now?</label>
-            <select value={STATUSES.includes(profile.current_status) ? profile.current_status : 'Other'} onChange={(e) => updateField('current_status', e.target.value)}>
-              {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-            </select>
-          </div>
+          <SelectWithOther
+            label="What are you up to?" options={statusOptions} value={statusSel}
+            onChange={(v) => updateField('current_status', v)}
+            otherValue={others.current_status} onOtherChange={(v) => updateOther('current_status', v)}
+            required
+          />
 
-          {(profile.current_status.toLowerCase().includes('studying') || profile.current_status.toLowerCase().includes('higher studies') || profile.current_status.toLowerCase().includes('preparing')) && (
-            <FloatingField label="Expected to finish in (Year)" type="number" min={CURRENT_YEAR} max={CURRENT_YEAR + 6} value={profile.expected_finish_year} onChange={(v) => updateField('expected_finish_year', v)} />
+          {isInProgressStatus(resolveValue(statusSel, others.current_status)) && (
+            <FloatingField
+              label="Expected to finish in (year)" type="number"
+              min={CURRENT_YEAR - 10} max={CURRENT_YEAR + 10}
+              value={profile.expected_finish_year}
+              onChange={(v) => updateField('expected_finish_year', v)}
+            />
           )}
 
-          <div className="two-col">
-            <FloatingField label="Currently at (Company/Institute)" value={profile.currently_at || ''} onChange={(v) => updateField('currently_at', v)} list="profile-org-list" />
-            <datalist id="profile-org-list">
-              {orgOptions.map(o => <option key={o} value={o} />)}
-            </datalist>
-            <FloatingField label="Role / Designation" value={profile.designation || ''} onChange={(v) => updateField('designation', v)} />
-          </div>
+          <EntitySearchField
+            table="organizations"
+            label="Currently at"
+            hint="company / institute, optional"
+            value={profile.currently_at}
+            onChange={(v) => updateField('currently_at', v)}
+          />
+          <datalist id="profile-org-list">
+            {orgOptions.map((o) => <option key={o} value={o} />)}
+          </datalist>
 
-          <h4 style={{ marginTop: 20 }}>Work Experience <span className="hint">optional — like a LinkedIn timeline</span></h4>
+          <FloatingField label="Role / Designation" hint="optional" value={profile.designation} onChange={(v) => updateField('designation', v)} />
+
+          <h4 style={{ marginTop: 20 }}>Work experience <span className="hint">optional — like a LinkedIn timeline</span></h4>
           {workExperience.map((entry, i) => (
-            <div key={entry.id ?? `new-${i}`} className="field" style={{ border: '1px solid var(--border)', borderRadius: 'var(--r-sm)', padding: 14, marginBottom: 12 }}>
-              <FloatingField label="Company / Organization" value={entry.company} onChange={(v) => updateWorkExperience(i, { company: v })} />
-              <FloatingField label="Role" hint="optional" value={entry.role} onChange={(v) => updateWorkExperience(i, { role: v })} />
+            <div key={entry.id ?? `new-${i}`} className="entry-card">
+              <FloatingField label="Company / Organisation" value={entry.company} onChange={(v) => setWorkExperience((p) => p.map((x, j) => j === i ? { ...x, company: v } : x))} />
+              <FloatingField label="Role" hint="optional" value={entry.role} onChange={(v) => setWorkExperience((p) => p.map((x, j) => j === i ? { ...x, role: v } : x))} />
               <div className="two-col">
-                <FloatingField label="Start year" hint="optional" type="number" value={entry.start_year} onChange={(v) => updateWorkExperience(i, { start_year: v })} />
+                <FloatingField label="Start year" hint="optional" type="number" value={entry.start_year} onChange={(v) => setWorkExperience((p) => p.map((x, j) => j === i ? { ...x, start_year: v } : x))} />
                 {!entry.is_current && (
-                  <FloatingField label="End year" hint="optional" type="number" value={entry.end_year} onChange={(v) => updateWorkExperience(i, { end_year: v })} />
+                  <FloatingField label="End year" hint="optional" type="number" value={entry.end_year} onChange={(v) => setWorkExperience((p) => p.map((x, j) => j === i ? { ...x, end_year: v } : x))} />
                 )}
               </div>
-              <label className="cbox" style={{ marginTop: 6 }}>
-                <input type="checkbox" checked={entry.is_current} onChange={(e) => updateWorkExperience(i, { is_current: e.target.checked, end_year: '' })} />
-                <span className="cbox__mark" />
+              <label className="cbox-row" style={{ marginTop: 10 }}>
+                <span className="cbox">
+                  <input type="checkbox" checked={entry.is_current} onChange={(e) => setWorkExperience((p) => p.map((x, j) => j === i ? { ...x, is_current: e.target.checked, end_year: '' } : x))} />
+                  <span className="cbox__mark" />
+                </span>
                 <span>I currently work here</span>
               </label>
-              <button type="button" onClick={() => removeWorkExperience(i)} className="btn btn--ghost" style={{ marginTop: 8 }}>
+              <button type="button" onClick={() => setWorkExperience((p) => p.filter((_, j) => j !== i))} className="btn btn--ghost" style={{ marginTop: 8 }}>
                 <span className="btn__inner">Remove</span>
               </button>
             </div>
           ))}
-          <button type="button" onClick={addWorkExperience} className="btn btn--ghost btn--block" style={{ marginBottom: 24 }}>
+          <button type="button" onClick={() => setWorkExperience((p) => [...p, emptyWorkExperience()])} className="btn btn--ghost btn--block" style={{ marginBottom: 24 }}>
             <span className="btn__inner">+ Add work experience</span>
           </button>
 
-          <FloatingField label="LinkedIn Profile URL" type="url" value={profile.linkedin_url || ''} onChange={(v) => updateField('linkedin_url', v)} />
-          <FloatingField label="Personal Email" type="email" value={profile.personal_email} onChange={(v) => updateField('personal_email', v)} />
+          <Divider />
+          <h3>Contact <span className="hint">never shown publicly</span></h3>
 
+          <FloatingField label="LinkedIn profile URL" hint="optional, shown publicly" type="url" value={profile.linkedin_url} onChange={(v) => updateField('linkedin_url', v)} />
+          <FloatingField label="Email" type="email" value={profile.personal_email} onChange={(v) => updateField('personal_email', v)} required />
           <div className="two-col">
-            <FloatingSelect label="Country Code" value={profile.phone_country_code} onChange={(v) => updateField('phone_country_code', v)} options={COUNTRY_CODES} />
-            <FloatingField label="Phone number" type="tel" value={profile.phone_number || ''} onChange={(v) => updateField('phone_number', v.replace(/\D/g, ''))} />
+            <FloatingSelect label="Country code" value={profile.phone_country_code} onChange={(v) => updateField('phone_country_code', v)} options={COUNTRY_CODES} />
+            <FloatingField label="Phone number" type="tel" value={profile.phone_number} onChange={(v) => updateField('phone_number', v.replace(/\D/g, ''))} required />
           </div>
 
           <div className="field" style={{ marginTop: 20 }}>
-            <label>One thing you'd tell your junior self?</label>
-            <textarea value={profile.message_1 || ''} onChange={(e) => updateField('message_1', e.target.value)} placeholder="e.g. don't stress over one bad exam, or start applying early..." />
+            <label>One thing you&apos;d tell your junior self?</label>
+            <textarea value={profile.message_1} onChange={(e) => updateField('message_1', e.target.value)} placeholder="e.g. don't stress over one bad exam, or start applying early…" />
           </div>
 
           <button type="submit" disabled={saving} className="btn btn--neutral btn--lg btn--block" style={{ marginTop: 24 }}>
-            <span className="btn__inner">{saving ? <span className="spinner" /> : 'Save Modifications 💾'}</span>
+            <span className="btn__inner">
+              {saving ? <span className="spinner" /> : isApproved ? 'Submit changes for review 💾' : 'Save changes 💾'}
+            </span>
           </button>
         </form>
       </div>
@@ -610,32 +608,31 @@ export default function ProfilePage() {
   );
 }
 
-/* ----- Helpers ----------------------------------------------------------- */
+/* ----- Small pieces ------------------------------------------------------- */
+
+function StatusBanner({ approval, pendingReview }: { approval: string; pendingReview: boolean }) {
+  const [tone, text] =
+    approval === 'pending'
+      ? ['warn', 'Pending verification — an administrator is reviewing your profile.']
+      : approval === 'rejected'
+        ? ['danger', 'This profile was not approved. Please contact the school office.']
+        : pendingReview
+          ? ['warn', 'Edits under review — the directory shows your last approved version until staff publish the changes.']
+          : ['ok', 'Verified and live on the directory ✨'];
+
+  return <div className={`status-banner status-banner--${tone}`}><strong>Profile status: </strong>{text}</div>;
+}
+
+function Divider() {
+  return <hr style={{ border: 'none', borderBottom: '1px solid var(--border)', margin: '24px 0' }} />;
+}
 
 function FloatingField({
-  label,
-  hint,
-  value,
-  onChange,
-  type = 'text',
-  list,
-  autoFocus,
-  style,
-  min,
-  max,
-  step,
+  label, hint, value, onChange, type = 'text', list, style, min, max, step, required,
 }: {
-  label: string;
-  hint?: string;
-  value: string;
-  onChange: (v: string) => void;
-  type?: string;
-  list?: string;
-  autoFocus?: boolean;
-  style?: React.CSSProperties;
-  min?: number;
-  max?: number;
-  step?: number;
+  label: string; hint?: string; value: string; onChange: (v: string) => void;
+  type?: string; list?: string; style?: React.CSSProperties;
+  min?: number; max?: number; step?: number; required?: boolean;
 }) {
   const id = `f-${label.replace(/\s+/g, '-').toLowerCase()}`;
   const [focused, setFocused] = useState(false);
@@ -643,137 +640,19 @@ function FloatingField({
   return (
     <div className={`f-field${active ? ' f-field--active' : ''}`} style={style}>
       <input
-        id={id}
-        type={type}
-        list={list}
-        value={value}
+        id={id} type={type} list={list} value={value}
         onChange={(e) => onChange(e.target.value)}
-        onFocus={() => setFocused(true)}
-        onBlur={() => setFocused(false)}
-        placeholder=""
-        autoFocus={autoFocus}
-        min={min}
-        max={max}
-        step={step}
+        onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
+        placeholder="" min={min} max={max} step={step} aria-required={required}
       />
-      <label htmlFor={id}>{label}</label>
+      <label htmlFor={id}>{label}{required && <span className="req" aria-hidden> *</span>}</label>
       {hint && <span className="hint">{hint}</span>}
     </div>
   );
 }
 
-// Live search-as-you-type against the full colleges table (47k+ rows) -
-// same component as app/register/page.tsx. Kept as a separate copy here
-// rather than a shared import to avoid restructuring this project's file
-// layout; keep both in sync if this ever needs changing.
-function CollegeSearchField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const [results, setResults] = useState<{ id: string; name: string; state: string | null }[]>([]);
-  const [open, setOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [focused, setFocused] = useState(false);
-  const id = 'f-college-university';
-
-  useEffect(() => {
-    const query = value.trim();
-    if (query.length < 3) {
-      setResults([]);
-      return;
-    }
-    setLoading(true);
-    const t = setTimeout(async () => {
-      const { data } = await supabase
-        .from('colleges')
-        .select('id, name, state')
-        .ilike('name', `%${query}%`)
-        .order('name')
-        .limit(12);
-      setResults(data ?? []);
-      setLoading(false);
-    }, 300);
-    return () => clearTimeout(t);
-  }, [value]);
-
-  const active = focused || value.trim().length > 0;
-
-  return (
-    <div className={`f-field${active ? ' f-field--active' : ''}`} style={{ position: 'relative' }}>
-      <input
-        id={id}
-        type="text"
-        value={value}
-        onChange={(e) => { onChange(e.target.value); setOpen(true); }}
-        onFocus={() => { setFocused(true); setOpen(true); }}
-        onBlur={() => setTimeout(() => setFocused(false), 150)}
-        placeholder=""
-        autoComplete="off"
-      />
-      <label htmlFor={id}>College / University</label>
-      <span className="hint">start typing to search all 47,000+ colleges</span>
-
-      {open && value.trim().length >= 3 && (
-        <div
-          style={{
-            position: 'absolute',
-            top: '100%',
-            left: 0,
-            right: 0,
-            marginTop: 6,
-            background: 'var(--surface-2, #191621)',
-            border: '1px solid var(--border-strong, #333)',
-            borderRadius: 'var(--r-sm, 10px)',
-            maxHeight: 260,
-            overflowY: 'auto',
-            zIndex: 20,
-            boxShadow: '0 12px 30px rgba(0,0,0,0.4)',
-          }}
-        >
-          {loading && (
-            <div style={{ padding: '10px 14px', color: 'var(--text-faint)', fontSize: '0.85rem' }}>Searching…</div>
-          )}
-          {!loading && results.length === 0 && (
-            <div style={{ padding: '10px 14px', color: 'var(--text-faint)', fontSize: '0.85rem' }}>
-              No match - not a problem, just keep your typed name and continue.
-            </div>
-          )}
-          {!loading && results.map((r) => (
-            <button
-              key={r.id}
-              type="button"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => { onChange(r.name); setOpen(false); }}
-              style={{
-                display: 'block',
-                width: '100%',
-                textAlign: 'left',
-                padding: '10px 14px',
-                background: 'transparent',
-                border: 'none',
-                borderBottom: '1px solid rgba(255,255,255,0.06)',
-                color: 'var(--text)',
-                cursor: 'pointer',
-                fontSize: '0.9rem',
-              }}
-            >
-              {r.name}
-              {r.state && <span style={{ color: 'var(--text-faint)', fontSize: '0.78rem' }}> — {r.state}</span>}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function FloatingSelect({
-  label,
-  value,
-  onChange,
-  options,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  options: string[];
+function FloatingSelect({ label, value, onChange, options }: {
+  label: string; value: string; onChange: (v: string) => void; options: string[];
 }) {
   const id = `f-${label.replace(/\s+/g, '-').toLowerCase()}`;
   return (
@@ -786,24 +665,42 @@ function FloatingSelect({
   );
 }
 
-function Chips({
-  options,
-  value,
-  onChange,
+/** A dropdown that reveals a "please specify" box when "Other" is chosen. */
+function SelectWithOther({
+  label, options, value, onChange, otherValue, onOtherChange, required,
 }: {
-  options: string[];
-  value: string;
-  onChange: (v: string) => void;
+  label: string; options: string[]; value: string; onChange: (v: string) => void;
+  otherValue: string; onOtherChange: (v: string) => void; required?: boolean;
+}) {
+  const id = `f-${label.replace(/\s+/g, '-').toLowerCase()}`;
+  return (
+    <div className="field">
+      <div className="f-field f-field--active">
+        <select id={id} value={value} onChange={(e) => onChange(e.target.value)} aria-required={required}>
+          <option value="" disabled hidden>Select {label.toLowerCase()}</option>
+          {options.map((o) => <option key={o} value={o}>{o}</option>)}
+        </select>
+        <label htmlFor={id}>{label}{required && <span className="req" aria-hidden> *</span>}</label>
+      </div>
+      {value === OTHER_OPTION && (
+        <>
+          <FloatingField label="Please specify" value={otherValue} onChange={onOtherChange} style={{ marginTop: 10 }} />
+          <p className="hint" style={{ display: 'block', marginTop: 4 }}>
+            New entries are checked by staff before they join the list for everyone.
+          </p>
+        </>
+      )}
+    </div>
+  );
+}
+
+function Chips({ options, value, onChange }: {
+  options: string[]; value: string; onChange: (v: string) => void;
 }) {
   return (
     <div className="chips">
       {options.map((o) => (
-        <button
-          type="button"
-          key={o}
-          className={`chip${value === o ? ' chip--active' : ''}`}
-          onClick={() => onChange(o)}
-        >
+        <button type="button" key={o} className={`chip${value === o ? ' chip--active' : ''}`} onClick={() => onChange(o)}>
           {o}
         </button>
       ))}

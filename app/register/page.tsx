@@ -1,33 +1,35 @@
-// redeploy trigger
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase, isSupabaseConfigured } from '../../lib/supabaseClient';
-import { commonOrganizations } from '../../lib/commonOrganizations';
+import EntitySearchField from '../../lib/EntitySearchField';
+import { cleanFreeText, cleanProperNoun } from '../../lib/text';
+import { fetchApprovedOptions, proposeOption } from '../../lib/publicData';
+import {
+  SCHOOLS, STREAMS, DEGREES, ADMISSION_ROUTES, STATUSES, SCHOOL_BOARDS,
+  COUNTRY_CODES, OTHER_OPTION, isInProgressStatus, mergeOptions, resolveValue,
+} from '../../lib/options';
 import { CATEGORIES } from '../../lib/types';
 
+/* ─────────────────────────────────────────────────────────────────────────
+   Form model
+───────────────────────────────────────────────────────────────────────── */
 interface FormState {
-  full_name: string;
   username: string;
   password_val: string;
+  full_name: string;
   school_name: string;
-  show_photo: 'yes' | 'no';
-  photo_file: File | null;
+  school_board: string;
+  school_board_other: string;
   class_of: string;
   stream: string;
   stream_other: string;
-  personal_email: string;
-  phone_country_code: string;
-  phone_number: string;
-  linkedin_url: string;
+  field: string;
+  field_other: string;
   college_name: string;
   degree: string;
   degree_other: string;
   branch: string;
-  field: string;
-  field_other: string;
-  admission_mode: 'Entrance Exam' | 'Board Marks' | 'Other';
-  admission_mode_other: string;
   admission_route: string;
   admission_route_other: string;
   admission_rank: string;
@@ -38,234 +40,206 @@ interface FormState {
   expected_finish_year: string;
   currently_at: string;
   designation: string;
+  personal_email: string;
+  phone_country_code: string;
+  phone_number: string;
+  linkedin_url: string;
   message_1: string;
-  message_2: string;
+  photo_file: File | null;
   consent_given: boolean;
 }
 
-// Same shape as the Profile page's repeatable entries -- kept optional here
-// so registration itself stays quick; people can also add these later from
-// their profile.
-interface HigherStudyEntry {
-  degree_name: string;
-  institution: string;
-  start_year: string;
-  finish_year: string;
-}
-interface WorkExperienceEntry {
-  company: string;
-  role: string;
-  start_year: string;
-  end_year: string;
-  is_current: boolean;
-}
+interface HigherStudyEntry { degree_name: string; institution: string; start_year: string; finish_year: string; }
+interface WorkExperienceEntry { company: string; role: string; start_year: string; end_year: string; is_current: boolean; }
+
 const emptyHigherStudy = (): HigherStudyEntry => ({ degree_name: '', institution: '', start_year: '', finish_year: '' });
 const emptyWorkExperience = (): WorkExperienceEntry => ({ company: '', role: '', start_year: '', end_year: '', is_current: false });
 
 const initialForm: FormState = {
-  full_name: '',
-  username: '',
-  password_val: '',
-  school_name: 'Veveaham Group Of Schools',
-  show_photo: 'no',
-  photo_file: null,
-  class_of: '',
-  stream: 'Bio-Maths',
-  stream_other: '',
-  personal_email: '',
-  phone_country_code: '+91',
-  phone_number: '',
-  linkedin_url: '',
-  college_name: '',
-  degree: '',
-  degree_other: '',
-  branch: '',
-  field: '',
-  field_other: '',
-  admission_mode: 'Entrance Exam',
-  admission_mode_other: '',
-  admission_route: '',
-  admission_route_other: '',
-  admission_rank: '',
-  board_marks: '',
-  board_cutoff: '',
-  current_status: '',
-  current_status_other: '',
-  expected_finish_year: '',
-  currently_at: '',
-  designation: '',
-  message_1: '',
-  message_2: '',
-  consent_given: false,
+  username: '', password_val: '',
+  full_name: '', school_name: '', school_board: '', school_board_other: '',
+  class_of: '', stream: '', stream_other: '',
+  field: '', field_other: '', college_name: '', degree: '', degree_other: '', branch: '',
+  admission_route: '', admission_route_other: '', admission_rank: '', board_marks: '', board_cutoff: '',
+  current_status: '', current_status_other: '', expected_finish_year: '',
+  currently_at: '', designation: '',
+  personal_email: '', phone_country_code: '+91', phone_number: '', linkedin_url: '',
+  message_1: '', photo_file: null, consent_given: false,
 };
 
 const CURRENT_YEAR = new Date().getFullYear();
-// Fake internal domain used to build a Supabase Auth email from an alumnus's
-// username - keeps their login identity separate from their real (optional)
-// personal email. Must match the same constant used in app/login/page.tsx.
+// Internal domain used to build a Supabase Auth email from a username, so login
+// never depends on the personal email. Must match app/login/page.tsx.
 const ALUMNI_LOGIN_DOMAIN = 'veveaham-alumni-network.com';
-const STEPS = ['Account', 'You', 'Studies', 'Now', 'Advice'];
-const STREAMS = ['Bio-Maths', 'CS-Maths', 'Business & Finance', 'Other'];
-const ROUTES = [
-  'JEE Main', 'JEE Advanced', 'NEET', 'CUET', 'BITSAT', 'VITEEE', 'SRMJEEE',
-  'COMEDK', 'KCET', 'MHT-CET', 'WBJEE', 'KEAM', 'CLAT', 'Other'
+
+const STEPS = [
+  { title: 'Account', blurb: 'So you can edit your profile later.' },
+  { title: 'School', blurb: 'Your Veveaham years.' },
+  { title: 'Studies', blurb: 'Where you went after school.' },
+  { title: 'Now', blurb: 'What you are doing today.' },
+  { title: 'Finish', blurb: 'A photo, some advice, and you are done.' },
 ];
-const STATUSES = ['Studying UG', 'Studying PG', 'Higher Studies', 'Working', 'Entrepreneur', 'Preparing', 'On Break', 'Other'];
-const DEGREES = ['BTech', 'BE', 'BSc', 'MBBS', 'BCom', 'BA', 'BArch', 'LLB', 'BBA', 'BCA'];
-const COUNTRY_CODES = ['+91', '+1', '+44', '+61', '+971', '+65', '+49', '+33', '+81', '+86'];
-const SCHOOLS = ['Veveaham Hr. Sec. School', 'Veveaham Prime Academy'];
-function withTags(base: string[], tags?: string[]): string[] {
-  if (!tags || tags.length === 0) return base;
-  const hasOther = base.includes('Other');
-  const core = base.filter((o) => o !== 'Other');
-  const merged = Array.from(new Set([...core, ...tags]));
-  return hasOther ? [...merged, 'Other'] : merged;
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const URL_RE = /^https?:\/\/.+/i;
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Validation — one rule set, used both per-field (on blur) and per-step.
+───────────────────────────────────────────────────────────────────────── */
+type FieldKey = keyof FormState;
+
+function validateField(key: FieldKey, form: FormState): string {
+  const val = (v: unknown) => String(v ?? '').trim();
+  switch (key) {
+    case 'username': {
+      const v = val(form.username);
+      if (!v) return 'Choose a username.';
+      if (v.length < 3) return 'At least 3 characters.';
+      return '';
+    }
+    case 'password_val':
+      return form.password_val.length < 6 ? 'At least 6 characters.' : '';
+    case 'full_name': {
+      const v = val(form.full_name);
+      if (!v) return 'Please tell us your name.';
+      if (v.length < 2) return 'That looks too short.';
+      return '';
+    }
+    case 'school_name':
+      return val(form.school_name) ? '' : 'Pick your school.';
+    case 'class_of': {
+      const v = val(form.class_of);
+      if (!v) return 'Which year did you finish?';
+      const yr = parseInt(v, 10);
+      if (Number.isNaN(yr) || yr < 1960 || yr > CURRENT_YEAR) return `Enter a year between 1960 and ${CURRENT_YEAR}.`;
+      return '';
+    }
+    case 'stream':
+      if (!val(form.stream)) return 'Pick your stream.';
+      if (form.stream === OTHER_OPTION && !val(form.stream_other)) return 'Type your stream.';
+      return '';
+    case 'field':
+      if (!val(form.field)) return 'Select your broad area.';
+      if (form.field === OTHER_OPTION && !val(form.field_other)) return 'Type your area of study.';
+      return '';
+    case 'college_name':
+      return val(form.college_name) ? '' : 'Which college did you join?';
+    case 'degree':
+      if (!val(form.degree)) return 'Pick your degree.';
+      if (form.degree === OTHER_OPTION && !val(form.degree_other)) return 'Type your degree.';
+      return '';
+    case 'admission_route':
+      if (!val(form.admission_route)) return 'How did you get in?';
+      if (form.admission_route === OTHER_OPTION && !val(form.admission_route_other)) return 'Type how you got in.';
+      return '';
+    case 'admission_rank': {
+      const v = val(form.admission_rank);
+      if (!v) return '';
+      const rank = parseInt(v, 10);
+      return Number.isNaN(rank) || rank <= 0 ? 'Rank must be a positive number.' : '';
+    }
+    case 'board_marks': {
+      const v = val(form.board_marks);
+      if (!v) return '';
+      const marks = parseFloat(v);
+      return Number.isNaN(marks) || marks < 0 || marks > 100 ? 'Marks must be between 0 and 100.' : '';
+    }
+    case 'current_status':
+      if (!val(form.current_status)) return 'Select what you are doing now.';
+      if (form.current_status === OTHER_OPTION && !val(form.current_status_other)) return 'Tell us what you are up to.';
+      return '';
+    case 'personal_email': {
+      const v = val(form.personal_email);
+      if (!v) return 'We need an email to reach you.';
+      return EMAIL_RE.test(v) ? '' : 'That email does not look right.';
+    }
+    case 'phone_number': {
+      const v = val(form.phone_number);
+      if (!v) return 'We need a phone number to reach you.';
+      return v.length < 7 ? 'That number looks too short.' : '';
+    }
+    case 'linkedin_url': {
+      const v = val(form.linkedin_url);
+      if (!v) return '';
+      return URL_RE.test(v) ? '' : 'Start the link with https://';
+    }
+    default:
+      return '';
+  }
 }
 
-// Small words that stay lowercase in title case (unless they're the very
-// first word) - e.g. "Indian Institute of Science Education and Research".
-// Auto-applied to free-typed "Other" answers and college names on submit,
-// so a student typing "bsms" or "iiser tvm" ends up stored as "Bsms" /
-// "Iiser Tvm" instead of showing up all-lowercase for everyone else to see.
-const TITLE_CASE_MINOR_WORDS = new Set(['a', 'an', 'and', 'as', 'at', 'but', 'by', 'for', 'in', 'nor', 'of', 'on', 'or', 'the', 'to', 'with']);
+// Which fields belong to which step, so "Continue" checks exactly that step.
+const STEP_FIELDS: FieldKey[][] = [
+  ['username', 'password_val'],
+  ['full_name', 'school_name', 'class_of', 'stream'],
+  ['field', 'college_name', 'degree', 'admission_route', 'admission_rank', 'board_marks'],
+  ['current_status', 'personal_email', 'phone_number', 'linkedin_url'],
+  [],
+];
 
-function toTitleCase(text: string): string {
-  return text
-    .split(/(\s+)/)
-    .map((chunk, i) => {
-      if (/^\s+$/.test(chunk) || chunk === '') return chunk;
-      const lowerChunk = chunk.toLowerCase();
-      if (i !== 0 && TITLE_CASE_MINOR_WORDS.has(lowerChunk)) return lowerChunk;
-      return chunk
-        .split('-')
-        .map((part) => (part ? part.charAt(0).toUpperCase() + part.slice(1).toLowerCase() : part))
-        .join('-');
-    })
-    .join('');
-}
+/* ═══════════════════════════════════════════════════════════════════════════
+   Page
+═══════════════════════════════════════════════════════════════════════════ */
 export default function RegisterPage() {
   const [form, setForm] = useState<FormState>(initialForm);
   const [step, setStep] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [submitted, setSubmitted] = useState(false);
-  // A ref (not state) so a double-click can't slip through before React
-  // re-renders the disabled button. State updates are async and can lag
-  // by a frame; this lock is checked and set synchronously, so two rapid
-  // clicks can never both start a submission.
-  const submitLockRef = useRef(false);
-
-  const [orgOptions, setOrgOptions] = useState<string[]>(commonOrganizations);
+  const [touched, setTouched] = useState<Partial<Record<FieldKey, boolean>>>({});
   const [tagOptions, setTagOptions] = useState<Record<string, string[]>>({});
 
-  // Optional "add now" sections -- collapsed by default so the form stays
-  // quick; people can also add these later from their profile instead.
+  // A ref (not state) so a double-click can't slip through before React
+  // re-renders the disabled button.
+  const submitLockRef = useRef(false);
+  const headingRef = useRef<HTMLHeadingElement>(null);
+
   const [showHigherStudies, setShowHigherStudies] = useState(false);
   const [higherStudies, setHigherStudies] = useState<HigherStudyEntry[]>([emptyHigherStudy()]);
   const [showWorkExperience, setShowWorkExperience] = useState(false);
   const [workExperience, setWorkExperience] = useState<WorkExperienceEntry[]>([emptyWorkExperience()]);
 
-  function updateHigherStudy(index: number, patch: Partial<HigherStudyEntry>) {
-    setHigherStudies((prev) => prev.map((entry, i) => (i === index ? { ...entry, ...patch } : entry)));
-  }
-  function addHigherStudy() {
-    setHigherStudies((prev) => [...prev, emptyHigherStudy()]);
-  }
-  function removeHigherStudy(index: number) {
-    setHigherStudies((prev) => prev.filter((_, i) => i !== index));
-  }
+  useEffect(() => { void fetchApprovedOptions().then(setTagOptions); }, []);
 
-  function updateWorkExperience(index: number, patch: Partial<WorkExperienceEntry>) {
-    setWorkExperience((prev) => prev.map((entry, i) => (i === index ? { ...entry, ...patch } : entry)));
-  }
-  function addWorkExperience() {
-    setWorkExperience((prev) => [...prev, emptyWorkExperience()]);
-  }
-  function removeWorkExperience(index: number) {
-    setWorkExperience((prev) => prev.filter((_, i) => i !== index));
-  }
+  // Move focus to the new step's heading so the form is followable by keyboard
+  // and screen reader, and the page doesn't stay scrolled halfway down.
+  useEffect(() => {
+    headingRef.current?.focus();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [step]);
 
-  useEffect(() => {
-    if (!isSupabaseConfigured) return;
-    (async () => {
-      const { data } = await supabase
-        .from('alumni')
-        .select('currently_at')
-        .eq('approval_status', 'approved');
-      if (data) {
-        const orgs = data.map((a) => a.currently_at as string).filter(Boolean);
-        setOrgOptions(Array.from(new Set([...commonOrganizations, ...orgs])).sort());
-      }
-    })();
-  }, []);
-  useEffect(() => {
-    if (!isSupabaseConfigured) return;
-    (async () => {
-      const { data } = await supabase.from('field_options').select('category, value');
-      if (data) {
-        const grouped: Record<string, string[]> = {};
-        for (const row of data as { category: string; value: string }[]) {
-          (grouped[row.category] ??= []).push(row.value);
-        }
-        setTagOptions(grouped);
-      }
-    })();
-  }, []);
-  
-  function update<K extends keyof FormState>(key: K, value: FormState[K]) {
+  const streamOptions = useMemo(() => mergeOptions(STREAMS, tagOptions.stream), [tagOptions]);
+  const degreeOptions = useMemo(() => mergeOptions(DEGREES, tagOptions.degree), [tagOptions]);
+  const routeOptions = useMemo(() => mergeOptions(ADMISSION_ROUTES, tagOptions.admission_route), [tagOptions]);
+  const statusOptions = useMemo(() => mergeOptions(STATUSES, tagOptions.current_status), [tagOptions]);
+  const fieldOptions = useMemo(() => mergeOptions([...CATEGORIES.map((c) => c.label)], tagOptions.field), [tagOptions]);
+
+  function update<K extends FieldKey>(key: K, value: FormState[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
-
-  const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  const URL_RE = /^https?:\/\/.+/i;
-
-  function validateStep(s: number): string {
-    if (s === 0) {
-      if (!form.username.trim()) return 'Please choose a username.';
-      if (form.username.trim().length < 3) return 'Username must be at least 3 characters.';
-      if (!form.password_val || form.password_val.length < 6) return 'Password must be at least 6 characters.';
-    }
-    if (s === 1) {
-      if (!form.full_name.trim()) return 'Please tell us your full name.';
-      if (form.full_name.trim().length < 2) return 'Full name looks too short.';
-      const yr = parseInt(form.class_of, 10);
-      if (!form.class_of || Number.isNaN(yr) || yr < 1960 || yr > CURRENT_YEAR)
-        return `Enter a valid graduating year, ${CURRENT_YEAR} or earlier.`;
-    }
-    if (s === 2) {
-      if (!form.college_name.trim()) return 'Tell us which college or university you attended.';
-      if (!form.degree.trim()) return 'Pick or type your degree.';
-      if (!form.field.trim()) return 'Select your field of study.';
-      if (form.admission_mode === 'Entrance Exam' && !form.admission_route.trim())
-        return 'Select which entrance exam you took.';
-      
-      if (form.admission_mode === 'Entrance Exam' && form.admission_rank.trim()) {
-        const rank = parseInt(form.admission_rank, 10);
-        if (Number.isNaN(rank) || rank <= 0) return 'Admission rank must be a positive number.';
-      }
-      if (form.admission_mode === 'Board Marks' && form.board_marks.trim()) {
-        const marks = parseFloat(form.board_marks);
-        if (Number.isNaN(marks) || marks < 0 || marks > 100) return 'Board marks must be between 0 and 100.';
-      }
-    }
-    if (s === 3) {
-      if (!form.current_status.trim()) return 'Please select your current status.';
-      if (form.linkedin_url.trim() && !URL_RE.test(form.linkedin_url.trim()))
-        return 'Enter a valid LinkedIn URL, starting with https://';
-      if (!form.personal_email.trim() || !EMAIL_RE.test(form.personal_email.trim()))
-        return 'Enter a valid email address.';
-      if (!form.phone_number.trim() || form.phone_number.trim().length < 7)
-        return 'Enter a valid phone number.';
-    }
-    return '';
+  function markTouched(key: FieldKey) {
+    setTouched((prev) => ({ ...prev, [key]: true }));
+  }
+  /** Error to display for a field: only once the person has left it. */
+  function errorFor(key: FieldKey): string {
+    return touched[key] ? validateField(key, form) : '';
+  }
+  function isValid(key: FieldKey): boolean {
+    return !!touched[key] && !validateField(key, form) && String(form[key] ?? '').trim().length > 0;
   }
 
+  const stepErrors = useMemo(
+    () => STEP_FIELDS[step].map((k) => validateField(k, form)).filter(Boolean),
+    [step, form],
+  );
+  const stepComplete = stepErrors.length === 0;
+
   function goNext() {
-    const msg = validateStep(step);
-    if (msg) {
-      setError(msg);
-      return;
-    }
+    // Reveal every problem on this step at once rather than one at a time.
+    const fields = STEP_FIELDS[step];
+    setTouched((prev) => ({ ...prev, ...Object.fromEntries(fields.map((f) => [f, true])) }));
+    const firstError = fields.map((k) => validateField(k, form)).find(Boolean);
+    if (firstError) { setError(firstError); return; }
     setError('');
     setStep((s) => Math.min(s + 1, STEPS.length - 1));
   }
@@ -277,22 +251,17 @@ export default function RegisterPage() {
 
   function handleFormSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (step < STEPS.length - 1) {
-      goNext();
-    } else {
-      void submit();
-    }
+    if (step < STEPS.length - 1) goNext();
+    else void submit();
   }
 
   async function submit() {
-    // Hard stop against double-submission - checked and set synchronously,
-    // before any async work or state updates happen.
     if (submitLockRef.current) return;
     submitLockRef.current = true;
-
     setError('');
+
     if (!isSupabaseConfigured) {
-      setError('Supabase isn’t connected yet, add your keys to .env.local to enable submissions.');
+      setError('The site is not connected to its database yet.');
       submitLockRef.current = false;
       return;
     }
@@ -301,228 +270,184 @@ export default function RegisterPage() {
       submitLockRef.current = false;
       return;
     }
+    // Re-check every step, in case someone skipped ahead.
+    const allErrors = STEP_FIELDS.flat().map((k) => validateField(k, form)).filter(Boolean);
+    if (allErrors.length) {
+      setError(allErrors[0]);
+      submitLockRef.current = false;
+      return;
+    }
 
     setSubmitting(true);
     try {
-      // 1. Check if username is already taken in the alumni database
-      const { data: userCheck, error: userCheckErr } = await supabase
-        .from('alumni')
-        .select('username')
-        .eq('username', form.username.trim())
-        .maybeSingle();
+      const username = form.username.trim();
 
-      // A real query failure (e.g. a missing column) must not be treated
-      // the same as "no matching row" - surface it clearly instead of
-      // silently letting a broken check pass through.
-      if (userCheckErr) throw userCheckErr;
+      // 1. Is the username free? Asked through an RPC because the browser can
+      //    no longer read the alumni table directly (that is what leaked
+      //    everyone's email and phone number).
+      const { data: available, error: checkErr } = await supabase.rpc('username_available', { candidate: username });
+      if (checkErr) throw checkErr;
+      if (available === false) throw new Error('That username is already taken. Please choose another one.');
 
-      if (userCheck) {
-        throw new Error('This username is already taken. Please choose another one.');
-      }
-
-      // 2. Sign up user via Supabase Auth
-      // We use a fake internal email built from the username rather than
-      // their real personal email - real email is optional on this form,
-      // and Supabase's free-tier mailer has a very low sending limit that
-      // real registrations would quickly hit. This keeps login identity
-      // fully decoupled from whatever email (if any) they typed in.
-      const authEmail = `${form.username.trim()}@${ALUMNI_LOGIN_DOMAIN}`;
+      // 2. Create the login. The email is synthesised from the username so the
+      //    real address stays optional-to-verify and private.
+      const authEmail = `${username}@${ALUMNI_LOGIN_DOMAIN}`;
       let userId: string;
-
       const { data: authData, error: authErr } = await supabase.auth.signUp({
         email: authEmail,
         password: form.password_val,
-        options: {
-          data: {
-            username: form.username.trim(),
-            full_name: form.full_name.trim(),
-          }
-        }
+        options: { data: { username, full_name: form.full_name.trim() } },
       });
 
       if (authErr) {
-        // "Already registered" can legitimately mean THIS SAME PERSON tried
-        // before, the login account got created, but saving their profile
-        // failed right after (e.g. a database constraint error) - leaving
-        // an orphaned account with no profile. Rather than dead-ending
-        // here, try signing in with the exact credentials they just typed:
-        // if that succeeds, it's safely their own account and we continue;
-        // if it fails too, the username genuinely belongs to someone else.
+        // "Already registered" can mean this same person tried before and the
+        // profile insert failed afterwards, leaving an account with no profile.
+        // Signing in with the credentials they just typed proves it is theirs.
         const isDuplicate = /already registered|already exists/i.test(authErr.message);
         if (!isDuplicate) throw authErr;
-
         const { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({
-          email: authEmail,
-          password: form.password_val,
+          email: authEmail, password: form.password_val,
         });
-
         if (signInErr || !signInData.user) {
-          throw new Error('This username is already taken. Please choose another one.');
+          throw new Error('That username is already taken. Please choose another one.');
         }
         userId = signInData.user.id;
       } else {
-        if (!authData.user) throw new Error('Auth registration failed.');
+        if (!authData.user) throw new Error('Could not create your account. Please try again.');
         userId = authData.user.id;
       }
 
-      // 3. Handle photo upload if present
+      // 3. Photo (optional).
       let photoUrl: string | null = null;
       if (form.photo_file) {
         const file = form.photo_file;
-        const MAX_BYTES = 5 * 1024 * 1024;
-        if (!file.type.startsWith('image/')) {
-          throw new Error('Please upload an image file (JPG, PNG, WEBP...).');
-        }
-        if (file.size > MAX_BYTES) {
-          throw new Error('Photo is too large, please pick one under 5MB.');
-        }
-        const extMatch = file.name.match(/\.([a-zA-Z0-9]{1,5})$/);
-        const ext = (extMatch?.[1] ?? 'jpg').toLowerCase();
-        const safeUsername = form.username.trim().replace(/[^a-zA-Z0-9-_]/g, '_');
+        if (!file.type.startsWith('image/')) throw new Error('Please upload an image file (JPG, PNG, WEBP…).');
+        if (file.size > 5 * 1024 * 1024) throw new Error('That photo is over 5MB — please pick a smaller one.');
+        const ext = (file.name.match(/\.([a-zA-Z0-9]{1,5})$/)?.[1] ?? 'jpg').toLowerCase();
+        const safeUsername = username.replace(/[^a-zA-Z0-9-_]/g, '_');
         const fileName = `${safeUsername}-${Date.now()}.${ext}`;
-        const { error: upErr } = await supabase.storage.from('photos').upload(fileName, file, {
-          contentType: file.type,
-        });
+        const { error: upErr } = await supabase.storage.from('photos').upload(fileName, file, { contentType: file.type });
         if (upErr) throw upErr;
         photoUrl = supabase.storage.from('photos').getPublicUrl(fileName).data.publicUrl;
       }
 
-      // 4. Look up the college the person typed against the (now Kaggle-backed)
-      // colleges table. We no longer create new rows here - with 47k+ real
-      // colleges already loaded, a typed name that doesn't match is more
-      // likely a typo or an genuinely obscure institution than something
-      // that needs a brand-new row, and letting any visitor insert into a
-      // shared reference table was the source of an earlier RLS bug. If it
-      // doesn't match, we keep the raw text so admin can review and match
-      // or add it manually later.
-      let collegeId: string | number | null = null;
-      const typedCollege = toTitleCase(form.college_name.trim());
+      // 4. Match college / organisation against the reference tables. An
+      //    unmatched name is kept as typed and lands in the admin's queue.
+      const typedCollege = cleanProperNoun(form.college_name);
+      let collegeId: string | null = null;
       if (typedCollege) {
-        const { data: existing } = await supabase
-          .from('colleges')
-          .select('id')
-          .ilike('name', typedCollege)
-          .maybeSingle();
-        if (existing) {
-          collegeId = existing.id;
-        }
+        const { data } = await supabase.from('colleges').select('id').ilike('name', typedCollege).maybeSingle();
+        if (data) collegeId = data.id;
+      }
+      const typedOrg = cleanProperNoun(form.currently_at);
+      let organizationId: string | null = null;
+      if (typedOrg) {
+        const { data } = await supabase.from('organizations').select('id').ilike('name', typedOrg).maybeSingle();
+        if (data) organizationId = data.id;
       }
 
-      // Map values
-      const finalStream = form.stream === 'Other' && form.stream_other.trim() ? toTitleCase(form.stream_other.trim()) : form.stream;
-      const finalDegree = form.degree === 'Other' && form.degree_other.trim() ? toTitleCase(form.degree_other.trim()) : form.degree;
-      const finalField = form.field === 'Other' && form.field_other.trim() ? toTitleCase(form.field_other.trim()) : form.field;
+      const finalStream = resolveValue(form.stream, form.stream_other);
+      const finalDegree = resolveValue(form.degree, form.degree_other);
+      const finalField = resolveValue(form.field, form.field_other);
+      const finalRoute = resolveValue(form.admission_route, form.admission_route_other);
+      const finalStatus = resolveValue(form.current_status, form.current_status_other);
+      const finalBoard = resolveValue(form.school_board, form.school_board_other);
+      const usesBoardMarks = finalRoute === 'Board Marks';
 
-      let finalRoute = 'Direct';
-      if (form.admission_mode === 'Entrance Exam') {
-        finalRoute = form.admission_route === 'Other' && form.admission_route_other.trim() ? toTitleCase(form.admission_route_other.trim()) : form.admission_route;
-      } else if (form.admission_mode === 'Board Marks') {
-        finalRoute = 'Board Marks';
-      } else if (form.admission_mode === 'Other') {
-        finalRoute = toTitleCase(form.admission_mode_other.trim()) || 'Other';
-      }
-
-      const finalStatus = form.current_status === 'Other' && form.current_status_other.trim() ? toTitleCase(form.current_status_other.trim()) : form.current_status;
-
-      // 5. Insert profile row with link to auth user
-      const { data: insertedAlumni, error: insErr } = await supabase.from('alumni').insert({
+      // 5. The profile row.
+      const { data: inserted, error: insErr } = await supabase.from('alumni').insert({
         user_id: userId,
-        username: form.username.trim(),
+        username,
         full_name: form.full_name.trim(),
         school_name: form.school_name,
+        school_board: finalBoard || null,
+        class_of: parseInt(form.class_of, 10),
+        stream: finalStream || null,
         show_photo: !!photoUrl,
         photo_url: photoUrl,
-        class_of: parseInt(form.class_of, 10),
-        stream: finalStream,
-
-        personal_email: form.personal_email.trim() || null,
-        phone_country_code: form.phone_number.trim() ? form.phone_country_code : null,
-        phone_number: form.phone_number.trim() || null,
-        linkedin_url: form.linkedin_url.trim() || null,
+        personal_email: form.personal_email.trim(),
+        phone_country_code: form.phone_country_code,
+        phone_number: form.phone_number.trim(),
+        linkedin_url: cleanFreeText(form.linkedin_url),
         college_id: collegeId,
-        college_name_raw: typedCollege || null,
-        degree: finalDegree.trim() || null,
-        branch: form.branch.trim() || null,
-        field: finalField.trim() || null,
-        admission_route: finalRoute,
-        admission_rank: form.admission_mode === 'Entrance Exam' ? (form.admission_rank.trim() || null) : null,
-        board_marks: form.admission_mode === 'Board Marks' ? (form.board_marks.trim() || null) : null,
-        board_cutoff: form.admission_mode === 'Board Marks' ? (form.board_cutoff.trim() || null) : null,
+        college_name_raw: typedCollege,
+        degree: finalDegree || null,
+        branch: cleanProperNoun(form.branch),
+        field: finalField || null,
+        admission_route: finalRoute || null,
+        admission_rank: usesBoardMarks ? null : cleanFreeText(form.admission_rank),
+        board_marks: usesBoardMarks ? cleanFreeText(form.board_marks) : null,
+        board_cutoff: usesBoardMarks ? cleanFreeText(form.board_cutoff) : null,
         current_status: finalStatus,
-        expected_finish_year: (finalStatus.toLowerCase().includes('studying') || finalStatus.toLowerCase().includes('higher studies') || finalStatus.toLowerCase().includes('preparing')) && form.expected_finish_year.trim() ? parseInt(form.expected_finish_year, 10) : null,
-        currently_at: form.currently_at.trim() || null,
-        designation: form.designation.trim() || null,
-        message_1: form.message_1.trim() || null,
-        message_2: form.message_2.trim() || null,
+        expected_finish_year: isInProgressStatus(finalStatus) && form.expected_finish_year
+          ? parseInt(form.expected_finish_year, 10) : null,
+        currently_at: typedOrg,
+        organization_id: organizationId,
+        designation: cleanProperNoun(form.designation),
+        message_1: cleanFreeText(form.message_1),
         consent_given: true,
         approval_status: 'pending',
-        modification_status: 'none'
+        modification_status: 'none',
       }).select('id').single();
 
       if (insErr) throw insErr;
+      const newId = inserted?.id;
 
-      // 5b. If they chose "Add now" for higher studies and/or work
-      // experience, save those too. Anything left blank (or if they picked
-      // "add later") is simply skipped -- they can fill it in from their
-      // profile afterwards.
-      const newAlumniId = insertedAlumni?.id;
-      if (newAlumniId && showHigherStudies) {
-        const studiesToInsert = higherStudies
-          .filter((s) => s.degree_name.trim())
-          .map((s) => ({
-            alumni_id: newAlumniId,
-            degree_name: s.degree_name.trim(),
-            institution: s.institution.trim() || null,
-            start_year: s.start_year ? parseInt(s.start_year, 10) : null,
-            finish_year: s.finish_year ? parseInt(s.finish_year, 10) : null,
-          }));
-        if (studiesToInsert.length) {
-          await supabase.from('higher_studies').insert(studiesToInsert);
-        }
+      // 6. Optional timelines.
+      if (newId && showHigherStudies) {
+        const rows = higherStudies.filter((s) => s.degree_name.trim()).map((s) => ({
+          alumni_id: newId,
+          degree_name: s.degree_name.trim(),
+          institution: cleanProperNoun(s.institution),
+          start_year: s.start_year ? parseInt(s.start_year, 10) : null,
+          finish_year: s.finish_year ? parseInt(s.finish_year, 10) : null,
+        }));
+        if (rows.length) await supabase.from('higher_studies').insert(rows);
       }
-      if (newAlumniId && showWorkExperience) {
-        const workToInsert = workExperience
-          .filter((w) => w.company.trim())
-          .map((w) => ({
-            alumni_id: newAlumniId,
-            company: w.company.trim(),
-            role: w.role.trim() || null,
-            start_year: w.start_year ? parseInt(w.start_year, 10) : null,
-            end_year: w.is_current ? null : (w.end_year ? parseInt(w.end_year, 10) : null),
-            is_current: w.is_current,
-          }));
-        if (workToInsert.length) {
-          await supabase.from('work_experience').insert(workToInsert);
-        }
+      if (newId && showWorkExperience) {
+        const rows = workExperience.filter((w) => w.company.trim()).map((w) => ({
+          alumni_id: newId,
+          company: cleanProperNoun(w.company)!,
+          role: cleanProperNoun(w.role),
+          start_year: w.start_year ? parseInt(w.start_year, 10) : null,
+          end_year: w.is_current ? null : (w.end_year ? parseInt(w.end_year, 10) : null),
+          is_current: w.is_current,
+        }));
+        if (rows.length) await supabase.from('work_experience').insert(rows);
       }
 
-      // Notify admin
-      fetch('/api/notify-admin', {
+      // 7. Queue any free-typed values for staff review. They already show on
+      //    this person's profile; this is only about joining the shared lists.
+      if (form.stream === OTHER_OPTION) void proposeOption('stream', form.stream_other);
+      if (form.degree === OTHER_OPTION) void proposeOption('degree', form.degree_other);
+      if (form.admission_route === OTHER_OPTION) void proposeOption('admission_route', form.admission_route_other);
+      if (form.current_status === OTHER_OPTION) void proposeOption('current_status', form.current_status_other);
+      if (form.field === OTHER_OPTION) void proposeOption('field', form.field_other);
+
+      // 8. Tell an admin. Never allowed to fail the registration.
+      void fetch('/api/notify-admin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           fullName: form.full_name.trim(),
           classOf: form.class_of,
-          currentStatus: form.current_status,
+          school: form.school_name,
+          college: typedCollege ?? '',
+          currentStatus: finalStatus,
         }),
       }).catch(() => {});
 
       setSubmitted(true);
     } catch (err) {
       console.error(err);
-      // Supabase/Postgrest errors are plain objects with a `message`
-      // property - they are NOT real `Error` instances, so the old check
-      // here (`err instanceof Error`) silently missed them and always
-      // fell back to a generic message, hiding the real reason.
-      const realMessage =
-        err instanceof Error
-          ? err.message
-          : (err && typeof err === 'object' && 'message' in err)
-            ? String((err as { message: unknown }).message)
-            : null;
-      setError(realMessage || 'Something went wrong. Please try again.');
-      // Only release the lock on failure, so the person can correct
-      // something and retry. On success there's nothing left to submit.
+      // Supabase errors are plain objects with a `message`, not Error
+      // instances, so an `instanceof Error` check alone silently hides them.
+      const message = err instanceof Error
+        ? err.message
+        : (err && typeof err === 'object' && 'message' in err)
+          ? String((err as { message: unknown }).message)
+          : 'Something went wrong. Please try again.';
+      setError(message);
       submitLockRef.current = false;
     } finally {
       setSubmitting(false);
@@ -532,42 +457,37 @@ export default function RegisterPage() {
   if (submitted) return <SuccessScreen />;
 
   const isLast = step === STEPS.length - 1;
+  const stepProps = { form, update, markTouched, errorFor, isValid };
 
   return (
     <main className="container container--narrow">
       <div className="card fade-up">
         <StepBar step={step} />
 
-        <p className="step-label">Step {step + 1} of {STEPS.length}</p>
+        <div className="step-head">
+          <p className="step-label">Step {step + 1} of {STEPS.length}</p>
+          <h2 className="step-title" ref={headingRef} tabIndex={-1}>{STEPS[step].title}</h2>
+          <p className="step-sub">{STEPS[step].blurb}</p>
+        </div>
 
-        {error && <div className="alert alert--error">{error}</div>}
+        {error && <div className="alert alert--error" role="alert">{error}</div>}
 
-        <form onSubmit={handleFormSubmit}>
+        <form onSubmit={handleFormSubmit} noValidate>
           <div key={step} className="fade-up">
-            {step === 0 && <StepAccount form={form} update={update} />}
-            {step === 1 && <StepYou form={form} update={update} tagOptions={tagOptions} />}
-            {step === 2 && <StepStudies form={form} update={update} tagOptions={tagOptions} />}
+            {step === 0 && <StepAccount {...stepProps} />}
+            {step === 1 && <StepSchool {...stepProps} streamOptions={streamOptions} />}
+            {step === 2 && <StepStudies {...stepProps} fieldOptions={fieldOptions} degreeOptions={degreeOptions} routeOptions={routeOptions} />}
             {step === 3 && (
               <StepNow
-                form={form}
-                update={update}
-                orgOptions={orgOptions}
-                tagOptions={tagOptions}
-                showHigherStudies={showHigherStudies}
-                setShowHigherStudies={setShowHigherStudies}
-                higherStudies={higherStudies}
-                updateHigherStudy={updateHigherStudy}
-                addHigherStudy={addHigherStudy}
-                removeHigherStudy={removeHigherStudy}
-                showWorkExperience={showWorkExperience}
-                setShowWorkExperience={setShowWorkExperience}
-                workExperience={workExperience}
-                updateWorkExperience={updateWorkExperience}
-                addWorkExperience={addWorkExperience}
-                removeWorkExperience={removeWorkExperience}
+                {...stepProps}
+                statusOptions={statusOptions}
+                showHigherStudies={showHigherStudies} setShowHigherStudies={setShowHigherStudies}
+                higherStudies={higherStudies} setHigherStudies={setHigherStudies}
+                showWorkExperience={showWorkExperience} setShowWorkExperience={setShowWorkExperience}
+                workExperience={workExperience} setWorkExperience={setWorkExperience}
               />
             )}
-            {step === 4 && <StepAdvice form={form} update={update} />}
+            {step === 4 && <StepFinish {...stepProps} />}
           </div>
 
           <div className="wizard-nav">
@@ -578,347 +498,344 @@ export default function RegisterPage() {
             )}
             <button type="submit" className="btn btn--neutral" disabled={submitting}>
               <span className="btn__inner">
-                {submitting ? (
-                  <><span className="spinner spinner--neutral" /> Submitting…</>
-                ) : isLast ? (
-                  'Submit my profile ✨'
-                ) : (
-                  'Continue →'
-                )}
+                {submitting
+                  ? <><span className="spinner spinner--neutral" /> Submitting…</>
+                  : isLast ? 'Submit my profile ✨' : 'Continue →'}
               </span>
             </button>
           </div>
+
+          {!isLast && !stepComplete && (
+            <p className="step-remaining">
+              {stepErrors.length} thing{stepErrors.length === 1 ? '' : 's'} left on this step
+            </p>
+          )}
         </form>
       </div>
     </main>
   );
 }
 
-/* ----- Steps -------------------------------------------------------------- */
-
+/* ─────────────────────────────────────────────────────────────────────────
+   Step props shared by all steps
+───────────────────────────────────────────────────────────────────────── */
 type StepProps = {
   form: FormState;
-  update: <K extends keyof FormState>(key: K, value: FormState[K]) => void;
+  update: <K extends FieldKey>(key: K, value: FormState[K]) => void;
+  markTouched: (key: FieldKey) => void;
+  errorFor: (key: FieldKey) => string;
+  isValid: (key: FieldKey) => boolean;
 };
 
-function StepAccount({ form, update }: StepProps) {
+function StepAccount({ form, update, markTouched, errorFor, isValid }: StepProps) {
   return (
     <>
-      <h2 className="step-title">Create your account 🔒</h2>
-      <p className="step-sub">You will use these details to edit your profile later.</p>
-      
-      <FloatingField label="Choose Username" value={form.username} onChange={(v) => update('username', v.toLowerCase().replace(/[^a-z0-9_-]/g, ''))} autoFocus />
-      <FloatingField label="Choose Password" type="password" revealable value={form.password_val} onChange={(v) => update('password_val', v)} />
-
-      {/* TEMPORARY testing helper - remove this button before real students
-          start using the site. Fills in a guaranteed-unique username/password
-          so repeated test runs never collide with an earlier test account. */}
-      <button
-        type="button"
-        onClick={() => {
-          const rand = Math.random().toString(36).slice(2, 8);
-          update('username', `test_${rand}`);
-          update('password_val', `Test${rand}!`);
-        }}
-        className="btn btn--ghost"
-        style={{ marginTop: 8, fontSize: '0.8rem' }}
-      >
-        <span className="btn__inner">🎲 Fill random test account</span>
-      </button>
+      <Field
+        label="Choose a username" required autoFocus
+        hint="letters, numbers, - and _ only"
+        value={form.username}
+        onChange={(v) => update('username', v.toLowerCase().replace(/[^a-z0-9_-]/g, ''))}
+        onBlur={() => markTouched('username')}
+        error={errorFor('username')} valid={isValid('username')}
+      />
+      <Field
+        label="Choose a password" required type="password" revealable
+        hint="at least 6 characters"
+        value={form.password_val}
+        onChange={(v) => update('password_val', v)}
+        onBlur={() => markTouched('password_val')}
+        error={errorFor('password_val')} valid={isValid('password_val')}
+      />
+      <p className="form-note">
+        You&apos;ll use these to sign in later and update your journey — there&apos;s no
+        email verification step to wait for.
+      </p>
     </>
   );
 }
 
-function StepYou({ form, update, tagOptions }: StepProps & { tagOptions: Record<string, string[]> }) {
+function StepSchool({ form, update, markTouched, errorFor, isValid, streamOptions }: StepProps & { streamOptions: string[] }) {
   return (
     <>
-      <h2 className="step-title">Tell us about you 👋</h2>
-      <p className="step-sub">Let's associate your high school details.</p>
-
-      <div className="field">
-        <label>Which school did you attend?</label>
-        <Chips options={SCHOOLS} value={form.school_name} onChange={(v) => update('school_name', v)} />
-      </div>
-
-      <FloatingField label="Full name" value={form.full_name} onChange={(v) => update('full_name', v)} />
-
-      <FloatingField label="Graduating year (Class of)" type="number" max={CURRENT_YEAR} value={form.class_of} onChange={(v) => update('class_of', v)} />
-
-      <div className="field">
-        <label>Stream at school</label>
-        <OtherAwareChips
-          options={withTags(STREAMS, tagOptions.stream)}
-          value={form.stream}
-          onChange={(v) => update('stream', v)}
-          otherValue={form.stream_other}
-          onOtherChange={(v) => update('stream_other', v)}
-          otherPlaceholder="Please specify your stream"
-        />
-      </div>
-    </>
-  );
-}
-
-function StepStudies({ form, update, tagOptions }: StepProps & { tagOptions: Record<string, string[]> }) {
-  return (
-    <>
-      <h2 className="step-title">What did you study? 🎓</h2>
-      <p className="step-sub">Select the area that fits your higher education.</p>
-
-      <div className="field">
-        <label>Broad area</label>
-        <select value={form.field} onChange={(e) => update('field', e.target.value)}>
-          <option value="" disabled hidden>Select your field</option>
-          {CATEGORIES.map((c) => <option key={c.key} value={c.label}>{c.emoji} {c.label}</option>)}
-        </select>
-        {form.field === 'Other' && (
-          <FloatingField
-            label="Please specify"
-            value={form.field_other}
-            onChange={(v) => update('field_other', v)}
-            style={{ marginTop: 10 }}
-          />
-        )}
-      </div>
-
-      <CollegeSearchField
-        value={form.college_name}
-        onChange={(v) => update('college_name', v)}
+      <Field
+        label="Full name" required autoFocus
+        value={form.full_name}
+        onChange={(v) => update('full_name', v)}
+        onBlur={() => markTouched('full_name')}
+        error={errorFor('full_name')} valid={isValid('full_name')}
       />
 
       <div className="field">
-        <label>Degree</label>
-        <OtherAwareSelect
-          label="Degree"
-          options={withTags(DEGREES, tagOptions.degree)}
-          value={form.degree}
-          onChange={(v) => update('degree', v)}
-          otherValue={form.degree_other}
-          onOtherChange={(v) => update('degree_other', v)}
-          otherPlaceholder="Please specify your degree"
-        />
+        <label className="field__label">Which school did you attend? <Req /></label>
+        <Chips options={[...SCHOOLS]} value={form.school_name} onChange={(v) => { update('school_name', v); markTouched('school_name'); }} />
+        {errorFor('school_name') && <p className="field__error">{errorFor('school_name')}</p>}
       </div>
 
-      <FloatingField label="Branch / Department" value={form.branch} onChange={(v) => update('branch', v)} />
+      <Field
+        label="Graduating year (Class of)" required type="number"
+        min={1960} max={CURRENT_YEAR} inputMode="numeric"
+        value={form.class_of}
+        onChange={(v) => update('class_of', v.replace(/[^\d]/g, ''))}
+        onBlur={() => markTouched('class_of')}
+        error={errorFor('class_of')} valid={isValid('class_of')}
+      />
 
-      <div className="field">
-        <label>How did you get in?</label>
-        <Chips
-          options={['Entrance Exam', 'Board Marks', 'Other']}
-          value={form.admission_mode}
-          onChange={(v) => update('admission_mode', v as any)}
+      <SelectWithOther
+        label="Stream at school" required options={streamOptions}
+        value={form.stream} onChange={(v) => { update('stream', v); markTouched('stream'); }}
+        otherValue={form.stream_other} onOtherChange={(v) => update('stream_other', v)}
+        error={errorFor('stream')}
+      />
+
+      <SelectWithOther
+        label="School board" options={SCHOOL_BOARDS} optional
+        value={form.school_board} onChange={(v) => update('school_board', v)}
+        otherValue={form.school_board_other} onOtherChange={(v) => update('school_board_other', v)}
+        error=""
+      />
+    </>
+  );
+}
+
+function StepStudies({
+  form, update, markTouched, errorFor, isValid, fieldOptions, degreeOptions, routeOptions,
+}: StepProps & { fieldOptions: string[]; degreeOptions: string[]; routeOptions: string[] }) {
+  const route = resolveValue(form.admission_route, form.admission_route_other);
+  const usesBoardMarks = form.admission_route === 'Board Marks';
+  const skipsRank = ['Merit / Direct', 'Management Quota', 'Sports Quota', OTHER_OPTION, ''].includes(form.admission_route);
+
+  return (
+    <>
+      <SelectWithOther
+        label="Broad area of study" required options={fieldOptions}
+        value={form.field} onChange={(v) => { update('field', v); markTouched('field'); }}
+        otherValue={form.field_other} onOtherChange={(v) => update('field_other', v)}
+        error={errorFor('field')}
+      />
+
+      <div onBlur={() => markTouched('college_name')}>
+        <EntitySearchField
+          table="colleges" label="College / University" required
+          hint="start typing — we'll search every college in India"
+          value={form.college_name}
+          onChange={(v) => update('college_name', v)}
+          searchShortNames
+          invalid={!!errorFor('college_name')}
         />
-        {form.admission_mode === 'Other' && (
-          <FloatingField
-            label="Please specify"
-            value={form.admission_mode_other}
-            onChange={(v) => update('admission_mode_other', v)}
-            style={{ marginTop: 10 }}
-          />
-        )}
       </div>
+      {errorFor('college_name') && <p className="field__error">{errorFor('college_name')}</p>}
 
-      {form.admission_mode === 'Entrance Exam' && (
-        <>
-          <div className="field" style={{ marginTop: 14 }}>
-            <OtherAwareSelect
-              label="Entrance Exam"
-              options={withTags(ROUTES, tagOptions.admission_route).filter((r) => r !== 'Other')}
-              value={form.admission_route}
-              onChange={(v) => update('admission_route', v)}
-              otherValue={form.admission_route_other}
-              onOtherChange={(v) => update('admission_route_other', v)}
-              otherPlaceholder="Specify Entrance Exam"
-            />
-          </div>
-          <FloatingField
-            label="Admission rank"
-            hint="optional"
-            type="number"
-            min={1}
-            step={1}
-            value={form.admission_rank}
-            onChange={(v) => update('admission_rank', v.replace(/[^\d]/g, ''))}
-          />
-        </>
-      )}
+      <SelectWithOther
+        label="Degree" required options={degreeOptions}
+        value={form.degree} onChange={(v) => { update('degree', v); markTouched('degree'); }}
+        otherValue={form.degree_other} onOtherChange={(v) => update('degree_other', v)}
+        error={errorFor('degree')}
+      />
 
-      {form.admission_mode === 'Board Marks' && (
-        <div className="two-col" style={{ marginTop: 14 }}>
-          <FloatingField
-            label="Board marks (%)"
-            hint="optional"
-            type="number"
-            min={0}
-            max={100}
-            step={0.01}
-            value={form.board_marks}
-            onChange={(v) => update('board_marks', v)}
+      <Field
+        label="Branch / Department" optional
+        hint="e.g. Computer Science"
+        value={form.branch} onChange={(v) => update('branch', v)}
+        onBlur={() => markTouched('branch')} error="" valid={false}
+      />
+
+      <SelectWithOther
+        label="How did you get in?" required options={routeOptions}
+        value={form.admission_route} onChange={(v) => { update('admission_route', v); markTouched('admission_route'); }}
+        otherValue={form.admission_route_other} onOtherChange={(v) => update('admission_route_other', v)}
+        error={errorFor('admission_route')}
+      />
+
+      {usesBoardMarks ? (
+        <div className="two-col">
+          <Field
+            label="Board marks (%)" optional type="number" min={0} max={100} step={0.01}
+            value={form.board_marks} onChange={(v) => update('board_marks', v)}
+            onBlur={() => markTouched('board_marks')}
+            error={errorFor('board_marks')} valid={isValid('board_marks')}
           />
-          <FloatingField
-            label="Cutoff"
-            hint="if applicable"
-            value={form.board_cutoff}
-            onChange={(v) => update('board_cutoff', v)}
+          <Field
+            label="Cutoff" optional hint="if applicable"
+            value={form.board_cutoff} onChange={(v) => update('board_cutoff', v)}
+            onBlur={() => markTouched('board_cutoff')} error="" valid={false}
           />
         </div>
-      )}
+      ) : !skipsRank && route ? (
+        <Field
+          label={`${route} rank`} optional type="number" min={1} inputMode="numeric"
+          hint="juniors find this really useful"
+          value={form.admission_rank}
+          onChange={(v) => update('admission_rank', v.replace(/[^\d]/g, ''))}
+          onBlur={() => markTouched('admission_rank')}
+          error={errorFor('admission_rank')} valid={isValid('admission_rank')}
+        />
+      ) : null}
     </>
   );
 }
 
 function StepNow({
-  form, update, orgOptions, tagOptions,
-  showHigherStudies, setShowHigherStudies, higherStudies, updateHigherStudy, addHigherStudy, removeHigherStudy,
-  showWorkExperience, setShowWorkExperience, workExperience, updateWorkExperience, addWorkExperience, removeWorkExperience,
-}: StepProps & { orgOptions: string[]; tagOptions: Record<string, string[]> } & OptionalSectionsProps) {
+  form, update, markTouched, errorFor, isValid, statusOptions,
+  showHigherStudies, setShowHigherStudies, higherStudies, setHigherStudies,
+  showWorkExperience, setShowWorkExperience, workExperience, setWorkExperience,
+}: StepProps & {
+  statusOptions: string[];
+  showHigherStudies: boolean; setShowHigherStudies: (v: boolean) => void;
+  higherStudies: HigherStudyEntry[]; setHigherStudies: React.Dispatch<React.SetStateAction<HigherStudyEntry[]>>;
+  showWorkExperience: boolean; setShowWorkExperience: (v: boolean) => void;
+  workExperience: WorkExperienceEntry[]; setWorkExperience: React.Dispatch<React.SetStateAction<WorkExperienceEntry[]>>;
+}) {
+  const status = resolveValue(form.current_status, form.current_status_other);
+
   return (
     <>
-      <h2 className="step-title">What are you up to now? 💼</h2>
-      <p className="step-sub">So juniors know where seniors end up.</p>
+      <SelectWithOther
+        label="What are you up to now?" required options={statusOptions}
+        value={form.current_status} onChange={(v) => { update('current_status', v); markTouched('current_status'); }}
+        otherValue={form.current_status_other} onOtherChange={(v) => update('current_status_other', v)}
+        error={errorFor('current_status')}
+      />
 
-      <div className="field">
-        <label>Current status</label>
-        <select value={form.current_status} onChange={(e) => update('current_status', e.target.value)}>
-          <option value="" disabled hidden>Select your current status</option>
-          {withTags(STATUSES, tagOptions.current_status).map((s) => <option key={s} value={s}>{s}</option>)}
-        </select>
-        {form.current_status === 'Other' && (
-          <FloatingField
-            label="Please specify"
-            value={form.current_status_other}
-            onChange={(v) => update('current_status_other', v)}
-            style={{ marginTop: 10 }}
-          />
-        )}
-        {(form.current_status.toLowerCase().includes('studying') || form.current_status.toLowerCase().includes('higher studies') || form.current_status.toLowerCase().includes('preparing')) && (
-          <FloatingField
-            label="Expected to finish in"
-            hint="year, optional"
-            type="number"
-            min={CURRENT_YEAR}
-            max={CURRENT_YEAR + 6}
-            value={form.expected_finish_year}
-            onChange={(v) => update('expected_finish_year', v)}
-            style={{ marginTop: 10 }}
-          />
-        )}
-      </div>
+      {isInProgressStatus(status) && (
+        <Field
+          label="Expected to finish in" optional type="number" hint="year"
+          min={CURRENT_YEAR - 10} max={CURRENT_YEAR + 10}
+          value={form.expected_finish_year}
+          onChange={(v) => update('expected_finish_year', v.replace(/[^\d]/g, ''))}
+          onBlur={() => markTouched('expected_finish_year')} error="" valid={false}
+        />
+      )}
 
       <div className="two-col">
-        <div>
-          <FloatingField label="Currently at" hint="org / institute, optional" value={form.currently_at} onChange={(v) => update('currently_at', v)} list="org-list" />
-          <datalist id="org-list">
-            {orgOptions.map((o) => <option key={o} value={o} />)}
-          </datalist>
+        <EntitySearchField
+          table="organizations" label="Currently at"
+          hint="company or institute, optional"
+          value={form.currently_at}
+          onChange={(v) => update('currently_at', v)}
+        />
+        <Field
+          label="Role / Designation" optional
+          value={form.designation} onChange={(v) => update('designation', v)}
+          onBlur={() => markTouched('designation')} error="" valid={false}
+        />
+      </div>
+
+      <OptionalSection
+        title="Higher studies" caption="PG, PhD, diploma — add as many as you like"
+        open={showHigherStudies} onToggle={setShowHigherStudies}
+      >
+        {higherStudies.map((entry, i) => (
+          <div key={i} className="entry-card">
+            <Field label="Degree" hint="e.g. MS, MBA, PhD" value={entry.degree_name}
+              onChange={(v) => setHigherStudies((p) => p.map((x, j) => j === i ? { ...x, degree_name: v } : x))}
+              onBlur={() => {}} error="" valid={false} />
+            <Field label="Institution" optional value={entry.institution}
+              onChange={(v) => setHigherStudies((p) => p.map((x, j) => j === i ? { ...x, institution: v } : x))}
+              onBlur={() => {}} error="" valid={false} />
+            <div className="two-col">
+              <Field label="Start year" optional type="number" value={entry.start_year}
+                onChange={(v) => setHigherStudies((p) => p.map((x, j) => j === i ? { ...x, start_year: v } : x))}
+                onBlur={() => {}} error="" valid={false} />
+              <Field label="Finish year" optional type="number" value={entry.finish_year}
+                onChange={(v) => setHigherStudies((p) => p.map((x, j) => j === i ? { ...x, finish_year: v } : x))}
+                onBlur={() => {}} error="" valid={false} />
+            </div>
+            {higherStudies.length > 1 && (
+              <button type="button" onClick={() => setHigherStudies((p) => p.filter((_, j) => j !== i))} className="btn btn--ghost" style={{ marginTop: 10 }}>
+                <span className="btn__inner">Remove</span>
+              </button>
+            )}
+          </div>
+        ))}
+        <button type="button" onClick={() => setHigherStudies((p) => [...p, emptyHigherStudy()])} className="btn btn--ghost btn--block">
+          <span className="btn__inner">+ Add another degree</span>
+        </button>
+      </OptionalSection>
+
+      <OptionalSection
+        title="Work experience" caption="like a LinkedIn timeline"
+        open={showWorkExperience} onToggle={setShowWorkExperience}
+      >
+        {workExperience.map((entry, i) => (
+          <div key={i} className="entry-card">
+            <Field label="Company / Organisation" value={entry.company}
+              onChange={(v) => setWorkExperience((p) => p.map((x, j) => j === i ? { ...x, company: v } : x))}
+              onBlur={() => {}} error="" valid={false} />
+            <Field label="Role" optional value={entry.role}
+              onChange={(v) => setWorkExperience((p) => p.map((x, j) => j === i ? { ...x, role: v } : x))}
+              onBlur={() => {}} error="" valid={false} />
+            <div className="two-col">
+              <Field label="Start year" optional type="number" value={entry.start_year}
+                onChange={(v) => setWorkExperience((p) => p.map((x, j) => j === i ? { ...x, start_year: v } : x))}
+                onBlur={() => {}} error="" valid={false} />
+              {!entry.is_current && (
+                <Field label="End year" optional type="number" value={entry.end_year}
+                  onChange={(v) => setWorkExperience((p) => p.map((x, j) => j === i ? { ...x, end_year: v } : x))}
+                  onBlur={() => {}} error="" valid={false} />
+              )}
+            </div>
+            <label className="cbox-row" style={{ marginTop: 10 }}>
+              <span className="cbox">
+                <input type="checkbox" checked={entry.is_current}
+                  onChange={(e) => setWorkExperience((p) => p.map((x, j) => j === i ? { ...x, is_current: e.target.checked, end_year: '' } : x))} />
+                <span className="cbox__mark" />
+              </span>
+              <span>I currently work here</span>
+            </label>
+            {workExperience.length > 1 && (
+              <button type="button" onClick={() => setWorkExperience((p) => p.filter((_, j) => j !== i))} className="btn btn--ghost" style={{ marginTop: 10 }}>
+                <span className="btn__inner">Remove</span>
+              </button>
+            )}
+          </div>
+        ))}
+        <button type="button" onClick={() => setWorkExperience((p) => [...p, emptyWorkExperience()])} className="btn btn--ghost btn--block">
+          <span className="btn__inner">+ Add another job</span>
+        </button>
+      </OptionalSection>
+
+      <div className="contact-block">
+        <h3 className="contact-block__title">How the school can reach you</h3>
+        <p className="contact-block__note">
+          🔒 Your email and phone number are for the school office only. They are never
+          shown on the public directory.
+        </p>
+
+        <Field
+          label="Email" required type="email"
+          value={form.personal_email} onChange={(v) => update('personal_email', v)}
+          onBlur={() => markTouched('personal_email')}
+          error={errorFor('personal_email')} valid={isValid('personal_email')}
+        />
+        <div className="two-col">
+          <SelectField
+            label="Country code" value={form.phone_country_code}
+            onChange={(v) => update('phone_country_code', v)} options={COUNTRY_CODES}
+          />
+          <Field
+            label="Phone number" required type="tel" inputMode="tel"
+            value={form.phone_number}
+            onChange={(v) => update('phone_number', v.replace(/\D/g, ''))}
+            onBlur={() => markTouched('phone_number')}
+            error={errorFor('phone_number')} valid={isValid('phone_number')}
+          />
         </div>
-        <FloatingField label="Role / Designation" hint="optional" value={form.designation} onChange={(v) => update('designation', v)} />
-      </div>
-
-      <div className="field" style={{ marginTop: 20 }}>
-        <label>Higher studies <span className="hint">optional</span></label>
-        <Chips options={['Add later', 'Add now']} value={showHigherStudies ? 'Add now' : 'Add later'} onChange={(v) => setShowHigherStudies(v === 'Add now')} />
-        {showHigherStudies && (
-          <div style={{ marginTop: 10 }}>
-            {higherStudies.map((entry, i) => (
-              <div key={i} className="entry-card">
-                <FloatingField label="Degree" hint="e.g. MS, MBA, PhD" value={entry.degree_name} onChange={(v) => updateHigherStudy(i, { degree_name: v })} />
-                <FloatingField label="Institution" hint="optional" value={entry.institution} onChange={(v) => updateHigherStudy(i, { institution: v })} style={{ marginTop: 8 }} />
-                <div className="two-col" style={{ marginTop: 8 }}>
-                  <FloatingField label="Start year" hint="optional" type="number" value={entry.start_year} onChange={(v) => updateHigherStudy(i, { start_year: v })} />
-                  <FloatingField label="Finish year" type="number" value={entry.finish_year} onChange={(v) => updateHigherStudy(i, { finish_year: v })} />
-                </div>
-                {higherStudies.length > 1 && (
-                  <button type="button" onClick={() => removeHigherStudy(i)} className="btn btn--ghost" style={{ marginTop: 10 }}>
-                    <span className="btn__inner">Remove</span>
-                  </button>
-                )}
-              </div>
-            ))}
-            <button type="button" onClick={addHigherStudy} className="btn btn--ghost btn--block">
-              <span className="btn__inner">+ Add another degree</span>
-            </button>
-          </div>
-        )}
-      </div>
-
-      <div className="field" style={{ marginTop: 20 }}>
-        <label>Work experience <span className="hint">optional</span></label>
-        <Chips options={['Add later', 'Add now']} value={showWorkExperience ? 'Add now' : 'Add later'} onChange={(v) => setShowWorkExperience(v === 'Add now')} />
-        {showWorkExperience && (
-          <div style={{ marginTop: 10 }}>
-            {workExperience.map((entry, i) => (
-              <div key={i} className="entry-card">
-                <FloatingField label="Company / Organization" value={entry.company} onChange={(v) => updateWorkExperience(i, { company: v })} />
-                <FloatingField label="Role" hint="optional" value={entry.role} onChange={(v) => updateWorkExperience(i, { role: v })} style={{ marginTop: 8 }} />
-                <div className="two-col" style={{ marginTop: 8 }}>
-                  <FloatingField label="Start year" hint="optional" type="number" value={entry.start_year} onChange={(v) => updateWorkExperience(i, { start_year: v })} />
-                  {!entry.is_current && (
-                    <FloatingField label="End year" hint="optional" type="number" value={entry.end_year} onChange={(v) => updateWorkExperience(i, { end_year: v })} />
-                  )}
-                </div>
-                <label className="cbox-row" style={{ marginTop: 10 }}>
-                  <span className="cbox">
-                    <input type="checkbox" checked={entry.is_current} onChange={(e) => updateWorkExperience(i, { is_current: e.target.checked, end_year: '' })} />
-                    <span className="cbox__mark" />
-                  </span>
-                  <span>I currently work here</span>
-                </label>
-                {workExperience.length > 1 && (
-                  <button type="button" onClick={() => removeWorkExperience(i)} className="btn btn--ghost" style={{ marginTop: 10 }}>
-                    <span className="btn__inner">Remove</span>
-                  </button>
-                )}
-              </div>
-            ))}
-            <button type="button" onClick={addWorkExperience} className="btn btn--ghost btn--block">
-              <span className="btn__inner">+ Add another job</span>
-            </button>
-          </div>
-        )}
-      </div>
-
-      <FloatingField label="LinkedIn" hint="optional, shown publicly" type="url" value={form.linkedin_url} onChange={(v) => update('linkedin_url', v)} />
-
-      <FloatingField label="Email" hint="never shown publicly" type="email" value={form.personal_email} onChange={(v) => update('personal_email', v)} />
-
-      <div className="two-col">
-        <FloatingSelect label="Country code" value={form.phone_country_code} onChange={(v) => update('phone_country_code', v)} options={COUNTRY_CODES} />
-        <FloatingField
-          label="Phone number"
-          hint="never shown publicly"
-          type="tel"
-          value={form.phone_number}
-          onChange={(v) => update('phone_number', v.replace(/\D/g, ''))}
+        <Field
+          label="LinkedIn" optional type="url" hint="shown publicly if you add it"
+          value={form.linkedin_url} onChange={(v) => update('linkedin_url', v)}
+          onBlur={() => markTouched('linkedin_url')}
+          error={errorFor('linkedin_url')} valid={isValid('linkedin_url')}
         />
       </div>
     </>
   );
 }
 
-interface OptionalSectionsProps {
-  showHigherStudies: boolean;
-  setShowHigherStudies: (v: boolean) => void;
-  higherStudies: HigherStudyEntry[];
-  updateHigherStudy: (i: number, patch: Partial<HigherStudyEntry>) => void;
-  addHigherStudy: () => void;
-  removeHigherStudy: (i: number) => void;
-  showWorkExperience: boolean;
-  setShowWorkExperience: (v: boolean) => void;
-  workExperience: WorkExperienceEntry[];
-  updateWorkExperience: (i: number, patch: Partial<WorkExperienceEntry>) => void;
-  addWorkExperience: () => void;
-  removeWorkExperience: (i: number) => void;
-}
-
-function StepAdvice({ form, update }: StepProps) {
+function StepFinish({ form, update }: StepProps) {
   return (
     <>
-      <h2 className="step-title">Almost there ✨</h2>
-      <p className="step-sub">Upload a photo so juniors recognize you, and leave some advice.</p>
-
       <div className="field" style={{ marginBottom: 24 }}>
-        <label>Upload photo <span className="hint">optional</span></label>
+        <label className="field__label">Photo <Optional /></label>
         <label className="upload">
           <span className="upload__blob" />
           <span className="upload__inner">
@@ -934,12 +851,15 @@ function StepAdvice({ form, update }: StepProps) {
       </div>
 
       <div className="field">
-        <label>One thing you'd tell your junior self?</label>
-        <textarea 
-          value={form.message_1} 
-          onChange={(e) => update('message_1', e.target.value)} 
-          placeholder="e.g. don't stress over one bad exam, or start applying early..." 
+        <label className="field__label">One thing you&apos;d tell your junior self? <Optional /></label>
+        <textarea
+          value={form.message_1}
+          onChange={(e) => update('message_1', e.target.value)}
+          placeholder="e.g. don't stress over one bad exam, or start applying early…"
         />
+        <p className="hint" style={{ display: 'block', marginTop: 6 }}>
+          This is the part juniors read most.
+        </p>
       </div>
 
       <div className="consent" style={{ marginTop: 20 }}>
@@ -948,46 +868,30 @@ function StepAdvice({ form, update }: StepProps) {
           <span className="cbox__mark" />
         </label>
         <label htmlFor="consent">
-          I agree that my name and the details I chose to share can be displayed
-          publicly on the Veveaham alumni site. My email and phone number will
-          never be shown publicly. Your information will never be shared publicly without your concern.
+          I agree that my name and the details I chose to share can be shown publicly on
+          the Veveaham alumni site. My email and phone number will never be shown publicly.
         </label>
       </div>
     </>
   );
 }
 
-/* ----- Small pieces ------------------------------------------------------- */
+/* ─────────────────────────────────────────────────────────────────────────
+   Form primitives
+───────────────────────────────────────────────────────────────────────── */
+function Req() { return <span className="req" aria-hidden> *</span>; }
+function Optional() { return <span className="opt">optional</span>; }
 
-function FloatingField({
-  label,
-  hint,
-  value,
-  onChange,
-  type = 'text',
-  list,
-  autoFocus,
-  style,
-  inputMode,
-  maxLength,
-  min,
-  max,
-  step,
-  revealable,
+function Field({
+  label, hint, value, onChange, onBlur, error, valid,
+  type = 'text', required, optional, autoFocus, min, max, step, inputMode, revealable,
 }: {
-  label: string;
-  hint?: string;
-  value: string;
-  onChange: (v: string) => void;
-  type?: string;
-  list?: string;
-  autoFocus?: boolean;
-  style?: React.CSSProperties;
+  label: string; hint?: string; value: string;
+  onChange: (v: string) => void; onBlur: () => void;
+  error: string; valid: boolean;
+  type?: string; required?: boolean; optional?: boolean; autoFocus?: boolean;
+  min?: number; max?: number; step?: number;
   inputMode?: React.HTMLAttributes<HTMLInputElement>['inputMode'];
-  maxLength?: number;
-  min?: number;
-  max?: number;
-  step?: number;
   revealable?: boolean;
 }) {
   const id = `f-${label.replace(/\s+/g, '-').toLowerCase()}`;
@@ -995,79 +899,47 @@ function FloatingField({
   const [revealed, setRevealed] = useState(false);
   const active = focused || value.trim().length > 0;
   const effectiveType = revealable && revealed ? 'text' : type;
+
   return (
-    <div className={`f-field${active ? ' f-field--active' : ''}`} style={style}>
+    <div className={`f-field${active ? ' f-field--active' : ''}${error ? ' f-field--invalid' : ''}${valid ? ' f-field--valid' : ''}`}>
       <input
-        id={id}
-        type={effectiveType}
-        list={list}
-        value={value}
+        id={id} type={effectiveType} value={value}
         onChange={(e) => onChange(e.target.value)}
         onFocus={() => setFocused(true)}
-        onBlur={() => setFocused(false)}
-        placeholder=""
-        autoFocus={autoFocus}
-        inputMode={inputMode}
-        maxLength={maxLength}
-        min={min}
-        max={max}
-        step={step}
+        onBlur={() => { setFocused(false); onBlur(); }}
+        placeholder="" autoFocus={autoFocus}
+        min={min} max={max} step={step} inputMode={inputMode}
+        aria-required={required} aria-invalid={!!error}
         style={revealable ? { paddingRight: 44 } : undefined}
       />
       <label htmlFor={id}>
-        {label}
+        {label}{required && <Req />}{optional && <Optional />}
       </label>
+
       {revealable && (
         <button
-          type="button"
+          type="button" className="reveal-btn"
           onClick={() => setRevealed((r) => !r)}
           aria-label={revealed ? 'Hide password' : 'Show password'}
-          style={{
-            position: 'absolute',
-            right: 12,
-            top: '50%',
-            transform: 'translateY(-50%)',
-            background: 'none',
-            border: 0,
-            cursor: 'pointer',
-            fontSize: '1.1rem',
-            color: 'var(--text-faint)',
-            lineHeight: 1,
-            padding: 4,
-          }}
         >
           {revealed ? '🙈' : '👁️'}
         </button>
       )}
-      {hint && <span className="hint">{hint}</span>}
+      {/* A green tick is a small thing, but it tells someone filling in a long
+          form that a step is genuinely done rather than merely typed in. */}
+      {valid && !error && <span className="field__tick" aria-hidden>✓</span>}
+      {error ? <p className="field__error">{error}</p> : hint ? <span className="hint">{hint}</span> : null}
     </div>
   );
 }
 
-function FloatingSelect({
-  label,
-  value,
-  onChange,
-  options,
-  style,
-  placeholder,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  options: string[];
-  style?: React.CSSProperties;
-  placeholder?: string;
+function SelectField({ label, value, onChange, options }: {
+  label: string; value: string; onChange: (v: string) => void; options: string[];
 }) {
   const id = `f-${label.replace(/\s+/g, '-').toLowerCase()}`;
   return (
-    <div className="f-field f-field--active" style={style}>
+    <div className="f-field f-field--active">
       <select id={id} value={value} onChange={(e) => onChange(e.target.value)}>
-        {/* A real placeholder option - without this, an empty `value` that
-            matches no option would make the browser silently DISPLAY the
-            first real option (e.g. "BTech") even though nothing was
-            actually chosen yet, which is exactly the bug being fixed. */}
-        <option value="" disabled hidden>{placeholder ?? `Select ${label.toLowerCase()}`}</option>
         {options.map((o) => <option key={o} value={o}>{o}</option>)}
       </select>
       <label htmlFor={id}>{label}</label>
@@ -1075,210 +947,87 @@ function FloatingSelect({
   );
 }
 
-// Live search-as-you-type against the full colleges table (47k+ rows),
-// instead of the old approach of pre-loading a list into the browser - that
-// approach was silently capped at Supabase's default 1000-row limit, so
-// most colleges (anything past roughly the first letter of the alphabet)
-// never showed up at all, no matter how well the data itself was cleaned.
-function CollegeSearchField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const [results, setResults] = useState<{ id: string; name: string; state: string | null }[]>([]);
-  const [open, setOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [focused, setFocused] = useState(false);
-  const id = 'f-college-university';
-
-  useEffect(() => {
-    const query = value.trim();
-    if (query.length < 3) {
-      setResults([]);
-      return;
-    }
-    setLoading(true);
-    const t = setTimeout(async () => {
-      const { data } = await supabase
-        .from('colleges')
-        .select('id, name, state')
-        .or(`name.ilike.%${query}%,short_names.ilike.%${query}%`)
-        .order('name')
-        .limit(12);
-      setResults(data ?? []);
-      setLoading(false);
-    }, 300); // debounce so we're not firing a query on every keystroke
-    return () => clearTimeout(t);
-  }, [value]);
-
-  const active = focused || value.trim().length > 0;
-
+function SelectWithOther({
+  label, options, value, onChange, otherValue, onOtherChange, error, required, optional,
+}: {
+  label: string; options: string[]; value: string; onChange: (v: string) => void;
+  otherValue: string; onOtherChange: (v: string) => void; error: string;
+  required?: boolean; optional?: boolean;
+}) {
+  const id = `f-${label.replace(/\s+/g, '-').toLowerCase()}`;
   return (
-    <div className={`f-field${active ? ' f-field--active' : ''}`} style={{ position: 'relative' }}>
-      <input
-        id={id}
-        type="text"
-        value={value}
-        onChange={(e) => { onChange(e.target.value); setOpen(true); }}
-        onFocus={() => { setFocused(true); setOpen(true); }}
-        onBlur={() => setTimeout(() => setFocused(false), 150)}
-        placeholder=""
-        autoComplete="off"
-      />
-      <label htmlFor={id}>College / University</label>
-      <span className="hint">start typing to search all 47,000+ colleges</span>
+    <div className="field">
+      <div className={`f-field f-field--active${error ? ' f-field--invalid' : ''}`}>
+        <select id={id} value={value} onChange={(e) => onChange(e.target.value)} aria-required={required} aria-invalid={!!error}>
+          <option value="" disabled hidden>Select…</option>
+          {options.map((o) => <option key={o} value={o}>{o}</option>)}
+        </select>
+        <label htmlFor={id}>{label}{required && <Req />}{optional && <Optional />}</label>
+      </div>
 
-      {open && value.trim().length >= 3 && (
-        <div
-          style={{
-            position: 'absolute',
-            top: '100%',
-            left: 0,
-            right: 0,
-            marginTop: 6,
-            background: 'var(--surface-2, #191621)',
-            border: '1px solid var(--border-strong, #333)',
-            borderRadius: 'var(--r-sm, 10px)',
-            maxHeight: 260,
-            overflowY: 'auto',
-            zIndex: 20,
-            boxShadow: '0 12px 30px rgba(0,0,0,0.4)',
-          }}
-        >
-          {loading && (
-            <div style={{ padding: '10px 14px', color: 'var(--text-faint)', fontSize: '0.85rem' }}>Searching…</div>
-          )}
-          {!loading && results.length === 0 && (
-            <div style={{ padding: '10px 14px', color: 'var(--text-faint)', fontSize: '0.85rem' }}>
-              No match - not a problem, just keep your typed name and continue.
-            </div>
-          )}
-          {!loading && results.map((r) => (
-            <button
-              key={r.id}
-              type="button"
-              onMouseDown={(e) => e.preventDefault()} // keep focus so onBlur doesn't fire before click
-              onClick={() => { onChange(r.name); setOpen(false); }}
-              style={{
-                display: 'block',
-                width: '100%',
-                textAlign: 'left',
-                padding: '10px 14px',
-                background: 'transparent',
-                border: 'none',
-                borderBottom: '1px solid rgba(255,255,255,0.06)',
-                color: 'var(--text)',
-                cursor: 'pointer',
-                fontSize: '0.9rem',
-              }}
-            >
-              {r.name}
-              {r.state && <span style={{ color: 'var(--text-faint)', fontSize: '0.78rem' }}> — {r.state}</span>}
-            </button>
-          ))}
-        </div>
+      {value === OTHER_OPTION && (
+        <>
+          <div className="f-field f-field--active" style={{ marginTop: 10 }}>
+            <input
+              type="text" value={otherValue}
+              onChange={(e) => onOtherChange(e.target.value)}
+              placeholder=""
+              aria-label={`Specify ${label.toLowerCase()}`}
+            />
+            <label>Please specify</label>
+          </div>
+          <p className="hint" style={{ display: 'block', marginTop: 4 }}>
+            We&apos;ll show this on your profile. Staff check new entries before adding
+            them to the list everyone picks from.
+          </p>
+        </>
       )}
+
+      {error && <p className="field__error">{error}</p>}
     </div>
   );
 }
 
-function Chips({
-  options,
-  value,
-  onChange,
-  emojiMap,
-  wrapText,
-}: {
-  options: string[];
-  value: string;
-  onChange: (v: string) => void;
-  emojiMap?: Record<string, string>;
-  wrapText?: boolean;
+function Chips({ options, value, onChange }: {
+  options: string[]; value: string; onChange: (v: string) => void;
 }) {
   return (
     <div className="chips">
       {options.map((o) => (
-        <button
-          type="button"
-          key={o}
-          className={`chip${value === o ? ' chip--active' : ''}`}
-          onClick={() => onChange(o)}
-        >
-          {emojiMap?.[o] && <span className="chip__emoji">{emojiMap[o]}</span>}
-          {wrapText ? o : o.charAt(0).toUpperCase() + o.slice(1)}
+        <button type="button" key={o} className={`chip${value === o ? ' chip--active' : ''}`} onClick={() => onChange(o)}>
+          {o}
         </button>
       ))}
     </div>
   );
 }
 
-function OtherAwareChips({
-  options,
-  value,
-  onChange,
-  otherValue,
-  onOtherChange,
-  otherPlaceholder = 'Please specify',
+/** A collapsed block that stays visibly optional until opened. */
+function OptionalSection({
+  title, caption, open, onToggle, children,
 }: {
-  options: string[];
-  value: string;
-  onChange: (v: string) => void;
-  otherValue: string;
-  onOtherChange: (v: string) => void;
-  otherPlaceholder?: string;
+  title: string; caption: string; open: boolean;
+  onToggle: (v: boolean) => void; children: React.ReactNode;
 }) {
   return (
-    <>
-      <Chips options={options} value={value} onChange={onChange} />
-      {value === 'Other' && (
-        <FloatingField
-          label={otherPlaceholder}
-          value={otherValue}
-          onChange={onOtherChange}
-          style={{ marginTop: 10 }}
-        />
-      )}
-    </>
-  );
-}
-
-// Same "Other -> type your own" pattern as OtherAwareChips, but as a clean
-// dropdown instead of a wall of buttons - used where the option list is
-// long (Degree, Entrance Exam) and chips would look cluttered.
-function OtherAwareSelect({
-  label,
-  options,
-  value,
-  onChange,
-  otherValue,
-  onOtherChange,
-  otherPlaceholder = 'Please specify',
-}: {
-  label: string;
-  options: string[];
-  value: string;
-  onChange: (v: string) => void;
-  otherValue: string;
-  onOtherChange: (v: string) => void;
-  otherPlaceholder?: string;
-}) {
-  const selectOptions = options.includes('Other') ? options : [...options, 'Other'];
-  return (
-    <>
-      <FloatingSelect label={label} value={value} onChange={onChange} options={selectOptions} />
-      {value === 'Other' && (
-        <FloatingField
-          label={otherPlaceholder}
-          value={otherValue}
-          onChange={onOtherChange}
-          style={{ marginTop: 10 }}
-        />
-      )}
-    </>
+    <div className="opt-section">
+      <button type="button" className="opt-section__head" onClick={() => onToggle(!open)} aria-expanded={open}>
+        <span>
+          <span className="opt-section__title">{title}</span>
+          <span className="opt-section__caption">{caption}</span>
+        </span>
+        <span className="opt-section__toggle">{open ? '−' : '+'}</span>
+      </button>
+      {open && <div className="opt-section__body">{children}</div>}
+    </div>
   );
 }
 
 function StepBar({ step }: { step: number }) {
   return (
     <div className="steps" aria-hidden>
-      {STEPS.map((_, i) => (
-        <div key={i} className={`step${i < step ? ' step--done' : ''}${i === step ? ' step--active' : ''}`}>
+      {STEPS.map((s, i) => (
+        <div key={s.title} className={`step${i < step ? ' step--done' : ''}${i === step ? ' step--active' : ''}`}>
           <div className="step__dot">{i < step ? '✓' : i + 1}</div>
           {i < STEPS.length - 1 && (
             <div className="step__bar" style={{ '--fill': i < step ? '100%' : '0%' } as React.CSSProperties} />
@@ -1289,6 +1038,9 @@ function StepBar({ step }: { step: number }) {
   );
 }
 
+/* ─────────────────────────────────────────────────────────────────────────
+   Success
+───────────────────────────────────────────────────────────────────────── */
 function SuccessScreen() {
   const [copied, setCopied] = useState(false);
   const shareUrl = typeof window !== 'undefined' ? window.location.origin + '/register' : '';
@@ -1302,81 +1054,53 @@ function SuccessScreen() {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      // Clipboard API can fail (older browsers, no HTTPS) -- fail quietly,
-      // the link is still shown in the field for a manual copy.
+      // Clipboard API needs HTTPS and permission; the link is visible anyway.
     }
   }
 
   return (
     <main className="container container--narrow">
       <div className="card fade-up" style={{ textAlign: 'center' }}>
-        <div className="success-icon">
-          <span>✓</span>
-        </div>
-
-        <h1 className="success-title">
-          Registration Successful
-        </h1>
-
-        <p className="success-subtitle">
-          Welcome to the Veveaham Alumni Network.
-        </p>
-
+        <div className="success-icon"><span>✓</span></div>
+        <h1 className="success-title">Registration successful</h1>
+        <p className="success-subtitle">Welcome to the Veveaham Alumni Network.</p>
         <p className="subtitle">
-          Your profile has been submitted successfully and is awaiting admin approval.
+          Your profile has been submitted and is waiting for admin approval.
           <br />
-          You can log in anytime using your username and password.
+          You can sign in any time with your username and password.
         </p>
 
         <hr style={{ border: 'none', borderBottom: '1px solid var(--border)', margin: '28px 0 20px' }} />
 
-        <h3 style={{ marginBottom: 4 }}>Help grow the alumni network</h3>
-
+        <h3 style={{ marginBottom: 4 }}>Help grow the network</h3>
         <p className="hint" style={{ marginBottom: 14 }}>
-          Invite your classmates and help build a stronger alumni community.
+          Invite your classmates — the more journeys juniors can see, the better.
         </p>
 
         <div className="share-row">
-          <div className="share-link">
-            🔗 Your Alumni Invite Link
-          </div>
-
+          <div className="share-link">🔗 Your alumni invite link</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <button
-              type="button"
-              onClick={copyLink}
-              className="btn btn--ghost"
-            >
-              <span className="btn__inner">
-                {copied ? '✓ Copied' : 'Copy Link'}
-              </span>
+            <button type="button" onClick={copyLink} className="btn btn--ghost">
+              <span className="btn__inner">{copied ? '✓ Copied' : 'Copy link'}</span>
             </button>
-
-            <a className="icon-share-btn" href={whatsapp} target="_blank" rel="noopener noreferrer" aria-label="Share on WhatsApp" title="Share on WhatsApp"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2 22l5.25-1.38c1.45.79 3.08 1.21 4.79 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.816 9.816 0 0012.04 2zm0 1.67c2.24 0 4.35.87 5.93 2.45a8.24 8.24 0 012.42 5.85c0 4.55-3.7 8.25-8.35 8.25a8.3 8.3 0 01-4.24-1.16l-.3-.18-3.12.82.83-3.04-.2-.31a8.18 8.18 0 01-1.27-4.4c0-4.55 3.7-8.25 8.3-8.28zm-4.6 4.7c-.17 0-.45.06-.68.32-.23.26-.9.88-.9 2.14 0 1.26.92 2.48 1.05 2.65.13.17 1.8 2.86 4.42 3.9 2.18.87 2.62.7 3.1.65.47-.04 1.5-.61 1.72-1.2.21-.59.21-1.1.15-1.2-.06-.11-.24-.17-.5-.3-.26-.13-1.5-.74-1.74-.82-.23-.09-.4-.13-.57.13-.17.26-.65.82-.8 1-.15.17-.29.19-.55.06-.26-.13-1.09-.4-2.07-1.28-.77-.68-1.28-1.53-1.43-1.79-.15-.26-.02-.4.11-.53.12-.12.26-.31.39-.47.13-.15.17-.26.26-.43.09-.17.04-.33-.02-.46-.06-.13-.57-1.4-.79-1.9-.2-.5-.42-.43-.57-.44l-.48-.01z"/></svg></a>
-            <a className="icon-share-btn" href={email} aria-label="Share via Email" title="Share via Email"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="2" /><path d="m22 6-10 7L2 6" /></svg></a>
-          </div>
-        </div> 
-
-        <div className="success-next">
-          <h3>What happens next?</h3>
-
-          <div className="next-item">
-            <span>1.</span> Your profile will be reviewed by an administrator.
-          </div>
-
-          <div className="next-item">
-            <span>2.</span> Once approved, you'll appear in the alumni directory.
-          </div>
-
-          <div className="next-item">
-            <span>3.</span> You can log in anytime using your username and password.
+            <a className="icon-share-btn" href={whatsapp} target="_blank" rel="noopener noreferrer" aria-label="Share on WhatsApp" title="Share on WhatsApp">
+              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2 22l5.25-1.38c1.45.79 3.08 1.21 4.79 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.816 9.816 0 0012.04 2zm0 1.67c2.24 0 4.35.87 5.93 2.45a8.24 8.24 0 012.42 5.85c0 4.55-3.7 8.25-8.35 8.25a8.3 8.3 0 01-4.24-1.16l-.3-.18-3.12.82.83-3.04-.2-.31a8.18 8.18 0 01-1.27-4.4c0-4.55 3.7-8.25 8.3-8.28zm-4.6 4.7c-.17 0-.45.06-.68.32-.23.26-.9.88-.9 2.14 0 1.26.92 2.48 1.05 2.65.13.17 1.8 2.86 4.42 3.9 2.18.87 2.62.7 3.1.65.47-.04 1.5-.61 1.72-1.2.21-.59.21-1.1.15-1.2-.06-.11-.24-.17-.5-.3-.26-.13-1.5-.74-1.74-.82-.23-.09-.4-.13-.57.13-.17.26-.65.82-.8 1-.15.17-.29.19-.55.06-.26-.13-1.09-.4-2.07-1.28-.77-.68-1.28-1.53-1.43-1.79-.15-.26-.02-.4.11-.53.12-.12.26-.31.39-.47.13-.15.17-.26.26-.43.09-.17.04-.33-.02-.46-.06-.13-.57-1.4-.79-1.9-.2-.5-.42-.43-.57-.44l-.48-.01z" /></svg>
+            </a>
+            <a className="icon-share-btn" href={email} aria-label="Share via email" title="Share via email">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="2" /><path d="m22 6-10 7L2 6" /></svg>
+            </a>
           </div>
         </div>
 
+        <div className="success-next">
+          <h3>What happens next?</h3>
+          <div className="next-item"><span>1.</span> An administrator reviews your profile.</div>
+          <div className="next-item"><span>2.</span> Once approved, you appear in the alumni directory.</div>
+          <div className="next-item"><span>3.</span> Sign in any time to keep your journey up to date.</div>
+        </div>
+
         <div className="success-login">
-          <a className="success-login-btn" href="/login">
-            Continue to Login →
-          </a>
+          <a className="success-login-btn" href="/login">Continue to login →</a>
         </div>
       </div>
     </main>
