@@ -530,8 +530,11 @@ function Card({ item, onExpand }: { item: EnrichedAlumnus; onExpand: () => void 
         <span>{cat.emoji}</span> {cat.label}
       </span>
 
+      {/* No "School" row here on purpose: these cards are already grouped under
+          a school heading, and repeating the full official name cost two
+          wrapped lines on every card. The modal still shows it, since a profile
+          opened on its own has no grouping context. */}
       <div className="a-card__rows">
-        <Row icon="🏫" label="School">{officialSchoolName(a.school_name) || '—'}</Row>
         {college && (
           <Row icon="🏛️" label="College">
             <span>{college}</span>

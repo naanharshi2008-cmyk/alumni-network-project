@@ -970,11 +970,14 @@ textarea { min-height: 84px; resize: vertical; }
 .year-head__rule { flex: 1; height: 1px; background: var(--border); }
 .year-head__count { font-size: 0.82rem; color: var(--text-faint); white-space: nowrap; }
 
+/* Not uppercased: the official school names are long ("Veveaham Matric Higher
+   Secondary School (Boys)"), and setting them in caps made the group headers
+   shout over the cards they label. */
 .school-head {
-  margin: 0 0 12px 0; font-size: 0.9rem; font-weight: 700; color: var(--text-faint);
-  text-transform: uppercase; letter-spacing: 0.04em;
+  margin: 0 0 12px 0; font-size: 0.92rem; font-weight: 700; color: var(--text-muted);
+  letter-spacing: 0.01em;
 }
-.school-head__count { opacity: 0.7; margin-left: 8px; text-transform: none; letter-spacing: 0; }
+.school-head__count { opacity: 0.65; margin-left: 8px; font-weight: 600; }
 
 /* ==========================================================================
    Badge size + tone variants
