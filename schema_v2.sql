@@ -112,10 +112,28 @@ COMMENT ON VIEW public_alumni IS
 
 REVOKE SELECT ON alumni FROM anon;
 
--- Sub-tables are shown on public profile cards, so they stay readable, but the
--- rows only make sense next to an approved alumnus and contain no contact info.
+-- Study / work timelines are shown on public profile cards, so they stay
+-- readable. But their existing policy was USING (true), which also published
+-- the timelines of people who are still PENDING or were REJECTED - profiles the
+-- directory deliberately hides. Scope both to approved alumni to match.
 GRANT SELECT ON higher_studies  TO anon, authenticated;
 GRANT SELECT ON work_experience TO anon, authenticated;
+
+DROP POLICY IF EXISTS "Higher studies are publicly viewable" ON higher_studies;
+CREATE POLICY "Higher studies of approved alumni are public"
+  ON higher_studies FOR SELECT
+  TO anon, authenticated
+  USING (
+    alumni_id IN (SELECT id FROM alumni WHERE approval_status = 'approved')
+  );
+
+DROP POLICY IF EXISTS "Work experience is publicly viewable" ON work_experience;
+CREATE POLICY "Work experience of approved alumni is public"
+  ON work_experience FOR SELECT
+  TO anon, authenticated
+  USING (
+    alumni_id IN (SELECT id FROM alumni WHERE approval_status = 'approved')
+  );
 
 
 -- =============================================================================
@@ -247,13 +265,12 @@ SELECT v, 'company', true FROM (VALUES
 ) AS t(v)
 ON CONFLICT DO NOTHING;
 
--- Adopt the organisation names alumni have already typed, so the admin's
--- "unmatched companies" queue starts from a real baseline.
-INSERT INTO organizations (name, kind, added_by_admin)
-SELECT DISTINCT btrim(currently_at), 'company', false
-FROM alumni
-WHERE currently_at IS NOT NULL AND btrim(currently_at) <> ''
-ON CONFLICT DO NOTHING;
+-- Deliberately NOT seeded from whatever alumni have typed into currently_at.
+-- Those values are raw and inconsistent ('VIT,chennai', 'IISER THIRUVANADHAPURAM'),
+-- and copying them in would defeat the point of a curated list. They stay as
+-- free text on each profile and surface in the admin dashboard's "Unmatched
+-- Companies" tab, where staff correct the spelling once and link everyone who
+-- typed it to the same clean record.
 
 
 -- =============================================================================
@@ -291,8 +308,14 @@ WHERE school_name ILIKE '%prime%academy%';
 UPDATE alumni SET field = 'Sciences'
 WHERE lower(btrim(field)) IN ('science', 'sciences');
 
-UPDATE alumni SET field = 'Engineering'   WHERE lower(btrim(field)) = 'engineering';
-UPDATE alumni SET field = 'Medicine'      WHERE lower(btrim(field)) = 'medicine';
+UPDATE alumni SET field = 'Engineering' WHERE lower(btrim(field)) = 'engineering';
+UPDATE alumni SET field = 'Medicine'    WHERE lower(btrim(field)) = 'medicine';
+
+-- The commerce category was renamed when the field list was expanded; bring the
+-- stored value in line so those profiles keep their chip instead of falling
+-- through to "Other".
+UPDATE alumni SET field = 'Commerce & Finance'
+WHERE lower(btrim(field)) IN ('business & finance', 'commerce', 'business and finance');
 
 -- 'bsms' and 'BSMS' are the same degree typed two ways.
 UPDATE alumni SET degree = 'BSMS' WHERE lower(btrim(degree)) = 'bsms';

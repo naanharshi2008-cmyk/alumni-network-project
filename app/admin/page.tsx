@@ -736,10 +736,14 @@ function PendingOptionRow({
 
   /** Rewrite every profile using `from` for this category to `to`. */
   async function rewriteProfiles(from: string, to: string) {
+    // ilike treats % and _ as wildcards, so an unescaped value could match -
+    // and silently rewrite - profiles it has nothing to do with. Escape them
+    // so this stays an exact, case-insensitive comparison.
+    const literal = from.replace(/[\\%_]/g, (c) => `\\${c}`);
     const { error } = await supabase
       .from('alumni')
       .update({ [option.category]: to })
-      .ilike(option.category, from);
+      .ilike(option.category, literal);
     if (error) throw error;
   }
 
