@@ -2,7 +2,8 @@
 /**
  * Post-migration security check.
  *
- * Run this AFTER applying schema_v2.sql in the Supabase SQL editor. It uses
+ * Run this AFTER applying migrations/02_lockdown.sql in the Supabase SQL
+ * editor (which itself comes after 01_additive.sql and the deploy). It uses
  * only the public anon key - exactly what any visitor's browser holds - and
  * confirms the contact-details leak is actually closed in production rather
  * than merely closed in the code.
@@ -60,7 +61,7 @@ console.log('\nChecking as an anonymous visitor…\n');
 {
   const { status, body } = await get('/alumni?approval_status=eq.approved&select=personal_email,phone_number&limit=1');
   const leaked = Array.isArray(body) && body.some((r) => r.personal_email || r.phone_number);
-  if (leaked) fail(`anon can STILL read contact details (HTTP ${status}) — has schema_v2.sql been run?`);
+  if (leaked) fail(`anon can STILL read contact details (HTTP ${status}) — has migrations/02_lockdown.sql been run?`);
   else pass(`contact details are not readable (HTTP ${status})`);
 }
 
@@ -96,19 +97,33 @@ console.log('\nChecking as an anonymous visitor…\n');
   else fail(`username_available RPC failed (HTTP ${res.status}) — registration will break`);
 }
 
-// 5. Pending profiles must stay hidden.
+// 5. The directory must not merely "work" — it must actually return people.
+//    An empty view would pass a naive HTTP check while showing visitors nothing.
 {
-  const { body } = await get('/public_alumni?select=id&limit=200');
-  const { body: all } = await get('/public_alumni?select=id');
-  const n = Array.isArray(all) ? all.length : 0;
-  if (Array.isArray(body)) pass(`${n} approved profile(s) visible publicly; pending ones are excluded by the view`);
+  const { body } = await get('/public_alumni?select=id');
+  const n = Array.isArray(body) ? body.length : 0;
+  if (n > 0) pass(`${n} approved profile(s) visible publicly; pending ones are excluded by the view`);
+  else fail('public_alumni returned 0 rows — the directory would be empty. Check the view definition.');
 }
 
-// 6. Timelines of unapproved people must not be public.
-{
-  const { status } = await get('/higher_studies?select=id&limit=1');
-  if (status === 200) pass('higher_studies readable (scoped to approved alumni by policy)');
-  else fail(`higher_studies not readable (HTTP ${status}) — profile timelines will be missing`);
+// 6/7. Public timelines must survive the revoke.
+//
+// This is the check that catches the subtlest failure in this migration. A
+// policy written as `USING (alumni_id IN (SELECT ... FROM alumni ...))` is
+// evaluated with the CALLING role's privileges, so it starts failing for anon
+// the moment SELECT on alumni is revoked — silently emptying every timeline.
+// The lockdown migration routes that check through a SECURITY DEFINER helper;
+// these two probes prove it worked.
+for (const table of ['higher_studies', 'work_experience']) {
+  const { status, body } = await get(`/${table}?select=id`);
+  if (status !== 200) {
+    fail(`${table} not readable (HTTP ${status}) — profile timelines will be missing. ` +
+         `If the error mentions "permission denied for table alumni", the RLS policy is sub-selecting ` +
+         `alumni instead of using the is_approved_alumnus() helper.`);
+  } else {
+    const n = Array.isArray(body) ? body.length : 0;
+    pass(`${table} readable by anon (${n} row(s), scoped to approved alumni)`);
+  }
 }
 
 console.log(

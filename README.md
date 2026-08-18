@@ -39,11 +39,17 @@ Supabase SQL editor:
 
 - `schema.sql` — the original tables, RLS policies and the `higher_studies` /
   `work_experience` tables.
-- `schema_v2.sql` — **run this before deploying the current code.** It adds the
-  `public_alumni` view the site reads from, revokes anonymous access to the raw
-  `alumni` table, adds edit-staging and the moderated options queue, creates the
-  `organizations` table, and migrates the school names. It ends with a set of
-  verification queries — run those and check the output.
+- `migrations/01_additive.sql` — **run this before deploying the current code.**
+  Adds the `public_alumni` view the site reads from, edit-staging, the moderated
+  options queue, the `organizations` table, and the school-name migration.
+  Everything in it is additive, so the currently-live site keeps working.
+- `migrations/02_lockdown.sql` — **run this only after the new code is live.**
+  Revokes anonymous access to the raw `alumni` table, which is what actually
+  closes the leak. Running it early would break the deployed site, because the
+  old code reads that table directly.
+
+Both files end with verification queries. After the second one, run
+`npm run verify:security` and confirm every check passes.
 
 ### How privacy is enforced
 
