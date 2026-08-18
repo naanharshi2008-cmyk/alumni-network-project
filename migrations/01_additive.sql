@@ -155,6 +155,15 @@ ALTER TABLE field_options ENABLE ROW LEVEL SECURITY;
 GRANT SELECT, INSERT ON field_options TO anon;
 GRANT SELECT, INSERT, UPDATE, DELETE ON field_options TO authenticated;
 
+-- The original setup left a blanket read policy on this table:
+--   "Public can read field options"  SELECT  {public}  USING (true)
+-- Permissive policies are OR'd together, so leaving it in place would let that
+-- `true` override the status check below and publish every PENDING option -
+-- exactly the unreviewed values the moderation queue exists to hold back.
+-- Found in production after enabling RLS here; drop it before adding ours.
+DROP POLICY IF EXISTS "Public can read field options" ON field_options;
+DROP POLICY IF EXISTS "Enable read access for all users" ON field_options;
+
 -- Everyone may read APPROVED options (they populate the dropdowns).
 DROP POLICY IF EXISTS "Approved options are public" ON field_options;
 CREATE POLICY "Approved options are public"
