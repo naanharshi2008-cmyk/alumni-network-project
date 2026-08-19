@@ -82,6 +82,9 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [actionError, setActionError] = useState('');
   const [actionNote, setActionNote] = useState('');
+  // D4 - bulk approve selection, registrations tab only.
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   const [pending, setPending] = useState<AlumniRow[]>([]);
   const [pendingEdits, setPendingEdits] = useState<AlumniRow[]>([]);
@@ -198,17 +201,37 @@ export default function AdminPage() {
       .update({ approval_status: 'approved', modification_status: 'none' })
       .eq('id', id);
     if (error) { setActionError('Could not approve: ' + error.message); return; }
+    const person = pending.find((p) => p.id === id);
+    setActionNote(`Approved ${person?.full_name ?? 'that registration'} — they're live on the directory now.`);
     setPending((prev) => prev.filter((p) => p.id !== id));
+    setSelected((prev) => { const n = new Set(prev); n.delete(id); return n; });
   }
 
-  async function handleReject(id: string) {
+  async function handleApproveSelected() {
     setActionError('');
-    const reason = window.prompt('Optional: reason for rejecting (can leave blank)');
-    if (reason === null) return; // cancelled
+    const ids = [...selected];
+    if (ids.length === 0) return;
+    setBulkBusy(true);
+    // One statement rather than a loop: a partial batch is worse than an
+    // obvious failure, and the admin needs to know exactly what happened.
     const { error } = await supabase.from('alumni')
-      .update({ approval_status: 'rejected', rejection_reason: reason || null })
+      .update({ approval_status: 'approved', modification_status: 'none' })
+      .in('id', ids);
+    setBulkBusy(false);
+    if (error) { setActionError('Could not approve the selected people: ' + error.message); return; }
+    setActionNote(`Approved ${ids.length} ${ids.length === 1 ? 'person' : 'people'} — they're live on the directory now.`);
+    setPending((prev) => prev.filter((p) => !selected.has(p.id)));
+    setSelected(new Set());
+  }
+
+  async function handleReject(id: string, reason: string) {
+    setActionError('');
+    const person = pending.find((p) => p.id === id);
+    const { error } = await supabase.from('alumni')
+      .update({ approval_status: 'rejected', rejection_reason: reason.trim() || null })
       .eq('id', id);
     if (error) { setActionError('Could not reject: ' + error.message); return; }
+    setActionNote(`Rejected ${person?.full_name ?? 'that registration'}.`);
     setPending((prev) => prev.filter((p) => p.id !== id));
   }
 
@@ -250,22 +273,36 @@ export default function AdminPage() {
     if (error) { setActionError('Could not approve edits: ' + error.message); return; }
 
     // Timelines are stored whole, so replace rather than merge.
-    if (Array.isArray(higher_studies)) {
-      await supabase.from('higher_studies').delete().eq('alumni_id', person.id);
-      if (higher_studies.length) {
-        await supabase.from('higher_studies').insert(
-          higher_studies.map((s: any) => ({ ...s, alumni_id: person.id })),
+    //
+    // Both errors are checked. Previously neither was, and because the delete
+    // runs first, a failed insert destroyed the person's entire education and
+    // work history while the card still disappeared as though it had worked.
+    // A replace is not atomic from the client, so on failure we say so loudly
+    // and keep the card in the queue rather than reporting success.
+    for (const [table, rowsRaw] of [
+      ['higher_studies', higher_studies],
+      ['work_experience', work_experience],
+    ] as const) {
+      if (!Array.isArray(rowsRaw)) continue;
+      const { error: delErr } = await supabase.from(table).delete().eq('alumni_id', person.id);
+      if (delErr) {
+        setActionError(`Published the profile details, but could not update ${table.replace('_', ' ')}: ${delErr.message}`);
+        return;
+      }
+      if (rowsRaw.length) {
+        const { error: insErr } = await supabase.from(table).insert(
+          rowsRaw.map((r: any) => ({ ...r, alumni_id: person.id })),
         );
+        if (insErr) {
+          setActionError(
+            `Published the profile details, but their ${table.replace('_', ' ')} entries did not save (${insErr.message}). ` +
+            'Ask them to re-enter that section from their profile page.',
+          );
+          return;
+        }
       }
     }
-    if (Array.isArray(work_experience)) {
-      await supabase.from('work_experience').delete().eq('alumni_id', person.id);
-      if (work_experience.length) {
-        await supabase.from('work_experience').insert(
-          work_experience.map((w: any) => ({ ...w, alumni_id: person.id })),
-        );
-      }
-    }
+    setActionNote(`Published ${person.full_name}'s changes — the directory shows them now.`);
     setPendingEdits((prev) => prev.filter((p) => p.id !== person.id));
   }
 
@@ -357,8 +394,49 @@ export default function AdminPage() {
           {pending.length === 0 ? (
             <EmptyCard emoji="🎉" text="No pending registrations right now." />
           ) : (
-            pending.map((person) => (
+            <>
+            {pending.length > 1 && (
+              <div className="bulk-bar">
+                <label className="bulk-bar__all">
+                  <input
+                    type="checkbox"
+                    checked={selected.size === pending.length}
+                    onChange={(e) =>
+                      setSelected(e.target.checked ? new Set(pending.map((p) => p.id)) : new Set())
+                    }
+                  />
+                  <span>Select all {pending.length}</span>
+                </label>
+                <button
+                  type="button"
+                  className="btn btn--primary"
+                  disabled={selected.size === 0 || bulkBusy}
+                  onClick={handleApproveSelected}
+                >
+                  <span className="btn__inner">
+                    {bulkBusy ? 'Approving…' : `✓ Approve ${selected.size || ''} selected`.trim()}
+                  </span>
+                </button>
+              </div>
+            )}
+            {pending.map((person) => (
               <div key={person.id} className="card" style={{ marginBottom: 18 }}>
+                {pending.length > 1 && (
+                  <label className="card-select">
+                    <input
+                      type="checkbox"
+                      checked={selected.has(person.id)}
+                      onChange={(e) =>
+                        setSelected((prev) => {
+                          const n = new Set(prev);
+                          if (e.target.checked) n.add(person.id); else n.delete(person.id);
+                          return n;
+                        })
+                      }
+                    />
+                    <span>Select</span>
+                  </label>
+                )}
                 <PersonHeader person={person} isNew={!!lastVisit && new Date(person.created_at).getTime() > lastVisit} />
                 <PersonDetails
                   person={person}
@@ -369,13 +447,12 @@ export default function AdminPage() {
                   <button type="button" onClick={() => handleApprove(person.id)} className="btn btn--primary">
                     <span className="btn__inner">✓ Approve</span>
                   </button>
-                  <button type="button" onClick={() => handleReject(person.id)} className="btn btn--neutral">
-                    <span className="btn__inner">✕ Reject</span>
-                  </button>
+                  <RejectButton person={person} onReject={handleReject} />
                   <DeleteButton person={person} onDelete={handleDelete} />
                 </div>
               </div>
-            ))
+            ))}
+            </>
           )}
         </div>
       )}
@@ -397,9 +474,13 @@ export default function AdminPage() {
                   <button type="button" onClick={() => handleApproveEdit(person)} className="btn btn--primary">
                     <span className="btn__inner">✓ Publish changes</span>
                   </button>
-                  <button type="button" onClick={() => handleRejectEdit(person.id)} className="btn btn--neutral">
-                    <span className="btn__inner">↩ Discard changes</span>
-                  </button>
+                  <ConfirmButton
+                    label="↩ Discard changes"
+                    confirmLabel="Yes, discard them"
+                    busyLabel="Discarding…"
+                    question={`Discard the changes ${person.full_name} submitted? They will have to type them again, and nothing tells them it happened.`}
+                    onConfirm={() => handleRejectEdit(person.id)}
+                  />
                 </div>
               </div>
             ))
@@ -423,6 +504,12 @@ export default function AdminPage() {
       {/* ===== Unmatched colleges ===== */}
       {tab === 'colleges' && (
         <div className="stagger">
+          <TabIntro title="Colleges we didn't recognise">
+            These students typed a college name that didn&apos;t match our list — usually
+            just a spelling difference. Fix the spelling once here and everyone who typed
+            it gets linked to the same college. If the name is already right, save it as-is
+            to add it to the list.
+          </TabIntro>
           {unmatchedColleges.length === 0 ? (
             <EmptyCard emoji="🏫" text="No unmatched colleges right now — nice and tidy." />
           ) : (
@@ -443,6 +530,10 @@ export default function AdminPage() {
       {/* ===== Unmatched companies ===== */}
       {tab === 'companies' && (
         <div className="stagger">
+          <TabIntro title="Employers we didn't recognise">
+            Same idea as colleges: someone typed an employer that isn&apos;t on our list yet.
+            Correct it once and every student who typed it is linked to the same record.
+          </TabIntro>
           {unmatchedCompanies.length === 0 ? (
             <EmptyCard emoji="🏢" text="Every organisation an alumnus typed is already on the list." />
           ) : (
@@ -511,6 +602,8 @@ function PersonHeader({ person, isNew }: { person: AlumniRow; isNew?: boolean })
         <p className="subtitle" style={{ margin: 0, fontSize: '0.86rem' }}>
           {person.username && <><strong>@{person.username}</strong> · </>}
           Class of {person.class_of} · {person.stream}
+          {/* The one field the office can actually verify someone against. */}
+          {person.admission_number && <> · Adm. no. <strong>{person.admission_number}</strong></>}
           {person.school_name && <> · {officialSchoolName(person.school_name)}</>}
         </p>
       </div>
@@ -626,6 +719,119 @@ function EditDiff({ person }: { person: AlumniRow }) {
   );
 }
 
+/**
+ * Inline confirm for an action that cannot be undone.
+ *
+ * Modelled on DeleteButton, which already got this right. Added because the
+ * two most destructive controls in the dashboard - discarding an alumnus's
+ * submitted edits, and rejecting a proposed option - were single clicks on
+ * buttons that looked exactly like the harmless ones beside them.
+ */
+/**
+ * Reject, with the reason captured inline.
+ *
+ * Replaces window.prompt: after a few dialogs browsers offer "prevent this
+ * page from creating additional dialogs", and if staff tick that mid-batch
+ * prompt() returns null forever - so every later Reject silently did nothing,
+ * during exactly the batch that provoked it.
+ */
+function TabIntro({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="tab-intro">
+      <h3>{title}</h3>
+      <p style={{ margin: 0 }}>{children}</p>
+    </div>
+  );
+}
+
+function RejectButton({
+  person, onReject,
+}: {
+  person: AlumniRow;
+  onReject: (id: string, reason: string) => Promise<void>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  if (!open) {
+    return (
+      <button type="button" onClick={() => setOpen(true)} className="btn btn--neutral">
+        <span className="btn__inner">✕ Reject</span>
+      </button>
+    );
+  }
+
+  return (
+    <div className="delete-confirm" style={{ width: '100%' }}>
+      <p style={{ margin: '0 0 8px 0' }}>
+        Reject <strong>{person.full_name}</strong>? They stay out of the directory.
+      </p>
+      <input
+        type="text"
+        value={reason}
+        onChange={(e) => setReason(e.target.value)}
+        placeholder="Reason (optional, for your records)"
+        style={{ marginBottom: 10 }}
+      />
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={async () => { setBusy(true); await onReject(person.id, reason); setBusy(false); }}
+          className="btn btn--neutral"
+        >
+          <span className="btn__inner">{busy ? 'Rejecting…' : 'Yes, reject'}</span>
+        </button>
+        <button type="button" disabled={busy} onClick={() => { setOpen(false); setReason(''); }} className="btn btn--ghost">
+          <span className="btn__inner">Cancel</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ConfirmButton({
+  label, confirmLabel, busyLabel, question, onConfirm, className = 'btn btn--neutral',
+}: {
+  label: string;
+  confirmLabel: string;
+  busyLabel: string;
+  question: string;
+  onConfirm: () => Promise<void> | void;
+  className?: string;
+}) {
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  if (!confirming) {
+    return (
+      <button type="button" onClick={() => setConfirming(true)} className={className}>
+        <span className="btn__inner">{label}</span>
+      </button>
+    );
+  }
+
+  return (
+    <div className="delete-confirm">
+      <p style={{ margin: '0 0 10px 0' }}>{question}</p>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={async () => { setBusy(true); await onConfirm(); setBusy(false); }}
+          className="btn btn--neutral"
+        >
+          <span className="btn__inner">{busy ? busyLabel : confirmLabel}</span>
+        </button>
+        <button type="button" disabled={busy} onClick={() => setConfirming(false)} className="btn btn--ghost">
+          <span className="btn__inner">Cancel</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function DeleteButton({ person, onDelete }: { person: AlumniRow; onDelete: (p: AlumniRow) => Promise<void> }) {
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -733,7 +939,7 @@ function PendingOptionRow({
   onApprovedValue: (category: string, value: string) => void;
   setError: (msg: string) => void;
 }) {
-  const [mode, setMode] = useState<'idle' | 'merging' | 'approving'>('idle');
+  const [mode, setMode] = useState<'idle' | 'merging' | 'approving' | 'rejecting'>('idle');
   const [busy, setBusy] = useState(false);
   const [mergeTarget, setMergeTarget] = useState('');
   const [canonical, setCanonical] = useState(() => toTitleCase(option.value));
@@ -819,6 +1025,24 @@ function PendingOptionRow({
             looks like {likely.slice(0, 2).join(', ')}
           </span>
         )}
+        {mode === 'rejecting' && (
+          <div className="delete-confirm" style={{ width: '100%' }}>
+            <p style={{ margin: '0 0 10px 0' }}>
+              Keep &ldquo;{option.value}&rdquo; out of the dropdown list?
+              {' '}
+              <strong>It stays on the student&apos;s profile</strong> and won&apos;t come back
+              here — use Merge instead if you want their spelling corrected.
+            </p>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button type="button" className="btn btn--neutral" disabled={busy} onClick={handleReject}>
+                <span className="btn__inner">{busy ? 'Removing…' : 'Yes, keep it off the list'}</span>
+              </button>
+              <button type="button" className="btn btn--ghost" disabled={busy} onClick={() => setMode('idle')}>
+                <span className="btn__inner">Cancel</span>
+              </button>
+            </div>
+          </div>
+        )}
         {mode === 'idle' && (
           <div style={{ display: 'flex', gap: 8, marginLeft: 'auto', flexWrap: 'wrap' }}>
             <button type="button" className="tag-add-btn" onClick={() => { setMode('merging'); setMergeTarget(likely[0] ?? ''); }}>
@@ -827,8 +1051,13 @@ function PendingOptionRow({
             <button type="button" className="tag-add-btn" onClick={() => setMode('approving')}>
               ✓ Approve as new
             </button>
-            <button type="button" className="tag-add-btn" onClick={handleReject} disabled={busy}>
-              ✕ Reject
+            <button
+              type="button"
+              className="tag-add-btn tag-add-btn--danger"
+              onClick={() => setMode('rejecting')}
+              disabled={busy}
+            >
+              ✕ Don&apos;t add to the list
             </button>
           </div>
         )}
