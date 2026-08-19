@@ -663,13 +663,22 @@ function StepStudies({
       ) : !skipsRank && route ? (
         <Field
           label={`${route} rank`} optional type="number" min={1} inputMode="numeric"
-          hint="juniors find this really useful"
+          hint="shown only as a range, never the exact number"
           value={form.admission_rank}
           onChange={(v) => update('admission_rank', v.replace(/[^\d]/g, ''))}
           onBlur={() => markTouched('admission_rank')}
           error={errorFor('admission_rank')} valid={isValid('admission_rank')}
         />
       ) : null}
+
+      {(route === 'Board Marks' || (!skipsRank && route)) && (
+        <p className="form-note form-note--warm">
+          Honestly? An average rank helps a junior more than a top one does.
+          Most of them aren&apos;t aiming for rank 100 — they want to know if
+          someone like them got in. We only ever show a range, like
+          &ldquo;Rank 10,000–25,000&rdquo;.
+        </p>
+      )}
     </>
   );
 }

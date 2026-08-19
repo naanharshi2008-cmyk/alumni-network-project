@@ -31,7 +31,7 @@ export default function ShowcaseSection() {
     <section className="showcase fade-up" style={{ animationDelay: '0.1s' }}>
       <div className="showcase__head">
         <h2>Meet a few seniors</h2>
-        <p className="subtitle">Hover a card for the full story. There are more in the directory.</p>
+        <p className="subtitle">Their college, where they are now, and their advice. There are more in the directory.</p>
       </div>
 
       <div className="showcase-grid stagger">

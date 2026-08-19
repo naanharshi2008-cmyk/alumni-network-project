@@ -78,10 +78,22 @@ export const DEGREES = [
  * missing entirely, despite being the single most common route for a Tamil
  * Nadu school - students had to pick "Other" and type it by hand.
  */
-export const ADMISSION_ROUTES = [
+/**
+ * Routes that are an actual competitive entrance exam. Split out from the full
+ * list because several things need to distinguish "sat an exam" from "got in
+ * another way": the rank field only applies to these, and the home page counts
+ * distinct exams (counting "Board Marks" or "Merit / Direct" as an entrance
+ * exam would overstate it).
+ */
+export const EXAM_ROUTES = [
   'JEE Main', 'JEE Advanced', 'TNEA', 'NEET', 'NEET (AYUSH)', 'CUET',
   'BITSAT', 'VITEEE', 'SRMJEEE', 'COMEDK', 'KCET', 'MHT-CET', 'KEAM', 'WBJEE',
   'CLAT', 'NATA', 'NDA', 'CA / CS / CMA Foundation',
+] as const;
+
+/** Every way someone can have got in, exams first. */
+export const ADMISSION_ROUTES = [
+  ...EXAM_ROUTES,
   'Management Quota', 'Lateral Entry', 'Sports Quota', 'Merit / Direct',
   'Board Marks',
   OTHER_OPTION,

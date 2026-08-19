@@ -548,12 +548,16 @@ textarea { min-height: 84px; resize: vertical; }
 
 .stats { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; margin-top: 56px; }
 .stat {
-  padding: 18px 26px; border-radius: var(--r-lg);
+  /* This block was written but never rendered by any component, so the fact
+     that its two spans were inline - giving "19seniors" - had never shown up.
+     Stack them: number over label is what the padding and min-width assume. */
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 16px 24px; border-radius: var(--r-lg);
   background: var(--surface-glass); border: 1px solid var(--border);
   backdrop-filter: blur(10px);
   min-width: 130px;
 }
-.stat__num { font-family: var(--font-sora), sans-serif; font-size: 2rem; font-weight: 800; background: var(--grad-text); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.stat__num { font-family: var(--font-sora), sans-serif; font-size: 1.9rem; line-height: 1.1; font-weight: 800; background: var(--grad-text); -webkit-background-clip: text; background-clip: text; color: transparent; }
 .stat__label { color: var(--text-muted); font-size: 0.85rem; font-weight: 500; }
 
 /* ---------- Directory ------------------------------------------------------ */
@@ -1264,4 +1268,41 @@ textarea { min-height: 84px; resize: vertical; }
 .contact-block__title { margin: 0 0 4px; font-size: 1rem; }
 .contact-block__note {
   margin: 0 0 16px; font-size: 0.82rem; color: var(--text-faint); line-height: 1.5;
+}
+
+/* ---------- "How they got in" ---------------------------------------------- */
+
+/* The route/rank/marks badge row. Deliberately the same shape on the directory
+   card, in the profile modal and on the Explorer mini-card - it is the answer a
+   visiting student came for, so it should look the same wherever they meet it. */
+.admission-row {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  margin-bottom: 12px;
+}
+.modal-note { margin: 8px 0 0; font-size: 0.84rem; color: var(--text-muted); }
+
+/* The span of ranks that got seniors into one college. Stated as a sentence
+   rather than a badge because a WIDE span is the encouraging case - it shows
+   the door is not only open to toppers - and that reads better as prose. */
+.college-span {
+  margin: 12px 0 0;
+  padding: 10px 13px;
+  border-radius: var(--r-sm);
+  background: rgba(52, 211, 153, 0.07);
+  border: 1px solid rgba(52, 211, 153, 0.22);
+  font-size: 0.86rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+.college-span strong { color: var(--text); font-weight: 650; }
+
+/* A reassurance note, as opposed to .form-note's neutral instruction voice.
+   Used where we are asking for something people are reluctant to give. */
+.form-note--warm {
+  background: rgba(52, 211, 153, 0.06);
+  border: 1px solid rgba(52, 211, 153, 0.2);
+  border-radius: var(--r-sm);
+  padding: 10px 13px;
+  color: var(--text-muted);
+  line-height: 1.55;
 }
