@@ -617,100 +617,6 @@ textarea { min-height: 84px; resize: vertical; }
 
 .result-count { color: var(--text-muted); font-size: 0.88rem; font-weight: 500; }
 
-/* ---------- Home showcase --------------------------------------------------- */
-
-.showcase { padding: 40px 0 20px; }
-.showcase__head { text-align: center; margin-bottom: 30px; }
-
-.showcase-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 20px;
-  perspective: 1200px;
-}
-
-.showcase-card {
-  position: relative;
-  min-height: 220px;
-  padding: 22px;
-  border-radius: var(--r-lg);
-  background: linear-gradient(180deg, var(--surface) 0%, var(--surface-2) 100%);
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow-sm);
-  overflow: hidden;
-  cursor: default;
-  transform-style: preserve-3d;
-  transition: transform 0.35s var(--ease), box-shadow 0.35s var(--ease), border-color 0.35s;
-}
-.showcase-card:hover {
-  transform: translateY(-6px) scale(1.03) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg));
-  box-shadow: var(--shadow-lg);
-  border-color: color-mix(in srgb, var(--cat, var(--gold)) 45%, var(--border));
-}
-
-/* Cursor-following spotlight, positioned via --mx/--my set in JS on mousemove. */
-.showcase-card__glow {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-  background: radial-gradient(220px circle at var(--mx, 50%) var(--my, 50%), color-mix(in srgb, var(--cat, var(--gold)) 28%, transparent), transparent 70%);
-  transition: opacity 0.3s;
-  pointer-events: none;
-}
-.showcase-card:hover .showcase-card__glow { opacity: 1; }
-
-.showcase-card__front, .showcase-card__back {
-  position: relative;
-  transition: opacity 0.28s var(--ease), transform 0.28s var(--ease);
-  transform-style: preserve-3d;
-}
-
-/* Layered depth: content pops toward the viewer on hover, in step with the
-   card's cursor-tracked tilt, for the "3D card" effect. */
-.showcase-card__pop {
-  transition: transform 0.35s var(--ease);
-  transform: translateZ(0);
-}
-.showcase-card:hover .showcase-card__pop { transform: translateZ(24px); }
-.showcase-card:hover .showcase-card__pop--lg { transform: translateZ(44px); }
-.showcase-card__front { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 10px; }
-.showcase-card__back {
-  position: absolute; inset: 22px; opacity: 0; transform: translateY(6px);
-  display: flex; flex-direction: column; align-items: flex-start; text-align: left;
-}
-.showcase-card:hover .showcase-card__front { opacity: 0; transform: translateY(-6px); }
-.showcase-card:hover .showcase-card__back { opacity: 1; transform: translateY(0); }
-
-.avatar--lg { width: 64px; height: 64px; font-size: 1.2rem; box-shadow: 0 8px 20px -8px var(--ring); }
-.showcase-card__name { font-weight: 750; font-size: 1.02rem; }
-.showcase-card__meta { color: var(--text-muted); font-size: 0.85rem; }
-.showcase-card__line { margin: 0 0 6px; font-size: 0.88rem; }
-.showcase-card__quote {
-  margin: 8px 0 0; font-size: 0.86rem; font-style: italic; color: var(--text-muted);
-  line-height: 1.4;
-}
-
-/* Touch devices can't hover, so the flip never happens. The old rule here
-   hid __front and showed __back - but __front is where the avatar, name and
-   class year live, so every phone got anonymous cards on a section headed
-   "Meet a few seniors". Stack the two halves into one flow instead, and key
-   off (hover: none) rather than a width so tablets are covered too. */
-@media (hover: none) {
-  .showcase-card { min-height: auto; }
-  .showcase-card__front {
-    align-items: flex-start; text-align: left; gap: 6px; margin-bottom: 12px;
-  }
-  .showcase-card__back {
-    position: static; opacity: 1; transform: none; inset: auto;
-  }
-  /* No cursor to follow, and no tilt to pop out of. */
-  .showcase-card:hover { transform: none; box-shadow: var(--shadow-sm); }
-  .showcase-card:hover .showcase-card__front { opacity: 1; transform: none; }
-  .showcase-card:hover .showcase-card__pop,
-  .showcase-card:hover .showcase-card__pop--lg { transform: none; }
-  .showcase-card__glow { display: none; }
-}
-
 /* ---------- Wizard progress ------------------------------------------------ */
 
 .steps { display: flex; align-items: center; gap: 0; margin-bottom: 26px; }
@@ -1357,4 +1263,118 @@ textarea { min-height: 84px; resize: vertical; }
 .card-select {
   display: inline-flex; align-items: center; gap: 8px;
   margin-bottom: 10px; font-size: 0.82rem; color: var(--text-faint); cursor: pointer;
+}
+
+/* Freshness block on the alumnus's own profile page. Public surfaces keep
+   these dates subtle; here they are the point, next to the one-tap confirm. */
+.fresh-block {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 14px; flex-wrap: wrap;
+  padding: 12px 16px; margin-bottom: 18px;
+  border: 1px solid var(--border); border-radius: var(--r-sm);
+  background: var(--surface-2);
+}
+.fresh-block__dates {
+  display: flex; gap: 18px; flex-wrap: wrap;
+  font-size: 0.86rem; color: var(--text-muted);
+}
+.fresh-block__dates strong { color: var(--text); font-weight: 650; }
+
+/* ---------- Round 3: banners, freshness meta, galleries -------------------- */
+
+/* College banner on the Explorer card: a rounded strip INSIDE the card
+   padding, deliberately not full-bleed - full-bleed would need negative
+   margins mirroring .card's clamp() padding, a coupling that breaks silently
+   the moment the padding changes. */
+.college-banner {
+  display: block; width: 100%;
+  height: clamp(96px, 18vw, 150px);
+  object-fit: cover;
+  border-radius: var(--r-sm);
+  margin-bottom: 14px;
+}
+
+/* Admin-written paragraph about a college. */
+.college-desc {
+  margin: 10px 0 0; font-size: 0.88rem; color: var(--text-muted); line-height: 1.55;
+}
+
+/* Banner backdrop at the top of the profile modal. Full-bleed here IS wanted
+   (it reads as a cover), so the margins mirror .a-modal's 32px padding, with
+   the mobile variant below mirroring its 24px. The scrim keeps the absolute
+   close button readable over bright skies and fades into the glass body. */
+.a-modal__banner {
+  position: relative;
+  height: 120px;
+  margin: -32px -32px 20px;
+  border-radius: var(--r-lg) var(--r-lg) 0 0;
+  overflow: hidden;
+}
+.a-modal__banner img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.a-modal__banner::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: linear-gradient(180deg, rgba(6,6,10,0.38) 0%, rgba(6,6,10,0.08) 45%, rgba(21,18,28,0.92) 100%);
+}
+.a-modal__close { z-index: 2; }
+.a-modal__share { margin-left: auto; padding: 0; font-size: 0.82rem; }
+
+/* Slim college strip on directory cards - present only when a banner exists,
+   sized and dimmed so the person stays the subject of the card. */
+.a-card__banner {
+  display: block; width: 100%; height: 48px;
+  object-fit: cover; border-radius: var(--r-sm);
+  margin: 2px 0 12px; opacity: 0.9;
+}
+
+/* Subtle freshness line at the foot of the modal - metadata, not content. */
+.a-modal__meta {
+  margin: 20px 0 0; padding-top: 14px;
+  border-top: 1px solid var(--border);
+  font-size: 0.76rem; color: var(--text-faint);
+}
+
+/* The school's note reads as an endorsement - emerald, like the ok tones. */
+.a-modal__quote--school { border-left-color: var(--emerald); }
+
+/* Home-page gallery cards: the badge colour formula (AA-verified in round 2)
+   applied at card size. --cat is set inline per card. */
+.gallery { margin-top: 46px; }
+.gallery__head { margin-bottom: 14px; }
+.gallery__head h2 { font-size: 1.15rem; margin: 0; }
+.gallery__head p { margin: 2px 0 0; font-size: 0.88rem; color: var(--text-muted); }
+.gallery__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(158px, 1fr));
+  gap: 12px;
+}
+.gallery-card {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 4px;
+  padding: 16px 16px 14px;
+  border-radius: var(--r);
+  background: color-mix(in srgb, var(--cat, var(--gold)) 9%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--cat, var(--gold)) 30%, var(--border));
+  transition: transform 0.18s var(--ease), border-color 0.18s, background 0.18s;
+}
+.gallery-card:hover {
+  transform: translateY(-3px);
+  border-color: color-mix(in srgb, var(--cat, var(--gold)) 55%, var(--border));
+  background: color-mix(in srgb, var(--cat, var(--gold)) 14%, var(--surface));
+}
+.gallery-card__emoji { font-size: 1.5rem; line-height: 1; }
+.gallery-card__label { font-weight: 700; font-size: 0.95rem; line-height: 1.25; }
+.gallery-card__count {
+  font-size: 0.8rem; font-weight: 650;
+  color: color-mix(in srgb, var(--cat, var(--gold)) 52%, #ffffff);
+}
+
+/* Hero search - one input that jumps to the directory pre-searched. */
+.hero-search {
+  display: flex; gap: 8px; max-width: 480px; margin: 26px auto 0;
+}
+.hero-search input { flex: 1; }
+
+@media (max-width: 560px) {
+  .a-modal__banner { margin: -24px -24px 16px; height: 100px; }
+  .gallery__grid { grid-template-columns: repeat(auto-fill, minmax(136px, 1fr)); gap: 10px; }
 }

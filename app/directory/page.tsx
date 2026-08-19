@@ -4,8 +4,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { isSupabaseConfigured } from '../../lib/supabaseClient';
 import { fetchApprovedAlumni, fetchTimelines } from '../../lib/publicData';
-import { officialSchoolName, SCHOOLS } from '../../lib/options';
-import { formatRankBand, formatMarksBand, formatRankSpan } from '../../lib/text';
+import { officialSchoolName, publicRouteLabel, SCHOOLS } from '../../lib/options';
+import { formatRankBand, formatMarksBand, formatRankSpan, formatMonthYear } from '../../lib/text';
 import {
   Alumnus,
   CATEGORIES,
@@ -104,15 +104,24 @@ export default function DirectoryPage() {
   // College Explorer filters
   const [explorerState, setExplorerState] = useState('');
   const [explorerQuery, setExplorerQuery] = useState('');
+  // Username from a shared ?p= link, held until the fetch resolves it.
+  const [pendingProfileParam, setPendingProfileParam] = useState<string | null>(null);
 
   // Honour /directory?cat=medicine from the home-page chips. Read once on
   // mount from window.location rather than useSearchParams, which would drag
   // this statically-rendered page into a Suspense boundary for no gain.
   useEffect(() => {
-    const cat = new URLSearchParams(window.location.search).get('cat');
+    const params = new URLSearchParams(window.location.search);
+    const cat = params.get('cat');
     if (cat && CATEGORIES.some((c) => c.key === cat)) {
       setActive(cat as CategoryKey);
     }
+    // ?q= pre-fills the search box - the home galleries and hero search land here.
+    const q = params.get('q');
+    if (q) setQuery(q);
+    // ?p=<username> is a shareable profile link; resolved once rows arrive.
+    const p = params.get('p');
+    if (p) setPendingProfileParam(p.toLowerCase());
   }, []);
 
   // Fetch approved alumni from the privacy-safe view, then their timelines.
@@ -156,7 +165,11 @@ export default function DirectoryPage() {
         a.full_name, collegeNameOf(a), a.college_name_raw, a.degree, a.branch,
         a.field, a.currently_at, a.designation, a.stream, officialSchoolName(a.school_name),
         // Searching "NEET" or "TNEA" is how a student actually looks for a path.
-        a.admission_route, a.admission_rank,
+        // The route goes through its PUBLIC label so quota wording stays
+        // unfindable, and the college state makes the home "Where they
+        // studied" cards land on real results.
+        publicRouteLabel(a.admission_route), a.admission_rank,
+        collegeDetailsOf(a)?.state,
         String(a.class_of ?? ''),
       ].filter(Boolean).join(' ').toLowerCase();
       return hay.includes(q);
@@ -164,6 +177,48 @@ export default function DirectoryPage() {
   }, [enriched, active, query]);
 
   const grouped = useMemo(() => groupByYear(filtered), [filtered]);
+
+  // Open a shared profile once data exists. Misses are ignored silently - a
+  // stale link should never error, just land on the directory.
+  useEffect(() => {
+    if (!pendingProfileParam || !rows) return;
+    const hit = enriched.find(({ a }) => (a.username ?? '').toLowerCase() === pendingProfileParam);
+    if (hit) setExpanded(hit);
+    setPendingProfileParam(null);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingProfileParam, rows]);
+
+  // Keep the URL in step with the open profile so links are shareable and the
+  // browser Back button closes the modal like students expect on a phone.
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const current = url.searchParams.get('p');
+    const wanted = expanded?.a.username ?? null;
+    if (wanted && current !== wanted) {
+      url.searchParams.set('p', wanted);
+      window.history.pushState({ p: wanted }, '', url);
+    } else if (!wanted && current) {
+      url.searchParams.delete('p');
+      window.history.pushState({}, '', url);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expanded]);
+
+  useEffect(() => {
+    const onPop = () => {
+      const p = new URLSearchParams(window.location.search).get('p');
+      if (!p) setExpanded(null);
+      else {
+        const hit = enriched.find(({ a }) => (a.username ?? '').toLowerCase() === p.toLowerCase());
+        if (hit) setExpanded(hit);
+      }
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enriched]);
+
+
 
   /* ── College Explorer computations ──────────────────────────────────── */
   const explorerColleges = useMemo(() => buildExplorerColleges(enriched), [enriched]);
@@ -422,11 +477,18 @@ function CollegeExplorerCard({
   // to toppers - so it is worth showing even from a handful of data points.
   const rankSpan = formatRankSpan(college.seniors.map((x) => x.admission_rank));
   const routes = Array.from(
-    new Set(college.seniors.map((x) => x.admission_route).filter(Boolean) as string[]),
+    new Set(
+      college.seniors
+        .map((x) => publicRouteLabel(x.admission_route))
+        .filter(Boolean) as string[],
+    ),
   );
 
   return (
     <div className="card" style={{ marginBottom: 16 }}>
+      {det?.banner_url && (
+        <img className="college-banner" src={det.banner_url} alt="" loading="lazy" />
+      )}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
         <div style={{ flex: 1 }}>
           <h3 style={{ margin: '0 0 4px 0', fontSize: '1.05rem' }} title={college.name}>
@@ -459,6 +521,10 @@ function CollegeExplorerCard({
           {college.seniors.length} Veveaham {college.seniors.length === 1 ? 'senior' : 'seniors'} here
         </span>
       </div>
+
+      {det?.description && (
+        <p className="college-desc">{det.description}</p>
+      )}
 
       {(rankSpan || routes.length > 0) && (
         <p className="college-span">
@@ -520,7 +586,7 @@ function AdmissionBadges({ a, showStatus = false }: { a: Alumnus; showStatus?: b
 
   return (
     <div className="admission-row">
-      {a.admission_route && <span className="badge badge--xs">via {a.admission_route}</span>}
+      {a.admission_route && <span className="badge badge--xs">via {publicRouteLabel(a.admission_route)}</span>}
       {rank && <span className="badge badge--xs">{rank}</span>}
       {marks && <span className="badge badge--xs">{marks} marks</span>}
       {showStatus && a.current_status && (
@@ -575,7 +641,9 @@ function SeniorMiniCard({ a, timelines }: { a: Alumnus; timelines: Timelines }) 
         </div>
       )}
 
-      {a.message_1 && <p className="senior-mini__quote">&ldquo;{a.message_1}&rdquo;</p>}
+      {a.college_thoughts
+        ? <p className="senior-mini__quote">&ldquo;{a.college_thoughts}&rdquo;</p>
+        : a.message_1 && <p className="senior-mini__quote">&ldquo;{a.message_1}&rdquo;</p>}
     </div>
   );
 }
@@ -612,6 +680,10 @@ function Card({ item, onExpand }: { item: EnrichedAlumnus; onExpand: () => void 
       {/* The whole point of the directory for a class-11 visitor. It was
           previously two clicks deep, in the modal. */}
       <AdmissionBadges a={a} />
+
+      {collegeDet?.banner_url && (
+        <img className="a-card__banner" src={collegeDet.banner_url} alt="" loading="lazy" />
+      )}
 
       {/* No "School" row here on purpose: these cards are already grouped under
           a school heading, and repeating the full official name cost two
@@ -718,6 +790,12 @@ function ProfileModal({
         aria-modal="true"
         aria-label={`Profile of ${a.full_name}`}
       >
+        {collegeDet?.banner_url && (
+          <div className="a-modal__banner" aria-hidden>
+            <img src={collegeDet.banner_url} alt="" />
+          </div>
+        )}
+
         <button ref={closeRef} type="button" className="a-modal__close" onClick={onClose} aria-label="Close">✕</button>
 
         <div className="a-modal__head">
@@ -730,6 +808,22 @@ function ProfileModal({
               Class of {a.class_of ?? '–'}{a.stream ? ` · ${a.stream}` : ''}
             </div>
           </div>
+          {a.username && (
+            <button
+              type="button"
+              className="btn btn--ghost a-modal__share"
+              onClick={async () => {
+                const url = `${window.location.origin}/directory?p=${encodeURIComponent(a.username!)}`;
+                // Native share sheet on phones; clipboard everywhere else.
+                try {
+                  if (navigator.share) await navigator.share({ title: `${a.full_name} — Veveaham Alumni`, url });
+                  else { await navigator.clipboard.writeText(url); alert('Link copied.'); }
+                } catch { /* user dismissed the sheet - not an error */ }
+              }}
+            >
+              <span className="btn__inner">Share ↗</span>
+            </button>
+          )}
         </div>
 
         <span className="badge" style={{ marginTop: 10, display: 'inline-flex' }}>
@@ -752,6 +846,13 @@ function ProfileModal({
             <h4>Their advice for juniors</h4>
             {a.message_1 && <p className="a-modal__quote">{a.message_1}</p>}
             {a.message_2 && <p className="a-modal__quote">{a.message_2}</p>}
+          </div>
+        )}
+
+        {a.school_note && (
+          <div className="a-modal__section">
+            <h4>A note from Veveaham</h4>
+            <p className="a-modal__quote a-modal__quote--school">{a.school_note}</p>
           </div>
         )}
 
@@ -817,9 +918,13 @@ function ProfileModal({
         )}
 
         {/* College details */}
-        {collegeDet && (collegeDet.website || collegeDet.university_name || collegeDet.established_year || collegeDet.management_type) && (
+        {collegeDet && (collegeDet.website || collegeDet.university_name || collegeDet.established_year || collegeDet.management_type || collegeDet.description || a.college_thoughts) && (
           <div className="a-modal__section">
             <h4>About {college}</h4>
+            {collegeDet.description && <p className="college-desc">{collegeDet.description}</p>}
+            {a.college_thoughts && (
+              <p className="a-modal__quote">In their words: &ldquo;{a.college_thoughts}&rdquo;</p>
+            )}
             <div className="college-facts">
               <div className="college-facts__grid">
                 {collegeDet.university_name && collegeDet.university_name !== college && (
@@ -865,6 +970,14 @@ function ProfileModal({
             )}
           </div>
         </div>
+
+        {(a.last_updated || a.last_confirmed_at) && (
+          <p className="a-modal__meta">
+            {a.last_updated && <>Profile updated {formatMonthYear(a.last_updated)}</>}
+            {a.last_updated && a.last_confirmed_at && ' · '}
+            {a.last_confirmed_at && <>confirmed {formatMonthYear(a.last_confirmed_at)}</>}
+          </p>
+        )}
 
       </div>
     </div>

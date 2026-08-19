@@ -10,14 +10,14 @@ import { supabase, isSupabaseConfigured } from './supabaseClient';
 import type { Alumnus, HigherStudy, WorkExperience } from './types';
 
 /**
- * Columns pulled for the directory and showcase. Listed explicitly rather than
+ * Columns pulled for the directory and home galleries. Listed explicitly rather than
  * `*` so adding a column to the view can never silently start publishing it.
  */
 export const PUBLIC_ALUMNI_SELECT = [
   'id', 'full_name', 'username', 'school_name', 'class_of', 'stream', 'degree',
   'branch', 'field', 'current_status', 'currently_at', 'designation',
   'expected_finish_year', 'show_photo', 'photo_url', 'linkedin_url',
-  'message_1', 'message_2', 'admission_route', 'admission_rank', 'board_marks',
+  'message_1', 'message_2', 'last_updated', 'last_confirmed_at', 'school_note', 'college_thoughts', 'admission_route', 'admission_rank', 'board_marks',
   'board_cutoff', 'college_id', 'college_name_raw', 'colleges',
 ].join(', ');
 
@@ -33,16 +33,6 @@ export async function fetchApprovedAlumni(): Promise<PublicDataResult<Alumnus[]>
   return { data: (data as unknown as Alumnus[]) ?? [], error: error?.message ?? '' };
 }
 
-/** A small sample for the home page showcase. */
-export async function fetchShowcaseAlumni(limit = 6): Promise<Alumnus[]> {
-  if (!isSupabaseConfigured) return [];
-  const { data } = await supabase
-    .from('public_alumni')
-    .select(PUBLIC_ALUMNI_SELECT)
-    .order('class_of', { ascending: false })
-    .limit(limit);
-  return (data as unknown as Alumnus[]) ?? [];
-}
 
 /**
  * Study + work timelines for a set of alumni, grouped by alumni id.

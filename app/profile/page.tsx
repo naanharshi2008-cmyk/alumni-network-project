@@ -4,7 +4,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase, isSupabaseConfigured } from '../../lib/supabaseClient';
 import EntitySearchField from '../../lib/EntitySearchField';
-import { cleanFreeText, cleanProperNoun } from '../../lib/text';
+import { cleanFreeText, cleanProperNoun , formatFullDate } from '../../lib/text';
 import { fetchApprovedOptions, fetchOrganizationNames, proposeOption } from '../../lib/publicData';
 import {
   SCHOOLS, STREAMS, DEGREES, ADMISSION_ROUTES, STATUSES, SCHOOL_BOARDS,
@@ -45,6 +45,9 @@ interface AlumnusData {
   photo_url: string | null;
   approval_status: string;
   modification_status: string;
+  last_updated: string | null;
+  last_confirmed_at: string | null;
+  college_thoughts: string;
 }
 
 interface HigherStudyEntry {
@@ -100,6 +103,9 @@ function normalizeProfile(raw: any): AlumnusData {
     photo_url: raw.photo_url ?? null,
     approval_status: str(raw.approval_status),
     modification_status: str(raw.modification_status),
+    last_updated: raw.last_updated ?? null,
+    last_confirmed_at: raw.last_confirmed_at ?? null,
+    college_thoughts: str(raw.college_thoughts),
   };
 }
 
@@ -107,6 +113,7 @@ export default function ProfilePage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
@@ -298,6 +305,7 @@ export default function ProfilePage() {
         designation: cleanProperNoun(profile.designation),
         message_1: cleanFreeText(profile.message_1),
         message_2: cleanFreeText(profile.message_2),
+        college_thoughts: cleanFreeText(profile.college_thoughts),
         photo_url: photoUrl,
         show_photo: !!photoUrl,
       };
@@ -327,13 +335,22 @@ export default function ProfilePage() {
           .update({
             pending_changes: { ...columns, higher_studies: studiesPayload, work_experience: workPayload },
             modification_status: 'pending',
+            // Saving is the alumnus attesting their info - that stands even
+            // while the edits wait for review. last_updated is deliberately
+            // NOT set here (and never enters `columns`): the published content
+            // has not changed yet; the admin's publish stamps it.
+            last_confirmed_at: new Date().toISOString(),
           })
           .eq('id', profile.id);
         if (saveErr) throw saveErr;
         setSuccess('Saved. Your changes are with an administrator for review — the directory keeps showing your approved profile until then.');
       } else {
         // ── Not published yet: write straight through. ────────────────────
-        const { error: saveErr } = await supabase.from('alumni').update(columns).eq('id', profile.id);
+        const nowIso = new Date().toISOString();
+        const { error: saveErr } = await supabase
+          .from('alumni')
+          .update({ ...columns, last_updated: nowIso, last_confirmed_at: nowIso })
+          .eq('id', profile.id);
         if (saveErr) throw saveErr;
 
         await supabase.from('higher_studies').delete().eq('alumni_id', profile.id);
@@ -365,6 +382,32 @@ export default function ProfilePage() {
       setError(message);
     } finally {
       setSaving(false);
+    }
+  }
+
+  // One-tap "everything is still correct". Touches ONLY the confirmation
+  // stamp: no staging, no review, no content change. The .select('id') matters
+  // - an RLS-blocked update reports success with zero rows, and silently
+  // "confirming" nothing would be worse than an error.
+  async function handleConfirmAllCorrect() {
+    if (!profile) return;
+    setConfirming(true);
+    setError('');
+    try {
+      const nowIso = new Date().toISOString();
+      const { data, error: confErr } = await supabase
+        .from('alumni')
+        .update({ last_confirmed_at: nowIso })
+        .eq('id', profile.id)
+        .select('id');
+      if (confErr) throw confErr;
+      if (!data || data.length === 0) throw new Error('The confirmation did not save — please try again.');
+      setProfile((prev) => (prev ? { ...prev, last_confirmed_at: nowIso } : prev));
+      setSuccess('Thanks — marked as confirmed today. Juniors can trust it is current.');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not confirm just now — please try again.');
+    } finally {
+      setConfirming(false);
     }
   }
 
@@ -413,6 +456,26 @@ export default function ProfilePage() {
         </div>
 
         <StatusBanner approval={profile.approval_status} pendingReview={pendingReview} />
+
+        {/* Freshness, shown plainly to the owner (public surfaces keep it
+            subtle). The one-tap confirm exists so an unchanged-but-accurate
+            profile never has to look stale. */}
+        <div className="fresh-block">
+          <div className="fresh-block__dates">
+            <span>Profile updated <strong>{formatFullDate(profile.last_updated) ?? '—'}</strong></span>
+            <span>Last confirmed <strong>{formatFullDate(profile.last_confirmed_at) ?? 'not yet'}</strong></span>
+          </div>
+          {profile.approval_status === 'approved' && (
+            <button
+              type="button"
+              className="btn btn--ghost"
+              disabled={confirming}
+              onClick={handleConfirmAllCorrect}
+            >
+              <span className="btn__inner">{confirming ? 'Saving…' : '✓ Everything is still correct'}</span>
+            </button>
+          )}
+        </div>
 
         {error && <div className="alert alert--error" style={{ marginBottom: 18 }}>{error}</div>}
         {success && <div className="alert alert--success" style={{ marginBottom: 18 }}>{success}</div>}
@@ -607,6 +670,16 @@ export default function ProfilePage() {
               placeholder="e.g. I'd have started preparing a year earlier, or picked a different branch…"
             />
             <span className="hint">Shown under your first piece of advice.</span>
+          </div>
+
+          <div className="field" style={{ marginTop: 20 }}>
+            <label>Your experience at your college <span className="opt">optional</span></label>
+            <textarea
+              value={profile.college_thoughts}
+              onChange={(e) => updateField('college_thoughts', e.target.value)}
+              placeholder="What is it actually like there? Hostel, teachers, workload, the thing brochures don't say…"
+            />
+            <span className="hint">Shown with your college in the College Explorer — juniors choosing a college read this.</span>
           </div>
 
           <button type="submit" disabled={saving} className="btn btn--neutral btn--lg btn--block" style={{ marginTop: 24 }}>

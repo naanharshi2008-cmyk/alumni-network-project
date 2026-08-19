@@ -177,3 +177,25 @@ export function formatRankSpan(ranks: (string | number | null | undefined)[]): s
   if (lo === hi) return `around ${lo.toLocaleString('en-IN')}`;
   return `${lo.toLocaleString('en-IN')}–${hi.toLocaleString('en-IN')}`;
 }
+
+
+/* ── Freshness dates ─────────────────────────────────────────────────────────
+ * Month-year for public surfaces (skew-tolerant, non-fussy), full date for the
+ * alumnus's own page. Both swallow bad input rather than throwing.
+ */
+
+/** "2026-03-14T…" -> "Mar 2026". Null when unusable. */
+export function formatMonthYear(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
+}
+
+/** "2026-03-14T…" -> "14 Mar 2026". Null when unusable. */
+export function formatFullDate(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}

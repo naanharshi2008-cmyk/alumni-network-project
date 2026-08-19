@@ -98,6 +98,10 @@ export interface CollegeDetails {
   management_type: string | null;
   established_year: number | null;
   is_engineering: boolean | null;
+  /** Campus banner, admin-uploaded to the college-banners bucket. */
+  banner_url: string | null;
+  /** Admin-written paragraph about the college. */
+  description: string | null;
 }
 
 /**
@@ -129,6 +133,14 @@ export interface Alumnus {
   linkedin_url: string | null;
   message_1: string | null;
   message_2: string | null;
+  /** When the PUBLISHED content last changed. Shown subtly in the modal only. */
+  last_updated: string | null;
+  /** When the alumnus last attested the profile is correct. */
+  last_confirmed_at: string | null;
+  /** Admin-written "Note from Veveaham" about this alumnus. */
+  school_note: string | null;
+  /** The alumnus's own words about their college experience. */
+  college_thoughts: string | null;
   admission_route: string | null;
   admission_rank: string | null;
   board_marks: string | null;
