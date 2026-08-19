@@ -69,7 +69,7 @@ const FIELD_LABELS: Record<string, string> = {
   designation: 'Designation', current_status: 'Status',
   expected_finish_year: 'Expected Finish', admission_route: 'Admission Route',
   admission_rank: 'Rank', board_marks: 'Board Marks', board_cutoff: 'Cutoff',
-  message_1: 'Advice', linkedin_url: 'LinkedIn', photo_url: 'Photo',
+  message_1: 'Advice', message_2: 'Advice (second)', linkedin_url: 'LinkedIn', photo_url: 'Photo',
 };
 
 /* ═══════════════════════════════════════════════════════════════════════════

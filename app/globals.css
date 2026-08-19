@@ -392,10 +392,11 @@ textarea { min-height: 84px; resize: vertical; }
 /* Fields with a hint need a bit more bottom margin so the caption below
    the border line doesn't collide with the next field underneath it. */
 .f-field:has(.hint) { margin-bottom: 34px; }
-/* Once the label has floated up, the typed value sits where the hint used to
-   render - keep the hint for the empty/placeholder state only, or its second
-   line prints straight over the input text. */
-.f-field--active .hint { display: none; }
+/* Deliberately NOT hidden while the field is active. The hint sits below the
+   border line with margin reserved for it, so it never overlaps the value -
+   and hiding it on focus removed every piece of guidance at precisely the
+   moment the person was typing and needed it. */
+.f-field--active .hint { color: var(--text-muted); }
 
 .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 @media (max-width: 560px) { .two-col { grid-template-columns: 1fr; } }
@@ -1219,9 +1220,14 @@ textarea { min-height: 84px; resize: vertical; }
   position: absolute; right: 14px; top: 17px;
   color: var(--emerald); font-weight: 700; font-size: 0.95rem; pointer-events: none;
 }
+/* --danger-border (#5b2626) is darker than the default --border-strong, so an
+   invalid field was genuinely LESS visible than a valid one. Use the ink colour
+   the error text already uses. Selects are included because they are most of
+   the required fields - previously only inputs could show either state. */
 .f-field--invalid input,
-.f-field--invalid select { border-color: var(--danger-border); }
-.f-field--valid input { border-color: rgba(52, 211, 153, 0.4); }
+.f-field--invalid select { border-color: var(--danger-ink); }
+.f-field--valid input,
+.f-field--valid select { border-color: var(--emerald); }
 
 .reveal-btn {
   position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
@@ -1305,4 +1311,11 @@ textarea { min-height: 84px; resize: vertical; }
   padding: 10px 13px;
   color: var(--text-muted);
   line-height: 1.55;
+}
+
+/* An inline action that reads as a link but is genuinely a button. */
+.link-btn {
+  background: none; border: 0; padding: 0;
+  font: inherit; font-weight: 700;
+  color: var(--gold); cursor: pointer; text-decoration: underline;
 }
