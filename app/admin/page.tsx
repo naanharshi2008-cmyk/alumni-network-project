@@ -111,9 +111,12 @@ export default function AdminPage() {
       }
       setAuthState('ok');
 
+      // Read it, but do NOT stamp a new one here: this effect runs on every
+      // mount, so writing now meant a single refresh wiped the "new since you
+      // last looked" marker for good. The stamp happens on the way out instead
+      // (see the pagehide handler below), which is what "last visit" means.
       const stored = window.localStorage.getItem(LAST_VISIT_KEY);
       setLastVisit(stored ? Number(stored) : null);
-      window.localStorage.setItem(LAST_VISIT_KEY, String(Date.now()));
 
       void loadAll();
     });
@@ -121,7 +124,18 @@ export default function AdminPage() {
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       if (!session) router.replace('/login');
     });
-    return () => { active = false; listener.subscription.unsubscribe(); };
+
+    // Stamp the visit as the admin leaves, so everything that arrived during
+    // this session still counts as "new" until they actually come back.
+    const stamp = () => window.localStorage.setItem(LAST_VISIT_KEY, String(Date.now()));
+    window.addEventListener('pagehide', stamp);
+
+    return () => {
+      active = false;
+      listener.subscription.unsubscribe();
+      window.removeEventListener('pagehide', stamp);
+      stamp();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -591,7 +605,7 @@ function EditDiff({ person }: { person: AlumniRow }) {
   return (
     <div className="diff-grid">
       <div className="diff-col diff-col--old">
-        <p className="diff-col__title">Live on the directory</p>
+        <p className="diff-col__title">Live on the directory now</p>
         {changed.map((key) => (
           <div key={key} style={{ marginBottom: 6 }}>
             <span className="diff-label">{FIELD_LABELS[key]}</span>
@@ -600,7 +614,7 @@ function EditDiff({ person }: { person: AlumniRow }) {
         ))}
       </div>
       <div className="diff-col diff-col--new">
-        <p className="diff-col__title">Waiting for approval</p>
+        <p className="diff-col__title">Proposed — not public yet</p>
         {changed.map((key) => (
           <div key={key} style={{ marginBottom: 6 }}>
             <span className="diff-label">{FIELD_LABELS[key]}</span>

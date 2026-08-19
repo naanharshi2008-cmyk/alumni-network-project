@@ -27,6 +27,37 @@ const UPPER_BY_LOWER = new Map(Array.from(KEEP_UPPER, (w) => [w.toLowerCase(), w
  * "iiser tvm" -> "IISER Tvm", "bsms" -> "BSMS", "school of law" -> "School of Law".
  * Never throws; returns '' for empty input.
  */
+/**
+ * Recase a single word, honouring the known-acronym list even when the word is
+ * wrapped in punctuation.
+ *
+ * The naive version looked the whole word up in UPPER_BY_LOWER and, on a miss,
+ * fell through to "capitalise first letter, lowercase the rest". That destroyed
+ * bracketed acronyms: "IIT (ISM) Dhanbad" came back as "IIT (ism) Dhanbad",
+ * because "(ism)" is not a key. Names are saved through this function and the
+ * admin "correct & link for all" flow then writes the mangled name onto every
+ * student linked to that college, so the corruption spreads.
+ *
+ * Splitting the leading/trailing punctuation off first means the acronym is
+ * matched on its own, then reassembled with its brackets intact.
+ */
+function recaseWord(part: string): string {
+  const m = part.match(/^([^\p{L}\p{N}]*)(.*?)([^\p{L}\p{N}]*)$/u);
+  if (!m) return part;
+  const [, lead, core, trail] = m;
+  if (!core) return part;
+  const known = UPPER_BY_LOWER.get(core.toLowerCase());
+  if (known) return lead + known + trail;
+  // A short word the author typed in full caps is almost certainly an acronym
+  // we simply haven't listed - "ISM", "NITK", "SASTRA". Lowercasing it would be
+  // wrong, so leave it alone. Length-capped so a shouted word like
+  // "THIRUVANANTHAPURAM" is still title-cased.
+  if (core.length <= 6 && core === core.toUpperCase() && /[A-Z]/.test(core)) {
+    return lead + core + trail;
+  }
+  return lead + core.charAt(0).toUpperCase() + core.slice(1).toLowerCase() + trail;
+}
+
 export function toTitleCase(text: string): string {
   if (!text) return '';
   return text
@@ -41,9 +72,7 @@ export function toTitleCase(text: string): string {
         .split('-') // capitalize both sides of hyphenated words, e.g. "Bio-Maths"
         .map((part) => {
           if (!part) return part;
-          const known = UPPER_BY_LOWER.get(part.toLowerCase());
-          if (known) return known;
-          return part.charAt(0).toUpperCase() + part.slice(1).toLowerCase();
+          return recaseWord(part);
         })
         .join('-');
     })
