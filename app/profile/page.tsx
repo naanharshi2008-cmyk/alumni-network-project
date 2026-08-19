@@ -297,6 +297,7 @@ export default function ProfilePage() {
         organization_id: organizationId,
         designation: cleanProperNoun(profile.designation),
         message_1: cleanFreeText(profile.message_1),
+        message_2: cleanFreeText(profile.message_2),
         photo_url: photoUrl,
         show_photo: !!photoUrl,
       };
@@ -595,6 +596,17 @@ export default function ProfilePage() {
           <div className="field" style={{ marginTop: 20 }}>
             <label>One thing you&apos;d tell your junior self?</label>
             <textarea value={profile.message_1} onChange={(e) => updateField('message_1', e.target.value)} placeholder="e.g. don't stress over one bad exam, or start applying early…" />
+            <span className="hint">This is the part juniors actually read.</span>
+          </div>
+
+          <div className="field" style={{ marginTop: 20 }}>
+            <label>Anything you&apos;d do differently? <span className="opt">optional</span></label>
+            <textarea
+              value={profile.message_2}
+              onChange={(e) => updateField('message_2', e.target.value)}
+              placeholder="e.g. I'd have started preparing a year earlier, or picked a different branch…"
+            />
+            <span className="hint">Shown under your first piece of advice.</span>
           </div>
 
           <button type="submit" disabled={saving} className="btn btn--neutral btn--lg btn--block" style={{ marginTop: 24 }}>

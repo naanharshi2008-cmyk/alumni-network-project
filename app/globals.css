@@ -141,6 +141,28 @@ p { line-height: 1.6; }
 }
 .nav__link--cta:hover { color: var(--primary-ink); filter: brightness(1.08); }
 
+/* At 375px the brand wordmark plus three links overflowed the viewport and
+   clipped the Register button. Keep the logo, drop the wordmark, tighten the
+   links - the nav is chrome, and the CTA has to survive. */
+@media (max-width: 560px) {
+  .nav { gap: 8px; padding: 10px 14px; }
+  .nav__brand { font-size: 0.95rem; gap: 8px; }
+  .nav__brand span:not(.nav__logo) { display: none; }
+  .nav__logo { width: 32px; height: 32px; font-size: 16px; border-radius: 10px; }
+  .nav__links { gap: 2px; }
+  .nav__link { padding: 10px 11px; font-size: 0.86rem; }
+}
+
+/* Keyboard focus was invisible on every link, the modal close and the nav.
+   One rule rather than per-component, so nothing new can be missed. */
+a:focus-visible,
+button:focus-visible,
+[role="button"]:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
 /* ---------- Footer ----------------------------------------------------------- */
 
 .footer {
@@ -283,7 +305,7 @@ input[type='number'], input[type='url'],
 select, textarea {
   width: 100%;
   padding: 13px 15px;
-  font: inherit; font-size: 0.95rem;
+  font: inherit; font-size: 1rem;
   color: var(--text);
   background: var(--surface-2);
   border: 1px solid var(--border-strong);
@@ -313,7 +335,7 @@ textarea { min-height: 84px; resize: vertical; }
   display: block;
   width: 100%;
   padding: 20px 14px 10px;
-  font-size: 0.98rem;
+  font-size: 1rem;
   color: var(--text);
 }
 .f-field--active input {
@@ -333,7 +355,7 @@ textarea { min-height: 84px; resize: vertical; }
   display: block;
   width: 100%;
   padding: 20px 14px 10px;
-  font-size: 0.98rem;
+  font-size: 1rem;
   color: var(--text);
 }
 .f-field--active select {
@@ -347,7 +369,7 @@ textarea { min-height: 84px; resize: vertical; }
   top: 17px;
   left: 15px;
   pointer-events: none;
-  font-size: 0.98rem;
+  font-size: 1rem;
   color: var(--text-faint);
   transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   transform-origin: left top;
@@ -370,10 +392,11 @@ textarea { min-height: 84px; resize: vertical; }
 /* Fields with a hint need a bit more bottom margin so the caption below
    the border line doesn't collide with the next field underneath it. */
 .f-field:has(.hint) { margin-bottom: 34px; }
-/* Once the label has floated up, the typed value sits where the hint used to
-   render - keep the hint for the empty/placeholder state only, or its second
-   line prints straight over the input text. */
-.f-field--active .hint { display: none; }
+/* Deliberately NOT hidden while the field is active. The hint sits below the
+   border line with margin reserved for it, so it never overlaps the value -
+   and hiding it on focus removed every piece of guidance at precisely the
+   moment the person was typing and needed it. */
+.f-field--active .hint { color: var(--text-muted); }
 
 .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 @media (max-width: 560px) { .two-col { grid-template-columns: 1fr; } }
@@ -383,7 +406,7 @@ textarea { min-height: 84px; resize: vertical; }
 .chips { display: flex; flex-wrap: wrap; gap: 9px; }
 .chip {
   display: inline-flex; align-items: center; gap: 7px;
-  padding: 9px 15px; border-radius: var(--r-full);
+  padding: 9px 15px; min-height: 44px; border-radius: var(--r-full);
   font: inherit; font-weight: 600; font-size: 0.9rem;
   color: var(--text-muted);
   background: var(--surface-2);
@@ -404,8 +427,8 @@ textarea { min-height: 84px; resize: vertical; }
 
 /* category-tinted chip (directory filters) */
 .chip--cat.chip--active {
-  background: var(--cat);
-  color: #08090a;
+  background: color-mix(in srgb, var(--cat) 72%, #05050a);
+  color: #ffffff;
   box-shadow: 0 8px 20px -8px color-mix(in srgb, var(--cat) 60%, transparent);
 }
 
@@ -415,7 +438,10 @@ textarea { min-height: 84px; resize: vertical; }
   display: inline-flex; align-items: center; gap: 6px;
   padding: 4px 11px; border-radius: var(--r-full);
   font-size: 0.76rem; font-weight: 700; letter-spacing: 0.01em;
-  color: var(--cat, var(--gold));
+  /* Not the raw accent: as small type on a dark surface the 600-level
+     accents sit at 2.4-4.1:1. Mixing toward white clears AA while reading
+     as the same hue. Fill and border keep the accent untouched. */
+  color: color-mix(in srgb, var(--cat, var(--gold)) 52%, #ffffff);
   background: color-mix(in srgb, var(--cat, var(--gold)) 16%, transparent);
   border: 1px solid color-mix(in srgb, var(--cat, var(--gold)) 34%, transparent);
 }
@@ -424,7 +450,8 @@ textarea { min-height: 84px; resize: vertical; }
 
 .alert { padding: 13px 16px; border-radius: var(--r-sm); margin-bottom: 16px; font-size: 0.92rem; }
 .alert--error { background: var(--danger-bg); border: 1px solid var(--danger-border); color: var(--danger-ink); }
-.alert--ok { background: var(--ok-bg); border: 1px solid var(--ok-border); color: var(--ok-ink); }
+.alert--ok,
+.alert--success { background: var(--ok-bg); border: 1px solid var(--ok-border); color: var(--ok-ink); }
 
 .consent {
   display: flex; align-items: flex-start; gap: 13px;
@@ -492,11 +519,11 @@ textarea { min-height: 84px; resize: vertical; }
 
 /* ---------- Hero ----------------------------------------------------------- */
 
-.hero { text-align: center; padding: clamp(40px, 9vw, 96px) 0 40px; position: relative; isolation: isolate; }
+.hero { text-align: center; padding: clamp(40px, 9vw, 96px) 0 40px; position: relative; isolation: isolate; overflow-x: clip; }
 .hero__glow {
   position: absolute;
   top: -10%; left: 50%; translate: -50% 0;
-  width: min(900px, 140vw); height: 460px;
+  width: min(900px, 100%); height: 460px;
   background: radial-gradient(closest-side, color-mix(in srgb, var(--violet) 14%, transparent), transparent 70%);
   z-index: -1;
   pointer-events: none;
@@ -522,12 +549,16 @@ textarea { min-height: 84px; resize: vertical; }
 
 .stats { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; margin-top: 56px; }
 .stat {
-  padding: 18px 26px; border-radius: var(--r-lg);
+  /* This block was written but never rendered by any component, so the fact
+     that its two spans were inline - giving "19seniors" - had never shown up.
+     Stack them: number over label is what the padding and min-width assume. */
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 16px 24px; border-radius: var(--r-lg);
   background: var(--surface-glass); border: 1px solid var(--border);
   backdrop-filter: blur(10px);
   min-width: 130px;
 }
-.stat__num { font-family: var(--font-sora), sans-serif; font-size: 2rem; font-weight: 800; background: var(--grad-text); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.stat__num { font-family: var(--font-sora), sans-serif; font-size: 1.9rem; line-height: 1.1; font-weight: 800; background: var(--grad-text); -webkit-background-clip: text; background-clip: text; color: transparent; }
 .stat__label { color: var(--text-muted); font-size: 0.85rem; font-weight: 500; }
 
 /* ---------- Directory ------------------------------------------------------ */
@@ -576,7 +607,12 @@ textarea { min-height: 84px; resize: vertical; }
 .a-row__label { color: var(--text-muted); }
 .a-card__foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-top: 12px; border-top: 1px solid var(--border); }
 .a-status { font-size: 0.8rem; font-weight: 600; color: var(--text-muted); }
-.a-link { color: var(--gold); font-weight: 700; font-size: 0.85rem; display: inline-flex; align-items: center; gap: 4px; }
+.a-link {
+  color: var(--gold); font-weight: 700; font-size: 0.85rem;
+  display: inline-flex; align-items: center; gap: 4px;
+  /* 19px tall before: padding gives a 44px touch target without moving it. */
+  min-height: 44px; padding: 4px 2px;
+}
 .a-link:hover { text-decoration: underline; }
 
 .result-count { color: var(--text-muted); font-size: 0.88rem; font-weight: 500; }
@@ -654,10 +690,25 @@ textarea { min-height: 84px; resize: vertical; }
   line-height: 1.4;
 }
 
-@media (max-width: 640px) {
-  /* Flip-on-hover doesn't work with touch; show the back details directly. */
-  .showcase-card__front { display: none; }
-  .showcase-card__back { position: static; opacity: 1; transform: none; inset: auto; }
+/* Touch devices can't hover, so the flip never happens. The old rule here
+   hid __front and showed __back - but __front is where the avatar, name and
+   class year live, so every phone got anonymous cards on a section headed
+   "Meet a few seniors". Stack the two halves into one flow instead, and key
+   off (hover: none) rather than a width so tablets are covered too. */
+@media (hover: none) {
+  .showcase-card { min-height: auto; }
+  .showcase-card__front {
+    align-items: flex-start; text-align: left; gap: 6px; margin-bottom: 12px;
+  }
+  .showcase-card__back {
+    position: static; opacity: 1; transform: none; inset: auto;
+  }
+  /* No cursor to follow, and no tilt to pop out of. */
+  .showcase-card:hover { transform: none; box-shadow: var(--shadow-sm); }
+  .showcase-card:hover .showcase-card__front { opacity: 1; transform: none; }
+  .showcase-card:hover .showcase-card__pop,
+  .showcase-card:hover .showcase-card__pop--lg { transform: none; }
+  .showcase-card__glow { display: none; }
 }
 
 /* ---------- Wizard progress ------------------------------------------------ */
@@ -782,8 +833,8 @@ textarea { min-height: 84px; resize: vertical; }
   position: absolute;
   top: 16px;
   right: 16px;
-  width: 34px;
-  height: 34px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.06);
@@ -853,7 +904,7 @@ textarea { min-height: 84px; resize: vertical; }
 }
 
 .success-subtitle{
-  color:var(--muted);
+  color: var(--text-muted);
   margin-bottom:18px;
 }
 
@@ -902,7 +953,7 @@ textarea { min-height: 84px; resize: vertical; }
 }
 
 .share-link{
-    color:var(--muted);
+    color: var(--text-muted);
     font-weight:600;
 }
 /* ---------- Admin: "+ Add as option" tag button ---------------------------- */
@@ -1088,17 +1139,21 @@ textarea { min-height: 84px; resize: vertical; }
 .diff-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
 @media (max-width: 640px) { .diff-grid { grid-template-columns: 1fr; } }
 .diff-col { border-radius: var(--r-sm); padding: 12px 14px; }
-.diff-col--old { background: rgba(239, 68, 68, 0.07); border: 1px solid rgba(239, 68, 68, 0.25); }
-.diff-col--new { background: rgba(52, 211, 153, 0.07); border: 1px solid rgba(52, 211, 153, 0.25); }
+/* Deliberately NOT red-vs-green. The left column is what the public can see
+   right now and the right column is an unreviewed proposal, so success-green
+   on the right read as "already approved" and red on the left as "wrong" -
+   the exact opposite of the truth. Neutral for published, amber for pending. */
+.diff-col--old { background: rgba(255, 255, 255, 0.04); border: 1px solid var(--border-strong); }
+.diff-col--new { background: rgba(242, 195, 78, 0.07); border: 1px solid rgba(242, 195, 78, 0.3); }
 .diff-col__title {
   margin: 0 0 8px 0; font-weight: 700; font-size: 0.8rem;
   letter-spacing: 0.06em; text-transform: uppercase;
 }
-.diff-col--old .diff-col__title { color: #fca5a5; }
-.diff-col--new .diff-col__title { color: var(--emerald); }
+.diff-col--old .diff-col__title { color: var(--text-muted); }
+.diff-col--new .diff-col__title { color: var(--gold); }
 .diff-label { font-size: 0.75rem; color: var(--text-faint); display: block; }
-.diff-old { font-size: 0.9rem; color: #fca5a5; }
-.diff-new { font-size: 0.9rem; color: var(--emerald); }
+.diff-old { font-size: 0.9rem; color: var(--text); }
+.diff-new { font-size: 0.9rem; color: var(--gold); }
 
 .delete-confirm {
   width: 100%; margin-top: 10px; background: var(--danger-bg);
@@ -1165,14 +1220,21 @@ textarea { min-height: 84px; resize: vertical; }
   position: absolute; right: 14px; top: 17px;
   color: var(--emerald); font-weight: 700; font-size: 0.95rem; pointer-events: none;
 }
+/* --danger-border (#5b2626) is darker than the default --border-strong, so an
+   invalid field was genuinely LESS visible than a valid one. Use the ink colour
+   the error text already uses. Selects are included because they are most of
+   the required fields - previously only inputs could show either state. */
 .f-field--invalid input,
-.f-field--invalid select { border-color: var(--danger-border); }
-.f-field--valid input { border-color: rgba(52, 211, 153, 0.4); }
+.f-field--invalid select { border-color: var(--danger-ink); }
+.f-field--valid input,
+.f-field--valid select { border-color: var(--emerald); }
 
 .reveal-btn {
   position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
   background: none; border: 0; cursor: pointer; font-size: 1.1rem;
-  color: var(--text-faint); line-height: 1; padding: 4px;
+  color: var(--text-faint); line-height: 1;
+  /* Glyph stays the same size; the hit area grows to 44px. */
+  width: 44px; height: 44px; display: grid; place-items: center; padding: 0;
 }
 
 .opt { font-size: 0.78rem; color: var(--text-faint); font-weight: 500; margin-left: 6px; }
@@ -1212,4 +1274,87 @@ textarea { min-height: 84px; resize: vertical; }
 .contact-block__title { margin: 0 0 4px; font-size: 1rem; }
 .contact-block__note {
   margin: 0 0 16px; font-size: 0.82rem; color: var(--text-faint); line-height: 1.5;
+}
+
+/* ---------- "How they got in" ---------------------------------------------- */
+
+/* The route/rank/marks badge row. Deliberately the same shape on the directory
+   card, in the profile modal and on the Explorer mini-card - it is the answer a
+   visiting student came for, so it should look the same wherever they meet it. */
+.admission-row {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  margin-bottom: 12px;
+}
+.modal-note { margin: 8px 0 0; font-size: 0.84rem; color: var(--text-muted); }
+
+/* The span of ranks that got seniors into one college. Stated as a sentence
+   rather than a badge because a WIDE span is the encouraging case - it shows
+   the door is not only open to toppers - and that reads better as prose. */
+.college-span {
+  margin: 12px 0 0;
+  padding: 10px 13px;
+  border-radius: var(--r-sm);
+  background: rgba(52, 211, 153, 0.07);
+  border: 1px solid rgba(52, 211, 153, 0.22);
+  font-size: 0.86rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+.college-span strong { color: var(--text); font-weight: 650; }
+
+/* A reassurance note, as opposed to .form-note's neutral instruction voice.
+   Used where we are asking for something people are reluctant to give. */
+.form-note--warm {
+  background: rgba(52, 211, 153, 0.06);
+  border: 1px solid rgba(52, 211, 153, 0.2);
+  border-radius: var(--r-sm);
+  padding: 10px 13px;
+  color: var(--text-muted);
+  line-height: 1.55;
+}
+
+/* An inline action that reads as a link but is genuinely a button. */
+.link-btn {
+  background: none; border: 0; padding: 0;
+  font: inherit; font-weight: 700;
+  color: var(--gold); cursor: pointer; text-decoration: underline;
+}
+
+/* Destructive option action: the three buttons on a pending option were
+   visually identical, so "merge", "approve" and "remove permanently" all
+   looked equally safe. */
+.tag-add-btn--danger { color: var(--danger-ink); border-color: rgba(252, 165, 165, 0.35); }
+.tag-add-btn--danger:hover { background: var(--danger-bg); }
+
+/* Always-on explainer at the top of an admin tab, so the tab teaches its job
+   even in a quiet month when the list is empty. */
+.tab-intro {
+  background: var(--grad-soft);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 14px 18px;
+  margin-bottom: 18px;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  line-height: 1.55;
+}
+.tab-intro h3 { margin: 0 0 4px; font-size: 0.98rem; color: var(--text); }
+
+/* Bulk approve. A graduation batch is ~30 registrations, and approving them
+   one at a time means 30 clicks each after scrolling past a full card. */
+.bulk-bar {
+  position: sticky; top: 64px; z-index: 20;
+  display: flex; align-items: center; justify-content: space-between; gap: 14px;
+  flex-wrap: wrap;
+  padding: 12px 16px; margin-bottom: 16px;
+  border-radius: var(--r);
+  background: var(--surface-glass);
+  backdrop-filter: saturate(180%) blur(14px);
+  border: 1px solid var(--border-strong);
+}
+.bulk-bar__all { display: flex; align-items: center; gap: 9px; font-weight: 600; font-size: 0.9rem; cursor: pointer; }
+.bulk-bar__all input, .card-select input { width: 18px; height: 18px; accent-color: var(--gold); }
+.card-select {
+  display: inline-flex; align-items: center; gap: 8px;
+  margin-bottom: 10px; font-size: 0.82rem; color: var(--text-faint); cursor: pointer;
 }

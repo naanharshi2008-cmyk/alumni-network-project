@@ -180,13 +180,44 @@ const STEP_FIELDS: FieldKey[][] = [
 /* ═══════════════════════════════════════════════════════════════════════════
    Page
 ═══════════════════════════════════════════════════════════════════════════ */
+/**
+ * Turn whatever the database or network threw into something a nervous
+ * twenty-year-old can act on. The raw text still goes to the console for us.
+ *
+ * Without this, a unique-constraint violation surfaces verbatim as
+ * `duplicate key value violates unique constraint "alumni_username_key"`,
+ * which is both frightening and unactionable.
+ */
+// Versioned so a future field rename cannot resurrect an incompatible draft.
+const DRAFT_KEY = 'veveaham.register.draft.v1';
+
+function friendlySubmitError(raw: string): string {
+  const t = raw.toLowerCase();
+  if (t.includes('alumni_username_key') || t.includes('duplicate key') || t.includes('already registered')) {
+    return 'That username has just been taken. Go back to step 1 and pick another — everything else you typed is still here.';
+  }
+  if (t.includes('failed to fetch') || t.includes('networkerror') || t.includes('load failed')) {
+    return 'Could not reach the server. Check your connection and tap Submit again — nothing has been lost.';
+  }
+  if (t.includes('row-level security') || t.includes('permission denied')) {
+    return 'The server would not accept that just now. Please try again in a moment, or tell the school office if it keeps happening.';
+  }
+  if (t.includes('payload') || t.includes('too large')) {
+    return 'Your photo is too large to upload. Go back and pick a smaller one, or skip the photo — it is optional.';
+  }
+  return 'Something went wrong saving your profile. Please try again — and if it keeps happening, tell the school office.';
+}
+
 export default function RegisterPage() {
   const [form, setForm] = useState<FormState>(initialForm);
   const [step, setStep] = useState(0);
+  const [restored, setRestored] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const [touched, setTouched] = useState<Partial<Record<FieldKey, boolean>>>({});
+  // C4 - username availability, checked on blur rather than at submit.
+  const [usernameState, setUsernameState] = useState<'idle' | 'checking' | 'free' | 'taken'>('idle');
   const [tagOptions, setTagOptions] = useState<Record<string, string[]>>({});
 
   // A ref (not state) so a double-click can't slip through before React
@@ -234,12 +265,68 @@ export default function RegisterPage() {
   );
   const stepComplete = stepErrors.length === 0;
 
+  // ── Draft persistence ──────────────────────────────────────────────────
+  // Restore once on mount. Password and the File object are deliberately never
+  // stored: one is a credential, the other cannot be serialised anyway.
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(DRAFT_KEY);
+      if (!saved) return;
+      const parsed = JSON.parse(saved) as { form?: Partial<FormState>; step?: number };
+      if (!parsed.form) return;
+      setForm((f) => ({ ...f, ...parsed.form, password_val: '', photo_file: null }));
+      if (typeof parsed.step === 'number') setStep(Math.min(parsed.step, STEPS.length - 1));
+      setRestored(true);
+    } catch {
+      // A corrupt draft should never block registration.
+    }
+  }, []);
+
+  useEffect(() => {
+    if (submitted) return;
+    try {
+      const { password_val: _pw, photo_file: _pf, ...safe } = form;
+      window.localStorage.setItem(DRAFT_KEY, JSON.stringify({ form: safe, step }));
+    } catch {
+      // Private browsing and full quotas both throw here; losing the draft is
+      // not worth breaking the form over.
+    }
+  }, [form, step, submitted]);
+
+  // Debounce-free: this only fires on blur, so at most one request per field
+  // exit. Failures fall back to 'idle' rather than blocking - submit() still
+  // does the authoritative check, this is purely to save a wasted five steps.
+  async function checkUsername(candidate: string) {
+    const v = candidate.trim();
+    if (v.length < 3) { setUsernameState('idle'); return; }
+    setUsernameState('checking');
+    try {
+      const { data, error: rpcErr } = await supabase.rpc('username_available', { candidate: v });
+      if (rpcErr) { setUsernameState('idle'); return; }
+      setUsernameState(data ? 'free' : 'taken');
+    } catch {
+      setUsernameState('idle');
+    }
+  }
+
   function goNext() {
     // Reveal every problem on this step at once rather than one at a time.
     const fields = STEP_FIELDS[step];
     setTouched((prev) => ({ ...prev, ...Object.fromEntries(fields.map((f) => [f, true])) }));
-    const firstError = fields.map((k) => validateField(k, form)).find(Boolean);
-    if (firstError) { setError(firstError); return; }
+    const firstBadField = fields.find((k) => validateField(k, form));
+    if (firstBadField) {
+      // Take the person to the problem. goNext does not change `step`, so the
+      // scroll-to-top effect never fires here - without this the error can sit
+      // far above the fold and Continue looks like it simply did nothing.
+      requestAnimationFrame(() => {
+        const el = document.querySelector<HTMLElement>(
+          `.f-field--invalid input, .f-field--invalid select, [data-field="${firstBadField}"]`,
+        );
+        el?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        el?.focus?.({ preventScroll: true });
+      });
+      return;
+    }
     setError('');
     setStep((s) => Math.min(s + 1, STEPS.length - 1));
   }
@@ -437,17 +524,18 @@ export default function RegisterPage() {
         }),
       }).catch(() => {});
 
+      try { window.localStorage.removeItem(DRAFT_KEY); } catch { /* nothing to lose */ }
       setSubmitted(true);
     } catch (err) {
       console.error(err);
       // Supabase errors are plain objects with a `message`, not Error
       // instances, so an `instanceof Error` check alone silently hides them.
-      const message = err instanceof Error
+      const raw = err instanceof Error
         ? err.message
         : (err && typeof err === 'object' && 'message' in err)
           ? String((err as { message: unknown }).message)
-          : 'Something went wrong. Please try again.';
-      setError(message);
+          : '';
+      setError(friendlySubmitError(raw));
       submitLockRef.current = false;
     } finally {
       setSubmitting(false);
@@ -474,7 +562,7 @@ export default function RegisterPage() {
 
         <form onSubmit={handleFormSubmit} noValidate>
           <div key={step} className="fade-up">
-            {step === 0 && <StepAccount {...stepProps} />}
+            {step === 0 && <StepAccount {...stepProps} usernameState={usernameState} checkUsername={checkUsername} />}
             {step === 1 && <StepSchool {...stepProps} streamOptions={streamOptions} />}
             {step === 2 && <StepStudies {...stepProps} fieldOptions={fieldOptions} degreeOptions={degreeOptions} routeOptions={routeOptions} />}
             {step === 3 && (
@@ -527,19 +615,29 @@ type StepProps = {
   isValid: (key: FieldKey) => boolean;
 };
 
-function StepAccount({ form, update, markTouched, errorFor, isValid }: StepProps) {
+function StepAccount({
+  form, update, markTouched, errorFor, isValid, usernameState, checkUsername,
+}: StepProps & {
+  usernameState: 'idle' | 'checking' | 'free' | 'taken';
+  checkUsername: (v: string) => void;
+}) {
   return (
     <>
       <Field
-        label="Choose a username" required autoFocus
-        hint="letters, numbers, - and _ only"
+        label="Choose a username" required autoFocus autoComplete="username"
+        hint={
+          usernameState === 'checking' ? 'checking if that one is free…'
+          : usernameState === 'free' ? '✓ that one is free'
+          : 'letters, numbers, - and _ only'
+        }
         value={form.username}
-        onChange={(v) => update('username', v.toLowerCase().replace(/[^a-z0-9_-]/g, ''))}
-        onBlur={() => markTouched('username')}
-        error={errorFor('username')} valid={isValid('username')}
+        onChange={(v) => { update('username', v.toLowerCase().replace(/[^a-z0-9_-]/g, '')); }}
+        onBlur={() => { markTouched('username'); checkUsername(form.username); }}
+        error={usernameState === 'taken' ? 'That username is already taken — try another.' : errorFor('username')}
+        valid={usernameState === 'free' && isValid('username')}
       />
       <Field
-        label="Choose a password" required type="password" revealable
+        label="Choose a password" required type="password" revealable autoComplete="new-password"
         hint="at least 6 characters"
         value={form.password_val}
         onChange={(v) => update('password_val', v)}
@@ -558,7 +656,7 @@ function StepSchool({ form, update, markTouched, errorFor, isValid, streamOption
   return (
     <>
       <Field
-        label="Full name" required autoFocus
+        label="Full name" required autoFocus autoComplete="name"
         value={form.full_name}
         onChange={(v) => update('full_name', v)}
         onBlur={() => markTouched('full_name')}
@@ -663,13 +761,22 @@ function StepStudies({
       ) : !skipsRank && route ? (
         <Field
           label={`${route} rank`} optional type="number" min={1} inputMode="numeric"
-          hint="juniors find this really useful"
+          hint="shown only as a range, never the exact number"
           value={form.admission_rank}
           onChange={(v) => update('admission_rank', v.replace(/[^\d]/g, ''))}
           onBlur={() => markTouched('admission_rank')}
           error={errorFor('admission_rank')} valid={isValid('admission_rank')}
         />
       ) : null}
+
+      {(route === 'Board Marks' || (!skipsRank && route)) && (
+        <p className="form-note form-note--warm">
+          Honestly? An average rank helps a junior more than a top one does.
+          Most of them aren&apos;t aiming for rank 100 — they want to know if
+          someone like them got in. We only ever show a range, like
+          &ldquo;Rank 10,000–25,000&rdquo;.
+        </p>
+      )}
     </>
   );
 }
@@ -802,7 +909,7 @@ function StepNow({
         </p>
 
         <Field
-          label="Email" required type="email"
+          label="Email" required type="email" autoComplete="email"
           value={form.personal_email} onChange={(v) => update('personal_email', v)}
           onBlur={() => markTouched('personal_email')}
           error={errorFor('personal_email')} valid={isValid('personal_email')}
@@ -813,7 +920,7 @@ function StepNow({
             onChange={(v) => update('phone_country_code', v)} options={COUNTRY_CODES}
           />
           <Field
-            label="Phone number" required type="tel" inputMode="tel"
+            label="Phone number" required type="tel" inputMode="tel" autoComplete="tel-national"
             value={form.phone_number}
             onChange={(v) => update('phone_number', v.replace(/\D/g, ''))}
             onBlur={() => markTouched('phone_number')}
@@ -821,7 +928,7 @@ function StepNow({
           />
         </div>
         <Field
-          label="LinkedIn" optional type="url" hint="shown publicly if you add it"
+          label="LinkedIn" optional type="url" autoComplete="url" hint="shown publicly if you add it"
           value={form.linkedin_url} onChange={(v) => update('linkedin_url', v)}
           onBlur={() => markTouched('linkedin_url')}
           error={errorFor('linkedin_url')} valid={isValid('linkedin_url')}
@@ -832,6 +939,9 @@ function StepNow({
 }
 
 function StepFinish({ form, update }: StepProps) {
+  // Local: only meaningful while this step is on screen, and it should reset
+  // if the person leaves and comes back with a different file in mind.
+  const [photoError, setPhotoError] = useState('');
   return (
     <>
       <div className="field" style={{ marginBottom: 24 }}>
@@ -845,8 +955,31 @@ function StepFinish({ form, update }: StepProps) {
               <span className="upload__hint">JPG, PNG or WEBP · up to 5MB</span>
             </span>
           </span>
-          <input type="file" accept="image/*" onChange={(e) => update('photo_file', e.target.files?.[0] ?? null)} />
+          <input
+            type="file"
+            accept="image/*"
+            onChange={(e) => {
+              const file = e.target.files?.[0] ?? null;
+              // Checked here rather than at submit: finding out your photo is
+              // too big only after you have pressed the final button is the
+              // worst possible moment to be told.
+              if (file && !file.type.startsWith('image/')) {
+                setPhotoError('That file is not an image — pick a JPG, PNG or WEBP.');
+                update('photo_file', null);
+                return;
+              }
+              if (file && file.size > 5 * 1024 * 1024) {
+                const mb = (file.size / (1024 * 1024)).toFixed(1);
+                setPhotoError(`That photo is ${mb}MB and the limit is 5MB. Most phones can shrink it when sharing, or just skip the photo — it is optional.`);
+                update('photo_file', null);
+                return;
+              }
+              setPhotoError('');
+              update('photo_file', file);
+            }}
+          />
         </label>
+        {photoError && <p className="field__error" style={{ position: 'static', marginTop: 8 }}>{photoError}</p>}
         {form.photo_file && <div className="upload__filename">✓ {form.photo_file.name}</div>}
       </div>
 
@@ -885,6 +1018,7 @@ function Optional() { return <span className="opt">optional</span>; }
 function Field({
   label, hint, value, onChange, onBlur, error, valid,
   type = 'text', required, optional, autoFocus, min, max, step, inputMode, revealable,
+  autoComplete,
 }: {
   label: string; hint?: string; value: string;
   onChange: (v: string) => void; onBlur: () => void;
@@ -893,6 +1027,7 @@ function Field({
   min?: number; max?: number; step?: number;
   inputMode?: React.HTMLAttributes<HTMLInputElement>['inputMode'];
   revealable?: boolean;
+  autoComplete?: string;
 }) {
   const id = `f-${label.replace(/\s+/g, '-').toLowerCase()}`;
   const [focused, setFocused] = useState(false);
@@ -909,6 +1044,7 @@ function Field({
         onBlur={() => { setFocused(false); onBlur(); }}
         placeholder="" autoFocus={autoFocus}
         min={min} max={max} step={step} inputMode={inputMode}
+        autoComplete={autoComplete}
         aria-required={required} aria-invalid={!!error}
         style={revealable ? { paddingRight: 44 } : undefined}
       />

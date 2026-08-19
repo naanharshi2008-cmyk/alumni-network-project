@@ -108,37 +108,62 @@ NOTIFY pgrst, 'reload schema';
 
 
 -- =============================================================================
--- 4. VERIFICATION — highlight each block and run it on its own
+-- THE RUNNABLE PART OF THIS FILE ENDS HERE.
 -- =============================================================================
-
--- 4a. Expect ZERO ROWS. This is the moment the leak is closed.
-SELECT grantee, privilege_type
-FROM information_schema.role_table_grants
-WHERE table_name = 'alumni' AND grantee = 'anon' AND privilege_type = 'SELECT';
-
--- 4b. Expect 7. Public timelines must still be visible to anonymous visitors.
---     If this errors with "permission denied for table alumni", the policy in
---     section 2 did not apply - re-run this file.
-SET LOCAL ROLE anon;
-SELECT count(*) AS higher_studies_visible_to_anon FROM higher_studies;
-RESET ROLE;
-
--- 4c. Expect 5.
-SET LOCAL ROLE anon;
-SELECT count(*) AS work_experience_visible_to_anon FROM work_experience;
-RESET ROLE;
-
--- 4d. Expect 19. The directory must still work.
-SET LOCAL ROLE anon;
-SELECT count(*) AS approved_visible FROM public_alumni;
-RESET ROLE;
-
--- 4e. Expect an ERROR: "permission denied for table alumni".
---     The error IS the pass condition. If it returns a number, the REVOKE
---     did not apply and contact details are still exposed.
-SET LOCAL ROLE anon;
-SELECT count(*) FROM alumni;
-RESET ROLE;
+-- Everything below is commented out ON PURPOSE. Do not uncomment it and run it
+-- together with the migration above.
+--
+-- WHY: Supabase executes everything you paste as ONE transaction. One of these
+-- checks is *designed* to fail (proving anon can no longer read `alumni`), and a
+-- failed statement rolls back the whole transaction - taking the REVOKE with it.
+-- An earlier version of this file shipped them together and the migration
+-- silently undid itself, reporting only:
+--     ERROR: 42501: permission denied for table alumni
+--
+-- HOW TO VERIFY INSTEAD (pick either):
+--
+--   A. From the repo, the thorough option - checks the real REST API as a real
+--      anonymous visitor, which is closer to what a browser actually does:
+--          npm run verify:security
+--      Every line should read PASS.
+--
+--   B. In the SQL editor, one query per run, in a SEPARATE tab from the
+--      migration. Highlight a single block, run it, read it, then the next.
+--
+-- -----------------------------------------------------------------------------
+-- V1. Expect ZERO ROWS. This is the moment the leak is closed.
+--
+--   SELECT grantee, privilege_type
+--   FROM information_schema.role_table_grants
+--   WHERE table_name = 'alumni' AND grantee = 'anon' AND privilege_type = 'SELECT';
+--
+-- V2. Expect 7. Public timelines must survive the revoke. If this errors with
+--     "permission denied for table alumni", the SECURITY DEFINER helper in
+--     section 1 is missing and the policies fell back to reading `alumni`.
+--
+--   SET LOCAL ROLE anon;
+--   SELECT count(*) AS higher_studies_visible_to_anon FROM higher_studies;
+--
+-- V3. Expect 5.
+--
+--   SET LOCAL ROLE anon;
+--   SELECT count(*) AS work_experience_visible_to_anon FROM work_experience;
+--
+-- V4. Expect 19. The directory must still work.
+--
+--   SET LOCAL ROLE anon;
+--   SELECT count(*) AS approved_visible FROM public_alumni;
+--
+-- V5. RUN THIS ONE COMPLETELY ALONE. It is expected to ERROR with
+--     "permission denied for table alumni" - the error IS the pass condition.
+--     If it returns a number instead, the REVOKE did not apply and contact
+--     details are still exposed.
+--
+--   SET LOCAL ROLE anon;
+--   SELECT count(*) FROM alumni;
+--
+-- (Each SET LOCAL ROLE ends with its own statement's transaction, so no
+--  RESET ROLE is needed when the block is run on its own.)
 
 
 -- =============================================================================

@@ -5,8 +5,10 @@ import Link from 'next/link';
 import { isSupabaseConfigured } from '../../lib/supabaseClient';
 import { fetchApprovedAlumni, fetchTimelines } from '../../lib/publicData';
 import { officialSchoolName, SCHOOLS } from '../../lib/options';
+import { formatRankBand, formatMarksBand, formatRankSpan } from '../../lib/text';
 import {
   Alumnus,
+  CATEGORIES,
   CategoryKey,
   CollegeDetails,
   HigherStudy,
@@ -103,6 +105,16 @@ export default function DirectoryPage() {
   const [explorerState, setExplorerState] = useState('');
   const [explorerQuery, setExplorerQuery] = useState('');
 
+  // Honour /directory?cat=medicine from the home-page chips. Read once on
+  // mount from window.location rather than useSearchParams, which would drag
+  // this statically-rendered page into a Suspense boundary for no gain.
+  useEffect(() => {
+    const cat = new URLSearchParams(window.location.search).get('cat');
+    if (cat && CATEGORIES.some((c) => c.key === cat)) {
+      setActive(cat as CategoryKey);
+    }
+  }, []);
+
   // Fetch approved alumni from the privacy-safe view, then their timelines.
   useEffect(() => {
     let cancelled = false;
@@ -143,6 +155,8 @@ export default function DirectoryPage() {
       const hay = [
         a.full_name, collegeNameOf(a), a.college_name_raw, a.degree, a.branch,
         a.field, a.currently_at, a.designation, a.stream, officialSchoolName(a.school_name),
+        // Searching "NEET" or "TNEA" is how a student actually looks for a path.
+        a.admission_route, a.admission_rank,
         String(a.class_of ?? ''),
       ].filter(Boolean).join(' ').toLowerCase();
       return hay.includes(q);
@@ -159,6 +173,15 @@ export default function DirectoryPage() {
     for (const c of explorerColleges) if (c.details?.state) s.add(c.details.state);
     return Array.from(s).sort();
   }, [explorerColleges]);
+
+  // Only offer the state filter once it can actually represent the list. It is
+  // derived from matched colleges only, so while most entries are unmatched it
+  // hides more than it reveals - and would omit the home state entirely.
+  const stateFilterUseful = useMemo(() => {
+    if (explorerColleges.length === 0) return false;
+    const withState = explorerColleges.filter((c) => c.details?.state).length;
+    return states.length >= 3 && withState / explorerColleges.length >= 0.6;
+  }, [explorerColleges, states]);
 
   const filteredColleges = useMemo(() => {
     const q = explorerQuery.trim().toLowerCase();
@@ -309,7 +332,7 @@ export default function DirectoryPage() {
                 aria-label="Search colleges"
               />
             </div>
-            {states.length > 0 && (
+            {stateFilterUseful && (
               <div className="chips" style={{ flexWrap: 'wrap' }}>
                 <button
                   className={`chip${explorerState === '' ? ' chip--active' : ''}`}
@@ -385,13 +408,32 @@ function CollegeExplorerCard({
   const det = college.details;
   const website = det?.website;
 
+  // Imported names often carry the full postal address:
+  // "Charak Institute of Pharmacy, Choli Road, Mandleshwar Block, Khargone 451221".
+  // The part before the first comma is the actual name; the rest belongs on the
+  // location line. Measured at 375px, headings were running to 5-6 lines.
+  const [shortName, ...restOfName] = college.name.split(',');
+  const nameTail = restOfName.join(',').trim();
+
+  // B2b - the span of ranks that got Veveaham students in here. This is the
+  // single most useful line on the page for a student choosing where to aim,
+  // and it is non-personal by construction: no rank is attributed to anyone.
+  // A wide span is the encouraging case - it shows the door is not only open
+  // to toppers - so it is worth showing even from a handful of data points.
+  const rankSpan = formatRankSpan(college.seniors.map((x) => x.admission_rank));
+  const routes = Array.from(
+    new Set(college.seniors.map((x) => x.admission_route).filter(Boolean) as string[]),
+  );
+
   return (
     <div className="card" style={{ marginBottom: 16 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
         <div style={{ flex: 1 }}>
-          <h3 style={{ margin: '0 0 4px 0', fontSize: '1.05rem' }}>{college.name}</h3>
+          <h3 style={{ margin: '0 0 4px 0', fontSize: '1.05rem' }} title={college.name}>
+            {shortName.trim()}
+          </h3>
           <p className="subtitle" style={{ margin: 0, fontSize: '0.83rem' }}>
-            {[det?.district, det?.state].filter(Boolean).join(', ')}
+            {[nameTail, det?.district, det?.state].filter(Boolean).join(', ')}
             {det?.university_name && det.university_name !== college.name && (
               <> · <span style={{ color: 'var(--text-faint)' }}>{det.university_name}</span></>
             )}
@@ -418,6 +460,20 @@ function CollegeExplorerCard({
         </span>
       </div>
 
+      {(rankSpan || routes.length > 0) && (
+        <p className="college-span">
+          {routes.length > 0 && (
+            <>Seniors got in through <strong>{routes.join(', ')}</strong></>
+          )}
+          {rankSpan && routes.length > 0 && ', with '}
+          {rankSpan && !routes.length && 'Seniors got in with '}
+          {rankSpan && (
+            <>ranks {rankSpan}</>
+          )}
+          .
+        </p>
+      )}
+
       <div style={{ marginTop: 14 }}>
         <button
           type="button"
@@ -441,6 +497,35 @@ function CollegeExplorerCard({
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * "How they got in", as badges.
+ *
+ * This is the answer a visiting student came for, so it appears on the card,
+ * in the modal, and on the Explorer mini-card rather than being buried.
+ *
+ * The route leads and is always shown when present - every one of the alumni
+ * on an exam route has one, and "via JEE Main" states that the path exists
+ * without ranking anybody. Rank and marks follow only when given, and always
+ * as bands: see formatRankBand in lib/text.ts for why exact figures are the
+ * wrong call here.
+ */
+function AdmissionBadges({ a, showStatus = false }: { a: Alumnus; showStatus?: boolean }) {
+  const rank = formatRankBand(a.admission_rank);
+  const marks = formatMarksBand(a.board_marks);
+  if (!a.admission_route && !rank && !marks) return null;
+
+  return (
+    <div className="admission-row">
+      {a.admission_route && <span className="badge badge--xs">via {a.admission_route}</span>}
+      {rank && <span className="badge badge--xs">{rank}</span>}
+      {marks && <span className="badge badge--xs">{marks} marks</span>}
+      {showStatus && a.current_status && (
+        <span className="badge badge--xs" style={{ opacity: 0.75 }}>{a.current_status}</span>
+      )}
     </div>
   );
 }
@@ -477,13 +562,7 @@ function SeniorMiniCard({ a, timelines }: { a: Alumnus; timelines: Timelines }) 
       </div>
 
       {/* How they got in - the part juniors are actually here for. */}
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: a.message_1 ? 8 : 0 }}>
-        {a.admission_route && <span className="badge badge--xs">via {a.admission_route}</span>}
-        {a.admission_rank && <span className="badge badge--xs">Rank {a.admission_rank}</span>}
-        {a.board_marks && <span className="badge badge--xs">{a.board_marks}% marks</span>}
-        {a.board_cutoff && <span className="badge badge--xs">Cutoff {a.board_cutoff}</span>}
-        {a.current_status && <span className="badge badge--xs" style={{ opacity: 0.75 }}>{a.current_status}</span>}
-      </div>
+      <AdmissionBadges a={a} showStatus />
 
       {(studies.length > 0 || work.length > 0) && (
         <div className="senior-mini__timeline">
@@ -526,9 +605,13 @@ function Card({ item, onExpand }: { item: EnrichedAlumnus; onExpand: () => void 
         </div>
       </div>
 
-      <span className="badge" style={{ marginBottom: 12, display: 'inline-flex' }}>
+      <span className="badge" style={{ marginBottom: 10, display: 'inline-flex' }}>
         <span>{cat.emoji}</span> {cat.label}
       </span>
+
+      {/* The whole point of the directory for a class-11 visitor. It was
+          previously two clicks deep, in the modal. */}
+      <AdmissionBadges a={a} />
 
       {/* No "School" row here on purpose: these cards are already grouped under
           a school heading, and repeating the full official name cost two
@@ -653,6 +736,25 @@ function ProfileModal({
           <span>{cat.emoji}</span> {cat.label}
         </span>
 
+        {/* A visitor opens a profile to answer two questions: how did they get
+            in, and what do they tell me to do. Both used to sit at the bottom,
+            below the college's founding year. They lead now. */}
+        <div className="a-modal__section">
+          <h4>How they got in</h4>
+          <AdmissionBadges a={a} />
+          {a.board_cutoff && (
+            <p className="modal-note">Cutoff {a.board_cutoff}</p>
+          )}
+        </div>
+
+        {(a.message_1 || a.message_2) && (
+          <div className="a-modal__section">
+            <h4>Their advice for juniors</h4>
+            {a.message_1 && <p className="a-modal__quote">{a.message_1}</p>}
+            {a.message_2 && <p className="a-modal__quote">{a.message_2}</p>}
+          </div>
+        )}
+
         {/* Education */}
         <div className="a-modal__section">
           <h4>Education</h4>
@@ -664,14 +766,6 @@ function ProfileModal({
               </Row>
             )}
             {dept && <Row icon="🎓" label="Studied">{dept}</Row>}
-            {a.admission_route && (
-              <Row icon="📝" label="Got in via">
-                {a.admission_route}
-                {a.admission_rank ? ` (Rank ${a.admission_rank})` : ''}
-                {a.board_marks ? ` (${a.board_marks}%)` : ''}
-                {a.board_cutoff ? ` (Cutoff ${a.board_cutoff})` : ''}
-              </Row>
-            )}
             {a.expected_finish_year && (
               <Row icon="📅" label="Expected to finish">{a.expected_finish_year}</Row>
             )}
@@ -772,14 +866,6 @@ function ProfileModal({
           </div>
         </div>
 
-        {/* Advice */}
-        {(a.message_1 || a.message_2) && (
-          <div className="a-modal__section">
-            <h4>Advice for juniors</h4>
-            {a.message_1 && <p className="a-modal__quote">{a.message_1}</p>}
-            {a.message_2 && <p className="a-modal__quote">{a.message_2}</p>}
-          </div>
-        )}
       </div>
     </div>
   );
