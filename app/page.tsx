@@ -1,9 +1,43 @@
-import Link from 'next/link';
-import { CATEGORIES } from '../lib/types';
-import ShowcaseSection from './ShowcaseSection';
-import HeroStats from './HeroStats';
+'use client';
 
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { Alumnus } from '../lib/types';
+import { fetchApprovedAlumni } from '../lib/publicData';
+import HeroStats from './HeroStats';
+import HomeGalleries from './HomeGalleries';
+
+/**
+ * Gallery-first landing page.
+ *
+ * No profiles here any more: the home page's job is to show a class-11 visitor
+ * the SHAPE of what exists - areas, exam routes, states, with honest counts -
+ * and hand them to the directory one tap later. (The old "Meet a few seniors"
+ * showcase moved out in round 3; profiles live in the directory.)
+ *
+ * One fetch feeds the stats strip and all three galleries.
+ */
 export default function Home() {
+  const router = useRouter();
+  const [rows, setRows] = useState<Alumnus[] | null>(null);
+  const [search, setSearch] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data } = await fetchApprovedAlumni();
+      if (!cancelled) setRows(data);
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  function submitSearch(e: React.FormEvent) {
+    e.preventDefault();
+    const q = search.trim();
+    router.push(q ? `/directory?q=${encodeURIComponent(q)}` : '/directory');
+  }
+
   return (
     <main className="container">
       <section className="hero fade-up">
@@ -13,11 +47,6 @@ export default function Home() {
           <br />
           <span className="hero__grad">and how they got there.</span>
         </h1>
-        {/* Written for the people this site is actually for: class 11-12
-            students and their parents. The old copy ended on "add your own
-            journey in under two minutes" - which addresses alumni, a group who
-            cannot use most of this page, and promised a form time the five-step
-            form was never going to keep. */}
         <p className="hero__sub">
           See which colleges seniors from your school got into, the exam or marks
           they got in with, and what they would tell you to do differently.
@@ -31,30 +60,27 @@ export default function Home() {
           </Link>
         </div>
 
-        <HeroStats />
+        {/* One search, straight into the directory: a college name, an exam,
+            a person, a state - the haystack matches all of them. */}
+        <form className="hero-search" onSubmit={submitSearch} role="search">
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Try “Anna University”, “NEET”, or a name…"
+            aria-label="Search the alumni directory"
+          />
+          <button type="submit" className="btn btn--neutral">
+            <span className="btn__inner">Search</span>
+          </button>
+        </form>
 
-        {/* These were decorative spans with cursor:default, sitting in the most
-            valuable slot on the page doing nothing. A student who taps
-            "Medicine" and lands on the two doctors is the whole product in one
-            gesture, so they are links now. */}
-        <div className="chips stagger" style={{ justifyContent: 'center', marginTop: 34, maxWidth: 620, marginInline: 'auto' }}>
-          {CATEGORIES.filter((c) => c.key !== 'other').map((c) => (
-            <Link
-              key={c.key}
-              href={`/directory?cat=${c.key}`}
-              className="chip chip--cat"
-              style={{ '--cat': c.accent } as React.CSSProperties}
-            >
-              <span className="chip__emoji">{c.emoji}</span>
-              {c.label}
-            </Link>
-          ))}
-        </div>
+        <HeroStats alumni={rows} />
 
         <div className="hero__glow" aria-hidden />
       </section>
 
-      <ShowcaseSection />
+      <HomeGalleries alumni={rows} />
     </main>
   );
 }

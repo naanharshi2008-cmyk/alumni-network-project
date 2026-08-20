@@ -1,8 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { fetchApprovedAlumni } from '../lib/publicData';
-import { collegeNameOf } from '../lib/types';
+import { useMemo } from 'react';
+import { Alumnus, collegeNameOf } from '../lib/types';
 import { EXAM_ROUTES } from '../lib/options';
 
 /**
@@ -13,33 +12,28 @@ import { EXAM_ROUTES } from '../lib/options';
  * honestly - a real number reads as "young and growing", where an unexplained
  * handful of cards reads as "abandoned".
  *
- * Renders nothing until there is something true to say, so the hero is never
- * pushed around by a loading state.
+ * Takes the alumni rows as a prop: the home page fetches once and shares the
+ * data with the galleries, instead of every hero component fetching for
+ * itself. Renders nothing until there is something true to say, so the hero
+ * is never pushed around by a loading state.
  */
-export default function HeroStats() {
-  const [stats, setStats] = useState<{ seniors: number; colleges: number; exams: number } | null>(null);
+export default function HeroStats({ alumni }: { alumni: Alumnus[] | null }) {
+  const stats = useMemo(() => {
+    if (!alumni || alumni.length === 0) return null;
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const { data } = await fetchApprovedAlumni();
-      if (cancelled || data.length === 0) return;
-
-      const colleges = new Set<string>();
-      const exams = new Set<string>();
-      for (const a of data) {
-        const college = collegeNameOf(a) ?? a.college_name_raw;
-        if (college) colleges.add(college.trim().toLowerCase());
-        // Only count actual entrance exams: "Board Marks" and "Merit / Direct"
-        // are routes, not exams, and counting them would overstate this.
-        if (a.admission_route && (EXAM_ROUTES as readonly string[]).includes(a.admission_route)) {
-          exams.add(a.admission_route);
-        }
+    const colleges = new Set<string>();
+    const exams = new Set<string>();
+    for (const a of alumni) {
+      const college = collegeNameOf(a) ?? a.college_name_raw;
+      if (college) colleges.add(college.trim().toLowerCase());
+      // Only count actual entrance exams: "Board Marks" and "Merit / Direct"
+      // are routes, not exams, and counting them would overstate this.
+      if (a.admission_route && (EXAM_ROUTES as readonly string[]).includes(a.admission_route)) {
+        exams.add(a.admission_route);
       }
-      setStats({ seniors: data.length, colleges: colleges.size, exams: exams.size });
-    })();
-    return () => { cancelled = true; };
-  }, []);
+    }
+    return { seniors: alumni.length, colleges: colleges.size, exams: exams.size };
+  }, [alumni]);
 
   if (!stats) return null;
 

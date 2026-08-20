@@ -91,6 +91,20 @@ export const EXAM_ROUTES = [
   'CLAT', 'NATA', 'NDA', 'CA / CS / CMA Foundation',
 ] as const;
 
+/**
+ * How an admission route reads on PUBLIC surfaces.
+ *
+ * The site never labels anyone "Management Quota": seat categories carry a
+ * stigma the school explicitly does not want attached to a student's name, so
+ * quota admissions display under the inclusive "Board Marks" umbrella. The
+ * decision is display-only - the stored data is unchanged, registration still
+ * collects the real route, and admin surfaces show the raw value.
+ */
+export function publicRouteLabel(route: string | null | undefined): string | null {
+  if (!route) return route ?? null;
+  return route === 'Management Quota' ? 'Board Marks' : route;
+}
+
 /** Every way someone can have got in, exams first. */
 export const ADMISSION_ROUTES = [
   ...EXAM_ROUTES,

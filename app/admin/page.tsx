@@ -1,10 +1,10 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../lib/supabaseClient';
 import EntitySearchField from '../../lib/EntitySearchField';
-import { toTitleCase } from '../../lib/text';
+import { toTitleCase, formatMonthYear } from '../../lib/text';
 import { officialSchoolName, BUILT_IN_OPTIONS, OPTION_CATEGORY_LABELS, OptionCategory } from '../../lib/options';
 import { CATEGORIES } from '../../lib/types';
 
@@ -45,6 +45,10 @@ type AlumniRow = {
   modification_status: string | null;
   pending_changes: Record<string, any> | null;
   created_at: string;
+  last_updated: string | null;
+  last_confirmed_at: string | null;
+  school_note: string | null;
+  college_thoughts: string | null;
 };
 
 type HigherStudyRow = {
@@ -59,7 +63,17 @@ type WorkExperienceRow = {
 
 type PendingOption = { id: number; category: string; value: string; created_at: string };
 
-type Tab = 'registrations' | 'edits' | 'options' | 'colleges' | 'companies';
+type CollegeInfoRow = {
+  id: string;
+  name: string;
+  state: string | null;
+  district: string | null;
+  banner_url: string | null;
+  description: string | null;
+  students: { id: string; full_name: string; class_of: number | null; school_note: string | null }[];
+};
+
+type Tab = 'registrations' | 'edits' | 'options' | 'colleges' | 'companies' | 'colleges_info';
 
 // Fields the profile editor may change, and how to label them in the diff.
 const FIELD_LABELS: Record<string, string> = {
@@ -69,7 +83,7 @@ const FIELD_LABELS: Record<string, string> = {
   designation: 'Designation', current_status: 'Status',
   expected_finish_year: 'Expected Finish', admission_route: 'Admission Route',
   admission_rank: 'Rank', board_marks: 'Board Marks', board_cutoff: 'Cutoff',
-  message_1: 'Advice', message_2: 'Advice (second)', linkedin_url: 'LinkedIn', photo_url: 'Photo',
+  message_1: 'Advice', message_2: 'Advice (second)', college_thoughts: 'College experience', linkedin_url: 'LinkedIn', photo_url: 'Photo',
 };
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -94,6 +108,9 @@ export default function AdminPage() {
   const [approvedOptions, setApprovedOptions] = useState<Record<string, string[]>>({});
   const [unmatchedColleges, setUnmatchedColleges] = useState<{ key: string; display: string; alumniIds: string[] }[]>([]);
   const [unmatchedCompanies, setUnmatchedCompanies] = useState<{ key: string; display: string; alumniIds: string[] }[]>([]);
+  // The "Colleges" tab: every matched college that has alumni, with its banner
+  // and description, plus the students there (for the school's per-alumnus note).
+  const [collegesInfo, setCollegesInfo] = useState<CollegeInfoRow[]>([]);
 
   // "New since you last looked" marker. Stored per-browser; the dashboard is
   // the only notification channel that works before email keys are configured.
@@ -168,6 +185,35 @@ export default function AdminPage() {
 
     setUnmatchedColleges(groupByTypedName((collegeRes.data as any[]) ?? [], 'college_name_raw'));
     setUnmatchedCompanies(groupByTypedName((companyRes.data as any[]) ?? [], 'currently_at'));
+
+    // Colleges tab: matched colleges + their students. Two small queries at
+    // this scale; authenticated can read colleges (the type-ahead relies on it).
+    const { data: linkRows } = await supabase
+      .from('alumni')
+      .select('id, full_name, class_of, school_note, college_id, approval_status')
+      .not('college_id', 'is', null);
+    const byCollege = new Map<string, CollegeInfoRow['students']>();
+    for (const r of (linkRows ?? []) as any[]) {
+      if (r.approval_status !== 'approved') continue;
+      const list = byCollege.get(r.college_id) ?? [];
+      list.push({ id: r.id, full_name: r.full_name, class_of: r.class_of, school_note: r.school_note });
+      byCollege.set(r.college_id, list);
+    }
+    if (byCollege.size > 0) {
+      const { data: collegeRows } = await supabase
+        .from('colleges')
+        .select('id, name, state, district, banner_url, description')
+        .in('id', [...byCollege.keys()])
+        .order('name');
+      setCollegesInfo(
+        ((collegeRows ?? []) as any[]).map((c) => ({
+          ...c,
+          students: (byCollege.get(c.id) ?? []).sort((a, b) => (b.class_of ?? 0) - (a.class_of ?? 0)),
+        })),
+      );
+    } else {
+      setCollegesInfo([]);
+    }
 
     // Timelines for everyone currently on screen.
     const allIds = [...((regRes.data as AlumniRow[]) ?? []), ...((editRes.data as AlumniRow[]) ?? [])].map((p) => p.id);
@@ -268,7 +314,10 @@ export default function AdminPage() {
     // Publish the staged values into the live columns the directory reads.
     const { higher_studies, work_experience, ...columns } = staged;
     const { error } = await supabase.from('alumni')
-      .update({ ...columns, modification_status: 'none', pending_changes: null })
+      // last_updated sits AFTER the spread on purpose: publishing is the
+      // moment the public content changes, so publish time always wins - even
+      // over anything a stale staged blob might carry.
+      .update({ ...columns, modification_status: 'none', pending_changes: null, last_updated: new Date().toISOString() })
       .eq('id', person.id);
     if (error) { setActionError('Could not approve edits: ' + error.message); return; }
 
@@ -383,6 +432,8 @@ export default function AdminPage() {
           label="🏫 Unmatched Colleges" count={unmatchedColleges.length} />
         <TabButton active={tab === 'companies'} onClick={() => setTab('companies')}
           label="🏢 Unmatched Companies" count={unmatchedCompanies.length} />
+        <TabButton active={tab === 'colleges_info'} onClick={() => setTab('colleges_info')}
+          label="🖼 Colleges" count={collegesInfo.length} />
       </div>
 
       {actionError && <div className="alert alert--error">{actionError}</div>}
@@ -550,6 +601,270 @@ export default function AdminPage() {
           )}
         </div>
       )}
+
+      {/* ===== Colleges: banners, descriptions, school notes ===== */}
+      {tab === 'colleges_info' && (
+        <div className="stagger">
+          <TabIntro title="Colleges our alumni attend">
+            Give each college a banner photo and a line about it — both show on the
+            public site. Under each college you can also write a short
+            &ldquo;Note from Veveaham&rdquo; about a student, shown on their profile.
+          </TabIntro>
+          {collegesInfo.length === 0 ? (
+            <EmptyCard emoji="🖼" text="No matched colleges yet — link some in the Unmatched Colleges tab first." />
+          ) : (
+            collegesInfo.map((c) => (
+              <CollegeInfoCard
+                key={c.id}
+                college={c}
+                onChanged={(patch) =>
+                  setCollegesInfo((prev) => prev.map((x) => (x.id === c.id ? { ...x, ...patch } : x)))
+                }
+                onNoteSaved={(studentId, note) =>
+                  setCollegesInfo((prev) => prev.map((x) =>
+                    x.id === c.id
+                      ? { ...x, students: x.students.map((st) => (st.id === studentId ? { ...st, school_note: note } : st)) }
+                      : x,
+                  ))
+                }
+                onError={setActionError}
+                onNote={setActionNote}
+              />
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * One college in the "Colleges" tab: banner upload/replace/remove, the
+ * admin-written description, and per-student "Note from Veveaham" fields.
+ *
+ * Banner and description go through the service-role API route - the only
+ * writer for those columns. The per-student note writes directly: the admin
+ * RLS policy on alumni covers it, and a plain single-column update cannot
+ * disturb the staged-edits flow.
+ */
+function CollegeInfoCard({
+  college, onChanged, onNoteSaved, onError, onNote,
+}: {
+  college: CollegeInfoRow;
+  onChanged: (patch: Partial<CollegeInfoRow>) => void;
+  onNoteSaved: (studentId: string, note: string | null) => void;
+  onError: (msg: string) => void;
+  onNote: (msg: string) => void;
+}) {
+  const [description, setDescription] = useState(college.description ?? '');
+  const [busy, setBusy] = useState(false);
+  const [showStudents, setShowStudents] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  async function authed(): Promise<string | null> {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) { onError('Your session expired, please sign in again.'); return null; }
+    return session.access_token;
+  }
+
+  // Downscale before upload: banners never need more than ~1600px, and the
+  // route (and Vercel itself) cap the body at 4MB.
+  async function shrink(file: File): Promise<Blob> {
+    if (file.size < 1.5 * 1024 * 1024) return file;
+    try {
+      const bmp = await createImageBitmap(file);
+      const scale = Math.min(1, 1600 / bmp.width);
+      if (scale === 1) return file;
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(bmp.width * scale);
+      canvas.height = Math.round(bmp.height * scale);
+      canvas.getContext('2d')!.drawImage(bmp, 0, 0, canvas.width, canvas.height);
+      const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, 'image/jpeg', 0.82));
+      return blob ?? file;
+    } catch {
+      return file; // downscaling is an optimisation, never a gate
+    }
+  }
+
+  async function upload(file: File) {
+    if (!file.type.startsWith('image/')) { onError('Banners must be JPG, PNG or WEBP images.'); return; }
+    const token = await authed();
+    if (!token) return;
+    setBusy(true);
+    try {
+      const body = await shrink(file);
+      if (body.size > 4 * 1024 * 1024) {
+        onError('That image is over 4MB even after shrinking — please use a smaller one.');
+        return;
+      }
+      const form = new FormData();
+      form.set('college_id', college.id);
+      form.set('file', body, file.name.replace(/\.[^.]+$/, '') + (body.type === 'image/jpeg' ? '.jpg' : ''));
+      const res = await fetch('/api/admin/college-banner', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: form,
+      });
+      const out = await res.json().catch(() => ({}));
+      if (!res.ok) { onError(out.error ?? 'Upload failed.'); return; }
+      onChanged({ banner_url: out.banner_url });
+      onNote(`Banner saved for ${college.name}.${out.warnings?.length ? ` Note: ${out.warnings.join('; ')}` : ''}`);
+    } finally {
+      setBusy(false);
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  }
+
+  async function removeBanner() {
+    const token = await authed();
+    if (!token) return;
+    setBusy(true);
+    try {
+      const res = await fetch('/api/admin/college-banner', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ college_id: college.id }),
+      });
+      const out = await res.json().catch(() => ({}));
+      if (!res.ok) { onError(out.error ?? 'Could not remove the banner.'); return; }
+      onChanged({ banner_url: null });
+      onNote(`Banner removed for ${college.name}.`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveDescription() {
+    const token = await authed();
+    if (!token) return;
+    setBusy(true);
+    try {
+      const form = new FormData();
+      form.set('college_id', college.id);
+      form.set('description', description);
+      const res = await fetch('/api/admin/college-banner', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: form,
+      });
+      const out = await res.json().catch(() => ({}));
+      if (!res.ok) { onError(out.error ?? 'Could not save the description.'); return; }
+      onChanged({ description: description.trim() || null });
+      onNote(`Description saved for ${college.name}.`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="card" style={{ marginBottom: 18, padding: '18px 22px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'baseline' }}>
+        <div>
+          <h3 style={{ margin: 0, fontSize: '1.02rem' }}>{college.name.split(',')[0]}</h3>
+          <p className="subtitle" style={{ margin: 0, fontSize: '0.8rem' }}>
+            {[college.district, college.state].filter(Boolean).join(', ') || '—'}
+            {' · '}{college.students.length} {college.students.length === 1 ? 'student' : 'students'}
+          </p>
+        </div>
+      </div>
+
+      {college.banner_url
+        ? <img src={college.banner_url} alt="" style={{ width: '100%', height: 84, objectFit: 'cover', borderRadius: 'var(--r-sm)', margin: '12px 0 10px' }} loading="lazy" />
+        : <p className="subtitle" style={{ fontSize: '0.82rem', margin: '12px 0 10px' }}>No banner yet.</p>}
+
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          disabled={busy}
+          onChange={(e) => { const f = e.target.files?.[0]; if (f) void upload(f); }}
+          style={{ fontSize: '0.82rem' }}
+        />
+        {college.banner_url && (
+          <ConfirmButton
+            label="🗑 Remove banner"
+            confirmLabel="Yes, remove it"
+            busyLabel="Removing…"
+            question={`Remove the banner for ${college.name.split(',')[0]}? The image disappears from every page that shows it.`}
+            onConfirm={removeBanner}
+            className="btn btn--ghost"
+          />
+        )}
+      </div>
+
+      <div className="field" style={{ marginTop: 14 }}>
+        <label>About this college <span className="opt">shown publicly</span></label>
+        <textarea
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          placeholder="A line or two about the college — what it's known for, campus, placements…"
+        />
+        <button type="button" className="btn btn--neutral" disabled={busy} onClick={saveDescription} style={{ marginTop: 8 }}>
+          <span className="btn__inner">{busy ? 'Saving…' : 'Save description'}</span>
+        </button>
+      </div>
+
+      <button
+        type="button"
+        className="btn btn--plain btn--plain-neutral"
+        style={{ width: '100%', marginTop: 12 }}
+        onClick={() => setShowStudents((v) => !v)}
+      >
+        {showStudents ? '▲ Hide students' : `▼ Notes for ${college.students.length} student(s) here`}
+      </button>
+
+      {showStudents && college.students.map((st) => (
+        <StudentNoteRow key={st.id} student={st} onSaved={onNoteSaved} onError={onError} onNote={onNote} />
+      ))}
+    </div>
+  );
+}
+
+/** One student's "Note from Veveaham" — a direct admin write to alumni.school_note. */
+function StudentNoteRow({
+  student, onSaved, onError, onNote,
+}: {
+  student: { id: string; full_name: string; class_of: number | null; school_note: string | null };
+  onSaved: (id: string, note: string | null) => void;
+  onError: (msg: string) => void;
+  onNote: (msg: string) => void;
+}) {
+  const [note, setNote] = useState(student.school_note ?? '');
+  const [busy, setBusy] = useState(false);
+
+  async function save() {
+    setBusy(true);
+    try {
+      const clean = note.trim() || null;
+      const { data, error } = await supabase
+        .from('alumni')
+        .update({ school_note: clean })
+        .eq('id', student.id)
+        .select('id');
+      if (error) { onError(`Could not save the note: ${error.message}`); return; }
+      if (!data || data.length === 0) { onError('The note did not save — please try again.'); return; }
+      onSaved(student.id, clean);
+      onNote(`Note saved for ${student.full_name}.`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--r-sm)', padding: '10px 12px', marginTop: 10 }}>
+      <p style={{ margin: '0 0 6px', fontSize: '0.88rem', fontWeight: 650 }}>
+        {student.full_name} <span style={{ color: 'var(--text-faint)', fontWeight: 400 }}>· Class of {student.class_of ?? '—'}</span>
+      </p>
+      <textarea
+        value={note}
+        onChange={(e) => setNote(e.target.value)}
+        placeholder="A proud line about them, in the school's voice — shown on their public profile."
+        style={{ minHeight: 56 }}
+      />
+      <button type="button" className="btn btn--ghost" disabled={busy} onClick={save} style={{ marginTop: 6 }}>
+        <span className="btn__inner">{busy ? 'Saving…' : 'Save note'}</span>
+      </button>
     </div>
   );
 }
@@ -604,6 +919,8 @@ function PersonHeader({ person, isNew }: { person: AlumniRow; isNew?: boolean })
           Class of {person.class_of} · {person.stream}
           {/* The one field the office can actually verify someone against. */}
           {person.admission_number && <> · Adm. no. <strong>{person.admission_number}</strong></>}
+          {person.last_updated && <> · Updated {formatMonthYear(person.last_updated)}</>}
+          {person.last_confirmed_at && <> · Confirmed {formatMonthYear(person.last_confirmed_at)}</>}
           {person.school_name && <> · {officialSchoolName(person.school_name)}</>}
         </p>
       </div>
