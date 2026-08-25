@@ -67,7 +67,7 @@ export const DEGREES = [
   // Science & computing
   'BSc', 'Integrated MSc', 'BCA',
   // Commerce & management
-  'BCom', 'BBA', 'CA', 'CS', 'CMA',
+  'BCom', 'BBA',
   // Arts, law, education & other
   'BA', 'BSW', 'BEd', 'LLB', 'BA LLB', 'BBA LLB', 'BHM', 'BVoc', 'Diploma',
   OTHER_OPTION,
@@ -104,6 +104,26 @@ export function publicRouteLabel(route: string | null | undefined): string | nul
   if (!route) return route ?? null;
   return route === 'Management Quota' ? 'Board Marks' : route;
 }
+
+/**
+ * Professional qualifications: CA, CS, CMA, ACCA.
+ *
+ * Deliberately NOT in DEGREES. These are not degrees and not colleges - you
+ * register with the institute and clear levels - and, importantly, they are
+ * ADDITIVE: many students read for CA alongside a (often distance) B.Com, and
+ * many do it on its own. So the profile carries them in their own columns and
+ * a person can have a degree, a professional course, both, or neither.
+ */
+export const PROFESSIONAL_COURSES = ['CA', 'CS', 'CMA', 'ACCA', OTHER_OPTION];
+
+/** How far along the qualification someone is. */
+export const PROFESSIONAL_STAGES = [
+  'Foundation',
+  'Intermediate',
+  'Articleship',
+  'Final',
+  'Qualified',
+];
 
 /** Every way someone can have got in, exams first. */
 export const ADMISSION_ROUTES = [
@@ -147,7 +167,7 @@ export const SCHOOL_BOARDS = ['State Board', 'CBSE', 'ICSE', 'Matriculation', OT
 export const COUNTRY_CODES = ['+91', '+1', '+44', '+61', '+971', '+65', '+49', '+33', '+81', '+86'];
 
 /** The `category` keys used in the `field_options` table. */
-export type OptionCategory = 'stream' | 'degree' | 'admission_route' | 'current_status' | 'field' | 'school_board';
+export type OptionCategory = 'stream' | 'degree' | 'admission_route' | 'current_status' | 'field' | 'school_board' | 'professional_course';
 
 /** Built-in defaults per category, for the admin "is this already known?" check. */
 export const BUILT_IN_OPTIONS: Record<OptionCategory, string[]> = {
@@ -156,6 +176,7 @@ export const BUILT_IN_OPTIONS: Record<OptionCategory, string[]> = {
   admission_route: ADMISSION_ROUTES,
   current_status: STATUSES,
   school_board: SCHOOL_BOARDS,
+  professional_course: PROFESSIONAL_COURSES,
   field: [], // filled from CATEGORIES in lib/types.ts to avoid a circular import
 };
 
@@ -167,6 +188,7 @@ export const OPTION_CATEGORY_LABELS: Record<OptionCategory, string> = {
   current_status: 'Current status',
   field: 'Broad field',
   school_board: 'School board',
+  professional_course: 'Professional course',
 };
 
 /**
