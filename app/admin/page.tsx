@@ -73,7 +73,7 @@ type CollegeInfoRow = {
   students: { id: string; full_name: string; class_of: number | null; school_note: string | null }[];
 };
 
-type Tab = 'registrations' | 'edits' | 'options' | 'colleges' | 'companies' | 'colleges_info';
+type Tab = 'registrations' | 'edits' | 'directory' | 'options' | 'colleges' | 'companies' | 'colleges_info';
 
 // Fields the profile editor may change, and how to label them in the diff.
 const FIELD_LABELS: Record<string, string> = {
@@ -103,6 +103,11 @@ export default function AdminPage() {
 
   const [pending, setPending] = useState<AlumniRow[]>([]);
   const [pendingEdits, setPendingEdits] = useState<AlumniRow[]>([]);
+  // Everyone already decided on. Without this the dashboard could only ever act
+  // on the review queue, so an approved profile - a duplicate, a test row, a
+  // person who asked to be taken down - could not be reached at all.
+  const [decided, setDecided] = useState<AlumniRow[]>([]);
+  const [decidedQuery, setDecidedQuery] = useState('');
   const [higherStudiesMap, setHigherStudiesMap] = useState<Record<string, HigherStudyRow[]>>({});
   const [workExperienceMap, setWorkExperienceMap] = useState<Record<string, WorkExperienceRow[]>>({});
   const [pendingOptions, setPendingOptions] = useState<PendingOption[]>([]);
@@ -163,9 +168,10 @@ export default function AdminPage() {
   /* ── Data loading ──────────────────────────────────────────────────────── */
   const loadAll = useCallback(async () => {
     setLoading(true);
-    const [regRes, editRes, optRes, collegeRes, companyRes] = await Promise.all([
+    const [regRes, editRes, decidedRes, optRes, collegeRes, companyRes] = await Promise.all([
       supabase.from('alumni').select('*').eq('approval_status', 'pending').order('created_at', { ascending: true }),
       supabase.from('alumni').select('*').eq('approval_status', 'approved').eq('modification_status', 'pending').order('created_at', { ascending: true }),
+      supabase.from('alumni').select('*').neq('approval_status', 'pending').order('full_name'),
       supabase.from('field_options').select('id, category, value, status, created_at').order('created_at', { ascending: true }),
       supabase.from('alumni').select('id, college_name_raw').is('college_id', null).not('college_name_raw', 'is', null),
       supabase.from('alumni').select('id, currently_at').is('organization_id', null).not('currently_at', 'is', null),
@@ -174,6 +180,9 @@ export default function AdminPage() {
     if (regRes.error) setActionError('Could not load registrations: ' + regRes.error.message);
     else setPending((regRes.data as AlumniRow[]) ?? []);
     setPendingEdits((editRes.data as AlumniRow[]) ?? []);
+
+    if (decidedRes.error) setActionError('Could not load the alumni list: ' + decidedRes.error.message);
+    else setDecided((decidedRes.data as AlumniRow[]) ?? []);
 
     // Split the options table into the review queue and the live lists.
     const opts = (optRes.data as (PendingOption & { status: string })[]) ?? [];
@@ -232,6 +241,17 @@ export default function AdminPage() {
     }
     setLoading(false);
   }, []);
+
+  // Name, username and college all searchable: the junk rows are easiest to
+  // find by the nonsense college someone typed, not by their name.
+  const decidedFiltered = useMemo(() => {
+    const q = decidedQuery.trim().toLowerCase();
+    if (!q) return decided;
+    return decided.filter((p) => [
+      p.full_name, p.username, p.college_name_raw, p.currently_at,
+      String(p.class_of ?? ''), p.approval_status,
+    ].filter(Boolean).join(' ').toLowerCase().includes(q));
+  }, [decided, decidedQuery]);
 
   const newSinceLastVisit = useMemo(() => {
     if (!lastVisit) return 0;
@@ -300,9 +320,30 @@ export default function AdminPage() {
     }
     setPending((prev) => prev.filter((p) => p.id !== person.id));
     setPendingEdits((prev) => prev.filter((p) => p.id !== person.id));
+    setDecided((prev) => prev.filter((p) => p.id !== person.id));
     setActionNote(
       `Deleted ${body.name ?? person.full_name}.` +
       (body.warnings?.length ? ` Note: ${body.warnings.join('; ')}.` : ''),
+    );
+  }
+
+  /* ── Directory actions (already-decided profiles) ──────────────────────── */
+  // Hiding is the reversible half of deleting: the profile leaves the public
+  // view immediately but the row, the photo and the login all survive, so a
+  // mistake costs a click rather than the person's whole record.
+  async function handleSetStatus(person: AlumniRow, status: 'approved' | 'rejected') {
+    setActionError('');
+    setActionNote('');
+    const { error } = await supabase.from('alumni')
+      .update({ approval_status: status })
+      .eq('id', person.id)
+      .select('id');
+    if (error) { setActionError('Could not update that profile: ' + error.message); return; }
+    setDecided((prev) => prev.map((p) => (p.id === person.id ? { ...p, approval_status: status } : p)));
+    setActionNote(
+      status === 'approved'
+        ? `${person.full_name} is back in the public directory.`
+        : `${person.full_name} is hidden from the public directory.`,
     );
   }
 
@@ -427,6 +468,8 @@ export default function AdminPage() {
           label="📋 New Registrations" count={pending.length} />
         <TabButton active={tab === 'edits'} onClick={() => setTab('edits')}
           label="✏️ Pending Edits" count={pendingEdits.length} />
+        <TabButton active={tab === 'directory'} onClick={() => setTab('directory')}
+          label="👥 All Alumni" count={decided.length} />
         <TabButton active={tab === 'options'} onClick={() => setTab('options')}
           label="🏷 Pending Options" count={totalPendingOptions} />
         <TabButton active={tab === 'colleges'} onClick={() => setTab('colleges')}
@@ -504,6 +547,70 @@ export default function AdminPage() {
                 </div>
               </div>
             ))}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ===== All alumni (everyone already decided on) ===== */}
+      {tab === 'directory' && (
+        <div>
+          <p className="subtitle" style={{ marginTop: 0 }}>
+            Everyone who has been approved or hidden. This is where to remove test
+            rows, duplicates and anyone who asks to be taken down.
+          </p>
+          <div className="search" style={{ marginBottom: 18 }}>
+            <input
+              type="text"
+              placeholder="Search name, username, college…"
+              value={decidedQuery}
+              onChange={(e) => setDecidedQuery(e.target.value)}
+              aria-label="Search alumni"
+            />
+          </div>
+
+          {decided.length === 0 ? (
+            <EmptyCard emoji="👥" text="No approved or hidden profiles yet." />
+          ) : decidedFiltered.length === 0 ? (
+            <EmptyCard emoji="🔍" text={`Nothing matches “${decidedQuery}”.`} />
+          ) : (
+            <>
+              <p className="result-count" style={{ marginBottom: 14 }}>
+                {decidedFiltered.length === decided.length
+                  ? `${decided.length} profiles`
+                  : `${decidedFiltered.length} of ${decided.length} profiles`}
+              </p>
+              {decidedFiltered.map((person) => (
+                <div key={person.id} className="card" style={{ marginBottom: 14 }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
+                    <div style={{ flex: '1 1 260px', minWidth: 0 }}>
+                      <strong>{person.full_name}</strong>{' '}
+                      <span className={`badge badge--sm${person.approval_status === 'approved' ? ' badge--ok' : ''}`}>
+                        {person.approval_status === 'approved' ? 'In the directory' : 'Hidden'}
+                      </span>
+                      <div className="subtitle" style={{ margin: '4px 0 0', fontSize: '0.84rem' }}>
+                        {person.username ? `@${person.username}` : 'no login'}
+                        {person.class_of ? ` · Class of ${person.class_of}` : ''}
+                        {person.college_name_raw ? ` · ${person.college_name_raw}` : ''}
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                      {person.approval_status === 'approved' ? (
+                        <button type="button" className="btn btn--ghost"
+                          onClick={() => handleSetStatus(person, 'rejected')}>
+                          <span className="btn__inner">Hide</span>
+                        </button>
+                      ) : (
+                        <button type="button" className="btn btn--ghost"
+                          onClick={() => handleSetStatus(person, 'approved')}>
+                          <span className="btn__inner">Restore</span>
+                        </button>
+                      )}
+                      <DeleteButton person={person} onDelete={handleDelete} />
+                    </div>
+                  </div>
+                </div>
+              ))}
             </>
           )}
         </div>

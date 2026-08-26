@@ -1,5 +1,11 @@
 import { NextResponse } from 'next/server';
-import { getAdminClient, requireAdmin, storagePathFromPublicUrl } from '../../../../lib/supabaseAdmin';
+import {
+  getAdminClient,
+  requireAdmin,
+  storagePathFromPublicUrl,
+  isServiceKeyProblem,
+  SERVICE_KEY_MESSAGE,
+} from '../../../../lib/supabaseAdmin';
 
 // Permanently remove an alumni record.
 //
@@ -42,6 +48,12 @@ export async function POST(request: Request) {
     .maybeSingle();
 
   if (readErr) {
+    // Distinguished from a genuine read failure: a bad service key answers here
+    // first, and "Could not read the profile: Invalid API key" tells an admin
+    // nothing they can act on.
+    if (isServiceKeyProblem(readErr)) {
+      return NextResponse.json({ error: SERVICE_KEY_MESSAGE }, { status: 503 });
+    }
     return NextResponse.json({ error: `Could not read the profile: ${readErr.message}` }, { status: 500 });
   }
   if (!person) {
@@ -61,6 +73,9 @@ export async function POST(request: Request) {
   //    via ON DELETE CASCADE on their alumni_id foreign key.
   const { error: delErr } = await admin.from('alumni').delete().eq('id', id);
   if (delErr) {
+    if (isServiceKeyProblem(delErr)) {
+      return NextResponse.json({ error: SERVICE_KEY_MESSAGE }, { status: 503 });
+    }
     return NextResponse.json({ error: `Could not delete the profile: ${delErr.message}` }, { status: 500 });
   }
 
