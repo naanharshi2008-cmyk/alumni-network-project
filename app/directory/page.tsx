@@ -9,7 +9,6 @@ import { formatRankBand, formatMarksBand, formatRankSpan, formatMonthYear } from
 import {
   Alumnus,
   CATEGORIES,
-  CategoryKey,
   CollegeDetails,
   HigherStudy,
   WorkExperience,
@@ -17,13 +16,13 @@ import {
   collegeNameOf,
   collegeDetailsOf,
   initialsOf,
+  professionalLabel,
   sortHigherStudies,
   sortWorkExperience,
   yearRange,
 } from '../../lib/types';
 
 type EnrichedAlumnus = { a: Alumnus; cat: ReturnType<typeof categorize> };
-type DirectoryTab = 'directory' | 'explorer';
 type Timelines = { studies: Record<string, HigherStudy[]>; work: Record<string, WorkExperience[]> };
 
 /* ── Batch/year grouping helpers ─────────────────────────────────────────── */
@@ -89,6 +88,112 @@ function buildExplorerColleges(items: EnrichedAlumnus[]): ExplorerCollege[] {
   );
 }
 
+/* ── Filters and lenses ──────────────────────────────────────────────────
+   One set of alumni, sliced four ways.
+
+   The directory used to offer a single dimension (study area) plus a separate
+   College Explorer tab with its own search and its own mental model. A
+   question as ordinary as "engineering seniors from 2024 who took TNEA" could
+   not be asked. So filters are now combinable and the tabs became LENSES over
+   the same filtered set - the Explorer is the College lens, not another page.
+
+   State is deliberately NOT a dimension: it is known for only 5 of 19 rows
+   (most matched colleges carry no state), so it would hide more than it
+   reveals. It stays searchable through the haystack instead.
+─────────────────────────────────────────────────────────────────────────── */
+type Lens = 'batch' | 'college' | 'route' | 'area';
+type FilterKey = 'cat' | 'batch' | 'route' | 'status';
+type Filters = Record<FilterKey, string>;
+
+const LENSES: { key: Lens; label: string; emoji: string }[] = [
+  { key: 'batch', label: 'Batch', emoji: '🎓' },
+  { key: 'college', label: 'College', emoji: '🏛️' },
+  { key: 'route', label: 'How they got in', emoji: '📝' },
+  { key: 'area', label: 'Area', emoji: '🧭' },
+];
+
+const FILTER_KEYS: FilterKey[] = ['cat', 'batch', 'route', 'status'];
+const FILTER_LABELS: Record<FilterKey, string> = {
+  cat: 'Area', batch: 'Batch', route: 'How they got in', status: 'Doing now',
+};
+const NO_FILTERS: Filters = { cat: '', batch: '', route: '', status: '' };
+
+// The value each alumnus takes on a filter dimension. '' means "not recorded",
+// which is never offered as a filter option - you cannot usefully ask for the
+// people whose route nobody wrote down.
+function facetValue({ a, cat }: EnrichedAlumnus, key: FilterKey): string {
+  switch (key) {
+    case 'cat': return cat.key;
+    case 'batch': return a.class_of ? String(a.class_of) : '';
+    case 'route': return publicRouteLabel(a.admission_route) ?? '';
+    case 'status': return a.current_status ?? '';
+  }
+}
+
+// `except` is what makes the counts honest: when counting the options of one
+// dimension, that dimension's own selection must be ignored, or every
+// unselected option would read 0.
+function matchesFilters(item: EnrichedAlumnus, filters: Filters, except?: FilterKey): boolean {
+  for (const key of FILTER_KEYS) {
+    if (key === except) continue;
+    if (filters[key] && facetValue(item, key) !== filters[key]) return false;
+  }
+  return true;
+}
+
+// Everything a student might type. Routes go through their PUBLIC label so
+// quota wording stays unfindable, and the college state is included so the
+// home page's "Where they studied" cards land on real results.
+function haystack(a: Alumnus): string {
+  return [
+    a.full_name, collegeNameOf(a), a.college_name_raw, a.degree, a.branch,
+    a.field, a.currently_at, a.designation, a.stream, officialSchoolName(a.school_name),
+    a.professional_course, a.professional_stage,
+    publicRouteLabel(a.admission_route), a.admission_rank,
+    collegeDetailsOf(a)?.state,
+    String(a.class_of ?? ''),
+  ].filter(Boolean).join(' ').toLowerCase();
+}
+
+function catLabel(key: string): string {
+  const c = CATEGORIES.find((x) => x.key === key);
+  return c ? `${c.emoji} ${c.label}` : key;
+}
+
+function optionLabel(key: FilterKey, value: string): string {
+  return key === 'cat' ? catLabel(value) : value;
+}
+
+type Group = { key: string; title: string; count: number; items: EnrichedAlumnus[] };
+
+// Batch has its own two-level rendering (year, then school), so it is absent
+// here and handled directly in the render.
+function groupByLens(items: EnrichedAlumnus[], lens: Lens): Group[] {
+  const map = new Map<string, EnrichedAlumnus[]>();
+  for (const item of items) {
+    const key = lens === 'area' ? item.cat.key : (publicRouteLabel(item.a.admission_route) ?? '');
+    const bucket = map.get(key);
+    if (bucket) bucket.push(item);
+    else map.set(key, [item]);
+  }
+  return [...map.entries()]
+    .map(([key, list]) => ({
+      key: key || 'unknown',
+      title: key
+        ? (lens === 'area' ? catLabel(key) : key)
+        : (lens === 'area' ? 'Area not recorded' : 'Route not recorded'),
+      count: list.length,
+      items: list,
+    }))
+    // Biggest groups first, but a "not recorded" bucket always sinks: it is
+    // the least useful thing a visiting student could open.
+    .sort((x, y) => {
+      const xUnknown = x.key === 'unknown' ? 1 : 0;
+      const yUnknown = y.key === 'unknown' ? 1 : 0;
+      return xUnknown - yUnknown || y.count - x.count || x.title.localeCompare(y.title);
+    });
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    Main page component
 ═══════════════════════════════════════════════════════════════════════════ */
@@ -96,14 +201,10 @@ export default function DirectoryPage() {
   const [rows, setRows] = useState<Alumnus[] | null>(null);
   const [error, setError] = useState('');
   const [query, setQuery] = useState('');
-  const [active, setActive] = useState<CategoryKey | 'all'>('all');
+  const [filters, setFilters] = useState<Filters>(NO_FILTERS);
+  const [lens, setLens] = useState<Lens>('batch');
   const [expanded, setExpanded] = useState<EnrichedAlumnus | null>(null);
-  const [activeTab, setActiveTab] = useState<DirectoryTab>('directory');
   const [timelines, setTimelines] = useState<Timelines>({ studies: {}, work: {} });
-
-  // College Explorer filters
-  const [explorerState, setExplorerState] = useState('');
-  const [explorerQuery, setExplorerQuery] = useState('');
   // Username from a shared ?p= link, held until the fetch resolves it.
   const [pendingProfileParam, setPendingProfileParam] = useState<string | null>(null);
 
@@ -112,10 +213,17 @@ export default function DirectoryPage() {
   // this statically-rendered page into a Suspense boundary for no gain.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+    const next = { ...NO_FILTERS };
     const cat = params.get('cat');
-    if (cat && CATEGORIES.some((c) => c.key === cat)) {
-      setActive(cat as CategoryKey);
+    if (cat && CATEGORIES.some((c) => c.key === cat)) next.cat = cat;
+    // A filtered view is worth sharing, so every dimension round-trips.
+    for (const key of ['batch', 'route', 'status'] as const) {
+      const v = params.get(key);
+      if (v) next[key] = v;
     }
+    setFilters(next);
+    const l = params.get('lens');
+    if (l && LENSES.some((x) => x.key === l)) setLens(l as Lens);
     // ?q= pre-fills the search box - the home galleries and hero search land here.
     const q = params.get('q');
     if (q) setQuery(q);
@@ -146,37 +254,89 @@ export default function DirectoryPage() {
     [rows],
   );
 
-  const chips = useMemo(() => {
-    const counts = new Map<CategoryKey, number>();
-    for (const { cat } of enriched) counts.set(cat.key, (counts.get(cat.key) ?? 0) + 1);
-    return enriched
-      .map(({ cat }) => cat)
-      .filter((c, i, arr) => arr.findIndex((x) => x.key === c.key) === i)
-      .sort((a, b) => (counts.get(b.key) ?? 0) - (counts.get(a.key) ?? 0))
-      .map((c) => ({ ...c, count: counts.get(c.key) ?? 0 }));
-  }, [enriched]);
-
-  const filtered = useMemo(() => {
+  // Searched but not yet filtered - the base every facet count is measured
+  // against, so typing in the search box updates the numbers too.
+  const searched = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return enriched.filter(({ a, cat }) => {
-      if (active !== 'all' && cat.key !== active) return false;
-      if (!q) return true;
-      const hay = [
-        a.full_name, collegeNameOf(a), a.college_name_raw, a.degree, a.branch,
-        a.field, a.currently_at, a.designation, a.stream, officialSchoolName(a.school_name),
-        // Searching "NEET" or "TNEA" is how a student actually looks for a path.
-        // The route goes through its PUBLIC label so quota wording stays
-        // unfindable, and the college state makes the home "Where they
-        // studied" cards land on real results.
-        publicRouteLabel(a.admission_route), a.admission_rank,
-        collegeDetailsOf(a)?.state,
-        String(a.class_of ?? ''),
-      ].filter(Boolean).join(' ').toLowerCase();
-      return hay.includes(q);
-    });
-  }, [enriched, active, query]);
+    if (!q) return enriched;
+    return enriched.filter(({ a }) => haystack(a).includes(q));
+  }, [enriched, query]);
+
+  const filtered = useMemo(
+    () => searched.filter((item) => matchesFilters(item, filters)),
+    [searched, filters],
+  );
+
+  // Every option's count, measured against the OTHER active filters. That is
+  // what guarantees the promise of the bar: no option shown can lead to an
+  // empty page, because an option only appears when at least one alumnus
+  // survives picking it.
+  const facets = useMemo(() => {
+    const out = {} as Record<FilterKey, { value: string; label: string; count: number }[]>;
+    for (const key of FILTER_KEYS) {
+      const counts = new Map<string, number>();
+      for (const item of searched) {
+        if (!matchesFilters(item, filters, key)) continue;
+        const v = facetValue(item, key);
+        if (!v) continue;
+        counts.set(v, (counts.get(v) ?? 0) + 1);
+      }
+      out[key] = [...counts.entries()]
+        .map(([value, count]) => ({ value, label: optionLabel(key, value), count }))
+        // Batches read as a calendar, newest first; everything else by weight.
+        .sort((x, y) => (key === 'batch'
+          ? Number(y.value) - Number(x.value)
+          : y.count - x.count || x.label.localeCompare(y.label)));
+    }
+    return out;
+  }, [searched, filters]);
+
+  const activeFilters = useMemo(
+    () => FILTER_KEYS.filter((k) => filters[k]).map((k) => ({ key: k, value: filters[k] })),
+    [filters],
+  );
 
   const grouped = useMemo(() => groupByYear(filtered), [filtered]);
+  const lensGroups = useMemo(
+    () => (lens === 'area' || lens === 'route' ? groupByLens(filtered, lens) : []),
+    [filtered, lens],
+  );
+
+  // The College lens is built from the FILTERED set, so filters compose with
+  // it: "medicine + 2024" narrows the colleges shown, it does not reset them.
+  const explorerColleges = useMemo(() => buildExplorerColleges(filtered), [filtered]);
+  const withoutCollege = useMemo(
+    () => filtered.filter(({ a }) => !(collegeNameOf(a) ?? a.college_name_raw)).length,
+    [filtered],
+  );
+
+  // Mirror the filters into the URL so a slice is shareable ("look at the
+  // 2024 medicine seniors"). replaceState, not pushState: Back should close a
+  // profile or leave the page, not rewind six filter clicks one at a time.
+  // Skipped on the first pass, which still holds the pre-read defaults.
+  const urlReady = useRef(false);
+  useEffect(() => {
+    if (!urlReady.current) { urlReady.current = true; return; }
+    const url = new URL(window.location.href);
+    for (const key of FILTER_KEYS) {
+      const param = key === 'cat' ? 'cat' : key;
+      if (filters[key]) url.searchParams.set(param, filters[key]);
+      else url.searchParams.delete(param);
+    }
+    if (query.trim()) url.searchParams.set('q', query.trim());
+    else url.searchParams.delete('q');
+    if (lens !== 'batch') url.searchParams.set('lens', lens);
+    else url.searchParams.delete('lens');
+    window.history.replaceState(window.history.state, '', url);
+  }, [filters, query, lens]);
+
+  // Re-keys the card grids so the stagger animation replays when the visible
+  // set changes, rather than only on first mount.
+  const filterSignature = `${query}|${FILTER_KEYS.map((k) => filters[k]).join('|')}`;
+
+  function setFilter(key: FilterKey, value: string) {
+    setFilters((prev) => ({ ...prev, [key]: value }));
+  }
 
   // Open a shared profile once data exists. Misses are ignored silently - a
   // stale link should never error, just land on the directory.
@@ -220,222 +380,188 @@ export default function DirectoryPage() {
 
 
 
-  /* ── College Explorer computations ──────────────────────────────────── */
-  const explorerColleges = useMemo(() => buildExplorerColleges(enriched), [enriched]);
-
-  const states = useMemo(() => {
-    const s = new Set<string>();
-    for (const c of explorerColleges) if (c.details?.state) s.add(c.details.state);
-    return Array.from(s).sort();
-  }, [explorerColleges]);
-
-  // Only offer the state filter once it can actually represent the list. It is
-  // derived from matched colleges only, so while most entries are unmatched it
-  // hides more than it reveals - and would omit the home state entirely.
-  const stateFilterUseful = useMemo(() => {
-    if (explorerColleges.length === 0) return false;
-    const withState = explorerColleges.filter((c) => c.details?.state).length;
-    return states.length >= 3 && withState / explorerColleges.length >= 0.6;
-  }, [explorerColleges, states]);
-
-  const filteredColleges = useMemo(() => {
-    const q = explorerQuery.trim().toLowerCase();
-    return explorerColleges.filter((c) => {
-      if (explorerState && c.details?.state !== explorerState) return false;
-      if (!q) return true;
-      return (
-        c.name.toLowerCase().includes(q) ||
-        (c.details?.district ?? '').toLowerCase().includes(q) ||
-        (c.details?.state ?? '').toLowerCase().includes(q)
-      );
-    });
-  }, [explorerColleges, explorerState, explorerQuery]);
-
   /* ──────────────────────────────────────────────────────────────────── */
+  const total = enriched.length;
+  const showing = filtered.length;
+
   return (
     <main className="container">
       <div className="fade-up">
         <h1>Alumni Network</h1>
         <p className="subtitle">
-          Real paths taken by Veveaham seniors — browse the directory, or open the
-          College Explorer to see exactly where they got in and how.
+          Real paths taken by Veveaham seniors — where they got in, how they got
+          in, and what they are doing now.
         </p>
       </div>
 
-      {/* Main tab switcher */}
-      <div className="chips fade-up" style={{ animationDelay: '0.04s', marginBottom: 8 }}>
-        <button
-          className={`chip${activeTab === 'directory' ? ' chip--active' : ''}`}
-          onClick={() => setActiveTab('directory')}
-        >
-          🎓 Alumni Directory
-        </button>
-        <button
-          className={`chip${activeTab === 'explorer' ? ' chip--active' : ''}`}
-          onClick={() => setActiveTab('explorer')}
-        >
-          🔭 College Explorer
-          <span className="chip__sub">where seniors got in</span>
-        </button>
-      </div>
+      {/* One sticky bar carries everything: search, the four combinable
+          filters, what is currently on, and how to switch it off. It stays
+          reachable because a student who scrolls to Class of 2019 and then
+          wants only medicine should not have to scroll back up. */}
+      <div className="filter-bar fade-up" style={{ animationDelay: '0.04s' }}>
+        <div className="search">
+          <SearchIcon />
+          <input
+            type="text"
+            placeholder="Search name, college, exam, company…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            aria-label="Search alumni"
+          />
+        </div>
 
-      {/* ═══════ DIRECTORY TAB ═══════ */}
-      {activeTab === 'directory' && (
-        <>
-          <div className="toolbar fade-up" style={{ animationDelay: '0.05s' }}>
-            <div className="search">
-              <SearchIcon />
-              <input
-                type="text"
-                placeholder="Search name, college, branch, company…"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                aria-label="Search alumni"
-              />
-            </div>
+        <div className="filter-row">
+          {FILTER_KEYS.map((key) => (
+            <FilterSelect
+              key={key}
+              name={FILTER_LABELS[key]}
+              value={filters[key]}
+              options={facets[key]}
+              onChange={(v) => setFilter(key, v)}
+            />
+          ))}
+        </div>
 
-            {chips.length > 0 && (
-              <div className="chips">
-                <button
-                  className={`chip${active === 'all' ? ' chip--active' : ''}`}
-                  onClick={() => setActive('all')}
-                >
-                  🌐 All <span style={{ opacity: 0.7 }}>{enriched.length}</span>
-                </button>
-                {chips.map((c) => (
-                  <button
-                    key={c.key}
-                    className={`chip chip--cat${active === c.key ? ' chip--active' : ''}`}
-                    style={{ '--cat': c.accent } as React.CSSProperties}
-                    onClick={() => setActive(active === c.key ? 'all' : c.key)}
-                  >
-                    <span className="chip__emoji">{c.emoji}</span>
-                    {c.label} <span style={{ opacity: 0.7 }}>{c.count}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+        <div className="lens-switch" role="group" aria-label="Group alumni by">
+          <span className="lens-switch__label">Group by</span>
+          {LENSES.map((l) => (
+            <button
+              key={l.key}
+              type="button"
+              className={`lens-btn${lens === l.key ? ' lens-btn--active' : ''}`}
+              aria-pressed={lens === l.key}
+              onClick={() => setLens(l.key)}
+            >
+              <span aria-hidden>{l.emoji}</span> {l.label}
+            </button>
+          ))}
+        </div>
 
-          {rows === null ? (
-            <div className="grid">
-              {Array.from({ length: 6 }).map((_, i) => <div key={i} className="skeleton" />)}
-            </div>
-          ) : !isSupabaseConfigured ? (
-            <NotConfigured />
-          ) : error ? (
-            <div className="alert alert--error">Couldn&apos;t load alumni: {error}</div>
-          ) : filtered.length === 0 ? (
-            <Empty hasData={enriched.length > 0} />
-          ) : (
-            <>
-              <p className="result-count" style={{ marginBottom: 14 }}>
-                Showing {filtered.length} {filtered.length === 1 ? 'alum' : 'alumni'}
-              </p>
-
-              {Array.from(grouped.entries()).map(([year, items]) => (
-                <div key={year ?? 'unknown'} style={{ marginBottom: 40 }}>
-                  <div className="year-head">
-                    <h2 className="year-head__title">Class of {year ?? 'Unknown'}</h2>
-                    <div className="year-head__rule" />
-                    <span className="year-head__count">{items.length} alumni</span>
-                  </div>
-
-                  {groupBySchool(items).map(([school, schoolItems]) => (
-                    <div key={school} style={{ marginBottom: 24 }}>
-                      <h3 className="school-head">
-                        🏫 {school}
-                        <span className="school-head__count">{schoolItems.length}</span>
-                      </h3>
-                      <div className="grid stagger" key={`${year}|${school}|${active}|${query}`}>
-                        {schoolItems.map((item, i) => (
-                          <Card
-                            key={item.a.id ?? `${item.a.full_name}-${i}`}
-                            item={item}
-                            onExpand={() => setExpanded(item)}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ))}
-            </>
-          )}
-        </>
-      )}
-
-      {/* ═══════ COLLEGE EXPLORER TAB ═══════ */}
-      {activeTab === 'explorer' && (
-        <div className="fade-up">
-          <div className="explorer-intro">
-            <h2>🔭 Where our seniors got in</h2>
-            <p className="subtitle" style={{ margin: 0, fontSize: '0.95rem' }}>
-              Every college on this list has at least one Veveaham alumnus. Open one to
-              see who went there, the rank or marks they got in with, and their advice.
-            </p>
-          </div>
-
-          <div className="toolbar" style={{ marginBottom: 20 }}>
-            <div className="search">
-              <SearchIcon />
-              <input
-                type="text"
-                placeholder="Search college, district or state…"
-                value={explorerQuery}
-                onChange={(e) => setExplorerQuery(e.target.value)}
-                aria-label="Search colleges"
-              />
-            </div>
-            {stateFilterUseful && (
-              <div className="chips" style={{ flexWrap: 'wrap' }}>
-                <button
-                  className={`chip${explorerState === '' ? ' chip--active' : ''}`}
-                  onClick={() => setExplorerState('')}
-                >
-                  All states
-                </button>
-                {states.map((s) => (
-                  <button
-                    key={s}
-                    className={`chip${explorerState === s ? ' chip--active' : ''}`}
-                    onClick={() => setExplorerState(explorerState === s ? '' : s)}
-                  >
-                    {s}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {rows === null ? (
-            <div className="grid">
-              {Array.from({ length: 3 }).map((_, i) => <div key={i} className="skeleton" />)}
-            </div>
-          ) : filteredColleges.length === 0 ? (
-            <div className="empty">
-              <span className="empty__emoji">🏫</span>
-              <h2>{explorerColleges.length === 0 ? 'No colleges yet' : 'No colleges found'}</h2>
-              <p>
-                {explorerColleges.length === 0
-                  ? 'Once alumni are approved, the colleges they attended appear here.'
-                  : 'Try clearing the filters or searching a different name.'}
-              </p>
-            </div>
-          ) : (
-            <>
-              <p className="result-count" style={{ marginBottom: 14 }}>
-                {filteredColleges.length} {filteredColleges.length === 1 ? 'college' : 'colleges'} where
-                Veveaham seniors study or studied
-              </p>
-              <div className="stagger">
-                {filteredColleges.map((college) => (
-                  <CollegeExplorerCard key={college.key} college={college} timelines={timelines} />
-                ))}
-              </div>
-            </>
+        <div className="filter-status">
+          <span className="result-count">
+            {showing === total
+              ? `${total} ${total === 1 ? 'alum' : 'alumni'}`
+              : `${showing} of ${total} alumni`}
+          </span>
+          {activeFilters.map(({ key, value }) => (
+            <button
+              key={key}
+              type="button"
+              className="filter-pill"
+              onClick={() => setFilter(key, '')}
+              aria-label={`Remove filter ${FILTER_LABELS[key]}: ${optionLabel(key, value)}`}
+            >
+              {optionLabel(key, value)} <span aria-hidden>✕</span>
+            </button>
+          ))}
+          {(activeFilters.length > 0 || query) && (
+            <button
+              type="button"
+              className="btn btn--plain btn--plain-neutral filter-clear"
+              onClick={() => { setFilters(NO_FILTERS); setQuery(''); }}
+            >
+              Clear all
+            </button>
           )}
         </div>
+      </div>
+
+      {rows === null ? (
+        <div className="grid">
+          {Array.from({ length: 6 }).map((_, i) => <div key={i} className="skeleton" />)}
+        </div>
+      ) : !isSupabaseConfigured ? (
+        <NotConfigured />
+      ) : error ? (
+        <div className="alert alert--error">Couldn&apos;t load alumni: {error}</div>
+      ) : filtered.length === 0 ? (
+        <Empty hasData={total > 0} />
+      ) : lens === 'batch' ? (
+        Array.from(grouped.entries()).map(([year, items]) => (
+          <div key={year ?? 'unknown'} style={{ marginBottom: 40 }}>
+            <div className="year-head">
+              <h2 className="year-head__title">Class of {year ?? 'Unknown'}</h2>
+              <div className="year-head__rule" />
+              <span className="year-head__count">{items.length} alumni</span>
+            </div>
+
+            {groupBySchool(items).map(([school, schoolItems]) => (
+              <div key={school} style={{ marginBottom: 24 }}>
+                <h3 className="school-head">
+                  🏫 {school}
+                  <span className="school-head__count">{schoolItems.length}</span>
+                </h3>
+                <div className="grid stagger" key={`${year}|${school}|${filterSignature}`}>
+                  {schoolItems.map((item, i) => (
+                    <Card
+                      key={item.a.id ?? `${item.a.full_name}-${i}`}
+                      item={item}
+                      onExpand={() => setExpanded(item)}
+                    />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        ))
+      ) : lens === 'college' ? (
+        <>
+          <div className="stagger">
+            {explorerColleges.map((college) => (
+              <CollegeExplorerCard
+                key={college.key}
+                college={college}
+                timelines={timelines}
+                onOpen={(a) => {
+                  const hit = filtered.find((x) => x.a.id === a.id);
+                  if (hit) setExpanded(hit);
+                }}
+              />
+            ))}
+          </div>
+          {/* Said plainly rather than silently dropping them: someone reading
+              for CA has no college, and a count that quietly shrinks would
+              make the directory look like it lost people. */}
+          {withoutCollege > 0 && (
+            <p className="lens-note">
+              {withoutCollege} {withoutCollege === 1 ? 'alumnus is' : 'alumni are'} not at a
+              college — they appear under{' '}
+              <button type="button" className="link-btn" onClick={() => setLens('batch')}>
+                Batch
+              </button>{' '}
+              and{' '}
+              <button type="button" className="link-btn" onClick={() => setLens('route')}>
+                How they got in
+              </button>.
+            </p>
+          )}
+          {explorerColleges.length === 0 && (
+            <div className="empty">
+              <span className="empty__emoji">🏫</span>
+              <h2>No colleges in this slice</h2>
+              <p>Everyone matching these filters took a non-college path. Try the Batch lens.</p>
+            </div>
+          )}
+        </>
+      ) : (
+        lensGroups.map((g) => (
+          <div key={g.key} style={{ marginBottom: 36 }}>
+            <div className="group-head">
+              <h2 className="group-head__title">{g.title}</h2>
+              <div className="year-head__rule" />
+              <span className="year-head__count">{g.count} {g.count === 1 ? 'alum' : 'alumni'}</span>
+            </div>
+            <div className="grid stagger" key={`${g.key}|${filterSignature}`}>
+              {g.items.map((item, i) => (
+                <Card
+                  key={item.a.id ?? `${item.a.full_name}-${i}`}
+                  item={item}
+                  onExpand={() => setExpanded(item)}
+                />
+              ))}
+            </div>
+          </div>
+        ))
       )}
 
       {expanded && (
@@ -450,14 +576,48 @@ export default function DirectoryPage() {
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
+   Filter dropdown
+
+   A native <select> on purpose. It is one tab stop, it is a thumb-friendly
+   wheel on iOS, it never traps focus, and it needs no popover code - all of
+   which a hand-rolled menu would have had to earn back. The count rides in
+   the option text, which is where it is read anyway.
+───────────────────────────────────────────────────────────────────────── */
+function FilterSelect({
+  name, value, options, onChange,
+}: {
+  name: string;
+  value: string;
+  options: { value: string; label: string; count: number }[];
+  onChange: (v: string) => void;
+}) {
+  // Nothing to choose between - one option is the whole set.
+  if (options.length < 2 && !value) return null;
+  const id = `filter-${name.replace(/\s+/g, '-').toLowerCase()}`;
+  return (
+    <div className={`filter-select${value ? ' filter-select--on' : ''}`}>
+      <label className="filter-select__label" htmlFor={id}>{name}</label>
+      <select id={id} value={value} onChange={(e) => onChange(e.target.value)}>
+        <option value="">Any</option>
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>{o.label} ({o.count})</option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
    College Explorer Card
 ───────────────────────────────────────────────────────────────────────── */
 function CollegeExplorerCard({
   college,
   timelines,
+  onOpen,
 }: {
   college: ExplorerCollege;
   timelines: Timelines;
+  onOpen: (a: Alumnus) => void;
 }) {
   const [showSeniors, setShowSeniors] = useState(false);
   const det = college.details;
@@ -558,7 +718,7 @@ function CollegeExplorerCard({
         {showSeniors && (
           <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
             {college.seniors.map((a, i) => (
-              <SeniorMiniCard key={a.id ?? i} a={a} timelines={timelines} />
+              <SeniorMiniCard key={a.id ?? i} a={a} timelines={timelines} onOpen={() => onOpen(a)} />
             ))}
           </div>
         )}
@@ -596,7 +756,7 @@ function AdmissionBadges({ a, showStatus = false }: { a: Alumnus; showStatus?: b
   );
 }
 
-function SeniorMiniCard({ a, timelines }: { a: Alumnus; timelines: Timelines }) {
+function SeniorMiniCard({ a, timelines, onOpen }: { a: Alumnus; timelines: Timelines; onOpen?: () => void }) {
   const studies = a.id ? sortHigherStudies(timelines.studies[a.id] ?? []) : [];
   const work = a.id ? sortWorkExperience(timelines.work[a.id] ?? []) : [];
 
@@ -612,6 +772,7 @@ function SeniorMiniCard({ a, timelines }: { a: Alumnus; timelines: Timelines }) 
             Class of {a.class_of ?? '–'}
             {a.degree ? ` · ${a.degree}` : ''}
             {a.branch ? ` in ${a.branch}` : ''}
+            {professionalLabel(a) ? ` · ${professionalLabel(a)}` : ''}
           </div>
         </div>
         {a.linkedin_url && (
@@ -644,6 +805,14 @@ function SeniorMiniCard({ a, timelines }: { a: Alumnus; timelines: Timelines }) 
       {a.college_thoughts
         ? <p className="senior-mini__quote">&ldquo;{a.college_thoughts}&rdquo;</p>
         : a.message_1 && <p className="senior-mini__quote">&ldquo;{a.message_1}&rdquo;</p>}
+
+      {/* The College lens used to be a dead end: you could read the mini-card
+          but not reach the full profile without switching lens and hunting. */}
+      {onOpen && (
+        <button type="button" className="link-btn senior-mini__more" onClick={onOpen}>
+          View full profile →
+        </button>
+      )}
     </div>
   );
 }
@@ -657,6 +826,7 @@ function Card({ item, onExpand }: { item: EnrichedAlumnus; onExpand: () => void 
   const collegeDet = collegeDetailsOf(a);
   const dept = [a.degree, a.branch].filter(Boolean).join(' · ');
   const now = [a.currently_at, a.designation].filter(Boolean).join(' · ');
+  const prof = professionalLabel(a);
   const showImg = a.show_photo && a.photo_url;
 
   return (
@@ -673,9 +843,14 @@ function Card({ item, onExpand }: { item: EnrichedAlumnus; onExpand: () => void 
         </div>
       </div>
 
-      <span className="badge" style={{ marginBottom: 10, display: 'inline-flex' }}>
-        <span>{cat.emoji}</span> {cat.label}
-      </span>
+      <div className="badge-row">
+        <span className="badge">
+          <span>{cat.emoji}</span> {cat.label}
+        </span>
+        {/* Sits alongside the degree rather than replacing it: someone reading
+            for CA next to a B.Com should show both. */}
+        {prof && <span className="badge badge--prof">📜 {prof}</span>}
+      </div>
 
       {/* The whole point of the directory for a class-11 visitor. It was
           previously two clicks deep, in the modal. */}
@@ -867,6 +1042,9 @@ function ProfileModal({
               </Row>
             )}
             {dept && <Row icon="🎓" label="Studied">{dept}</Row>}
+            {professionalLabel(a) && (
+              <Row icon="📜" label={a.degree ? 'Also pursuing' : 'Pursuing'}>{professionalLabel(a)}</Row>
+            )}
             {a.expected_finish_year && (
               <Row icon="📅" label="Expected to finish">{a.expected_finish_year}</Row>
             )}

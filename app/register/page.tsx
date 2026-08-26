@@ -8,6 +8,7 @@ import { fetchApprovedOptions, proposeOption } from '../../lib/publicData';
 import {
   SCHOOLS, STREAMS, DEGREES, ADMISSION_ROUTES, STATUSES, SCHOOL_BOARDS,
   COUNTRY_CODES, OTHER_OPTION, isInProgressStatus, mergeOptions, resolveValue,
+  PROFESSIONAL_COURSES, PROFESSIONAL_STAGES,
 } from '../../lib/options';
 import { CATEGORIES } from '../../lib/types';
 
@@ -26,9 +27,13 @@ interface FormState {
   stream_other: string;
   field: string;
   field_other: string;
+  joined_college: 'yes' | 'no' | 'not_yet';
   college_name: string;
   degree: string;
   degree_other: string;
+  professional_course: string;
+  professional_course_other: string;
+  professional_stage: string;
   branch: string;
   admission_route: string;
   admission_route_other: string;
@@ -59,7 +64,8 @@ const initialForm: FormState = {
   username: '', password_val: '',
   full_name: '', school_name: '', school_board: '', school_board_other: '',
   class_of: '', stream: '', stream_other: '',
-  field: '', field_other: '', college_name: '', degree: '', degree_other: '', branch: '',
+  field: '', field_other: '', joined_college: 'yes', college_name: '', degree: '', degree_other: '', branch: '',
+  professional_course: '', professional_course_other: '', professional_stage: '',
   admission_route: '', admission_route_other: '', admission_rank: '', board_marks: '', board_cutoff: '',
   current_status: '', current_status_other: '', expected_finish_year: '',
   currently_at: '', designation: '',
@@ -123,10 +129,21 @@ function validateField(key: FieldKey, form: FormState): string {
       if (form.field === OTHER_OPTION && !val(form.field_other)) return 'Type your area of study.';
       return '';
     case 'college_name':
+      // Only required of people who actually joined a college. A CA student
+      // has no college to name, and the old required field forced them to
+      // invent one.
+      if (form.joined_college !== 'yes') return '';
       return val(form.college_name) ? '' : 'Which college did you join?';
     case 'degree':
+      if (form.joined_college !== 'yes') return '';
       if (!val(form.degree)) return 'Pick your degree.';
       if (form.degree === OTHER_OPTION && !val(form.degree_other)) return 'Type your degree.';
+      return '';
+    case 'professional_course':
+      // Optional throughout; only the "Other" free-text needs a value.
+      if (form.professional_course === OTHER_OPTION && !val(form.professional_course_other)) {
+        return 'Type which qualification.';
+      }
       return '';
     case 'admission_route':
       if (!val(form.admission_route)) return 'How did you get in?';
@@ -172,7 +189,7 @@ function validateField(key: FieldKey, form: FormState): string {
 const STEP_FIELDS: FieldKey[][] = [
   ['username', 'password_val'],
   ['full_name', 'school_name', 'class_of', 'stream'],
-  ['field', 'college_name', 'degree', 'admission_route', 'admission_rank', 'board_marks'],
+  ['field', 'college_name', 'degree', 'professional_course', 'admission_route', 'admission_rank', 'board_marks'],
   ['current_status', 'personal_email', 'phone_number', 'linkedin_url'],
   [],
 ];
@@ -241,6 +258,7 @@ export default function RegisterPage() {
 
   const streamOptions = useMemo(() => mergeOptions(STREAMS, tagOptions.stream), [tagOptions]);
   const degreeOptions = useMemo(() => mergeOptions(DEGREES, tagOptions.degree), [tagOptions]);
+  const professionalOptions = useMemo(() => mergeOptions(PROFESSIONAL_COURSES, tagOptions.professional_course), [tagOptions]);
   const routeOptions = useMemo(() => mergeOptions(ADMISSION_ROUTES, tagOptions.admission_route), [tagOptions]);
   const statusOptions = useMemo(() => mergeOptions(STATUSES, tagOptions.current_status), [tagOptions]);
   const fieldOptions = useMemo(() => mergeOptions([...CATEGORIES.map((c) => c.label)], tagOptions.field), [tagOptions]);
@@ -458,6 +476,8 @@ export default function RegisterPage() {
         linkedin_url: cleanFreeText(form.linkedin_url),
         college_id: collegeId,
         college_name_raw: typedCollege,
+        professional_course: resolveValue(form.professional_course, form.professional_course_other) || null,
+        professional_stage: form.professional_course ? (form.professional_stage || null) : null,
         degree: finalDegree || null,
         branch: cleanProperNoun(form.branch),
         field: finalField || null,
@@ -564,7 +584,7 @@ export default function RegisterPage() {
           <div key={step} className="fade-up">
             {step === 0 && <StepAccount {...stepProps} usernameState={usernameState} checkUsername={checkUsername} />}
             {step === 1 && <StepSchool {...stepProps} streamOptions={streamOptions} />}
-            {step === 2 && <StepStudies {...stepProps} fieldOptions={fieldOptions} degreeOptions={degreeOptions} routeOptions={routeOptions} />}
+            {step === 2 && <StepStudies {...stepProps} fieldOptions={fieldOptions} degreeOptions={degreeOptions} routeOptions={routeOptions} professionalOptions={professionalOptions} />}
             {step === 3 && (
               <StepNow
                 {...stepProps}
@@ -696,8 +716,8 @@ function StepSchool({ form, update, markTouched, errorFor, isValid, streamOption
 }
 
 function StepStudies({
-  form, update, markTouched, errorFor, isValid, fieldOptions, degreeOptions, routeOptions,
-}: StepProps & { fieldOptions: string[]; degreeOptions: string[]; routeOptions: string[] }) {
+  form, update, markTouched, errorFor, isValid, fieldOptions, degreeOptions, routeOptions, professionalOptions,
+}: StepProps & { fieldOptions: string[]; degreeOptions: string[]; routeOptions: string[]; professionalOptions: string[] }) {
   const route = resolveValue(form.admission_route, form.admission_route_other);
   const usesBoardMarks = form.admission_route === 'Board Marks';
   const skipsRank = ['Merit / Direct', 'Management Quota', 'Sports Quota', OTHER_OPTION, ''].includes(form.admission_route);
@@ -711,31 +731,75 @@ function StepStudies({
         error={errorFor('field')}
       />
 
-      <div onBlur={() => markTouched('college_name')}>
-        <EntitySearchField
-          table="colleges" label="College / University" required
-          hint="start typing — we'll search every college in India"
-          value={form.college_name}
-          onChange={(v) => update('college_name', v)}
-          searchShortNames
-          invalid={!!errorFor('college_name')}
+      {/* Asked before the college fields, because the honest answer for a CA
+          student is "no" - and the old form had no way to say that, forcing
+          them to invent a college name to get past validation. */}
+      <div className="field">
+        <label>After 12th, did you join a college?</label>
+        <Chips
+          options={['Yes', 'Not yet', 'No']}
+          value={form.joined_college === 'yes' ? 'Yes' : form.joined_college === 'not_yet' ? 'Not yet' : 'No'}
+          onChange={(v) => update('joined_college', v === 'Yes' ? 'yes' : v === 'Not yet' ? 'not_yet' : 'no')}
         />
       </div>
-      {errorFor('college_name') && <p className="field__error">{errorFor('college_name')}</p>}
 
-      <SelectWithOther
-        label="Degree" required options={degreeOptions}
-        value={form.degree} onChange={(v) => { update('degree', v); markTouched('degree'); }}
-        otherValue={form.degree_other} onOtherChange={(v) => update('degree_other', v)}
-        error={errorFor('degree')}
-      />
+      {form.joined_college === 'yes' && (
+        <>
+          <div onBlur={() => markTouched('college_name')}>
+            <EntitySearchField
+              table="colleges" label="College / University" required
+              hint="start typing — we'll search every college in India"
+              value={form.college_name}
+              onChange={(v) => update('college_name', v)}
+              searchShortNames
+              invalid={!!errorFor('college_name')}
+            />
+          </div>
+          {errorFor('college_name') && <p className="field__error">{errorFor('college_name')}</p>}
 
-      <Field
-        label="Branch / Department" optional
-        hint="e.g. Computer Science"
-        value={form.branch} onChange={(v) => update('branch', v)}
-        onBlur={() => markTouched('branch')} error="" valid={false}
-      />
+          <SelectWithOther
+            label="Degree" required options={degreeOptions}
+            value={form.degree} onChange={(v) => { update('degree', v); markTouched('degree'); }}
+            otherValue={form.degree_other} onOtherChange={(v) => update('degree_other', v)}
+            error={errorFor('degree')}
+          />
+
+          <Field
+            label="Branch / Department" optional
+            hint="e.g. Computer Science"
+            value={form.branch} onChange={(v) => update('branch', v)}
+            onBlur={() => markTouched('branch')} error="" valid={false}
+          />
+        </>
+      )}
+
+      {/* Always shown, whichever way the question above was answered: plenty of
+          people read for CA alongside a degree, and plenty do it instead of
+          one. Presenting it as an either/or would misrepresent both. */}
+      <div className="opt-section opt-section--static">
+        <div className="opt-section__body">
+          <p className="opt-section__title">Doing CA, CS, CMA or ACCA? <span className="opt">optional</span></p>
+          <p className="opt-section__caption" style={{ marginBottom: 12 }}>
+            Many people do this alongside a degree, and many do it on its own — either way it belongs here.
+          </p>
+        <SelectWithOther
+          label="Qualification" optional options={professionalOptions}
+          value={form.professional_course}
+          onChange={(v) => { update('professional_course', v); markTouched('professional_course'); }}
+          otherValue={form.professional_course_other}
+          onOtherChange={(v) => update('professional_course_other', v)}
+          error={errorFor('professional_course')}
+        />
+        {form.professional_course && (
+          <SelectField
+            label="How far along?" value={form.professional_stage}
+            onChange={(v) => update('professional_stage', v)}
+            options={PROFESSIONAL_STAGES}
+            placeholder="Select stage"
+          />
+        )}
+        </div>
+      </div>
 
       <SelectWithOther
         label="How did you get in?" required options={routeOptions}
@@ -1069,13 +1133,15 @@ function Field({
   );
 }
 
-function SelectField({ label, value, onChange, options }: {
+function SelectField({ label, value, onChange, options, placeholder }: {
   label: string; value: string; onChange: (v: string) => void; options: string[];
+  placeholder?: string;
 }) {
   const id = `f-${label.replace(/\s+/g, '-').toLowerCase()}`;
   return (
     <div className="f-field f-field--active">
       <select id={id} value={value} onChange={(e) => onChange(e.target.value)}>
+        {placeholder && <option value="">{placeholder}</option>}
         {options.map((o) => <option key={o} value={o}>{o}</option>)}
       </select>
       <label htmlFor={id}>{label}</label>

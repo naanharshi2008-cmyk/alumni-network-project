@@ -9,6 +9,7 @@ import { fetchApprovedOptions, fetchOrganizationNames, proposeOption } from '../
 import {
   SCHOOLS, STREAMS, DEGREES, ADMISSION_ROUTES, STATUSES, SCHOOL_BOARDS,
   COUNTRY_CODES, OTHER_OPTION, LEGACY_STREAM_MAP, officialSchoolName,
+  PROFESSIONAL_COURSES, PROFESSIONAL_STAGES,
   isInProgressStatus, mergeOptions, splitStoredValue, resolveValue,
 } from '../../lib/options';
 import { CATEGORIES } from '../../lib/types';
@@ -29,6 +30,8 @@ interface AlumnusData {
   college_name: string;
   college_id: string | null;
   degree: string;
+  professional_course: string;
+  professional_stage: string;
   branch: string;
   field: string;
   admission_route: string;
@@ -87,6 +90,8 @@ function normalizeProfile(raw: any): AlumnusData {
     college_name: raw.colleges?.name || str(raw.college_name_raw),
     college_id: raw.college_id ?? null,
     degree: str(raw.degree),
+    professional_course: str(raw.professional_course),
+    professional_stage: str(raw.professional_stage),
     branch: str(raw.branch),
     field: str(raw.field),
     admission_route: str(raw.admission_route),
@@ -127,7 +132,7 @@ export default function ProfilePage() {
   // Free-typed "Other" values, kept beside the dropdown selection. The old
   // editor had no such box: choosing "Other" stored the literal word "Other"
   // and wiped whatever the person had actually written.
-  const [others, setOthers] = useState({ stream: '', degree: '', admission_route: '', current_status: '', field: '', school_board: '' });
+  const [others, setOthers] = useState({ stream: '', degree: '', admission_route: '', current_status: '', field: '', school_board: '', professional_course: '' });
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -158,6 +163,7 @@ export default function ProfilePage() {
       setOthers({
         stream: splitStoredValue(merged.stream, STREAMS, LEGACY_STREAM_MAP).other,
         degree: splitStoredValue(merged.degree, DEGREES).other,
+        professional_course: splitStoredValue(merged.professional_course, PROFESSIONAL_COURSES).other,
         admission_route: splitStoredValue(merged.admission_route, ADMISSION_ROUTES).other,
         current_status: splitStoredValue(merged.current_status, STATUSES).other,
         field: splitStoredValue(merged.field, CATEGORIES.map((c) => c.label)).other,
@@ -217,6 +223,7 @@ export default function ProfilePage() {
 
   const streamOptions = useMemo(() => mergeOptions(STREAMS, tagOptions.stream), [tagOptions]);
   const degreeOptions = useMemo(() => mergeOptions(DEGREES, tagOptions.degree), [tagOptions]);
+  const professionalOptions = useMemo(() => mergeOptions(PROFESSIONAL_COURSES, tagOptions.professional_course), [tagOptions]);
   const routeOptions = useMemo(() => mergeOptions(ADMISSION_ROUTES, tagOptions.admission_route), [tagOptions]);
   const statusOptions = useMemo(() => mergeOptions(STATUSES, tagOptions.current_status), [tagOptions]);
   const fieldOptions = useMemo(
@@ -237,6 +244,7 @@ export default function ProfilePage() {
       // Resolve every "Other" selection back to the value we actually store.
       const finalStream = resolveValue(profile.stream, others.stream);
       const finalDegree = resolveValue(profile.degree, others.degree);
+      const finalProfessional = resolveValue(profile.professional_course, others.professional_course);
       const finalRoute = resolveValue(profile.admission_route, others.admission_route);
       const finalStatus = resolveValue(profile.current_status, others.current_status);
       const finalField = resolveValue(profile.field, others.field);
@@ -291,6 +299,8 @@ export default function ProfilePage() {
         college_id: collegeId,
         college_name_raw: typedCollege,
         degree: finalDegree || null,
+        professional_course: finalProfessional || null,
+        professional_stage: finalProfessional ? (profile.professional_stage || null) : null,
         branch: cleanProperNoun(profile.branch),
         field: finalField || null,
         admission_route: finalRoute || null,
@@ -436,6 +446,7 @@ export default function ProfilePage() {
 
   const streamSel = splitStoredValue(profile.stream, streamOptions, LEGACY_STREAM_MAP).selected;
   const degreeSel = splitStoredValue(profile.degree, degreeOptions).selected;
+  const professionalSel = splitStoredValue(profile.professional_course, professionalOptions).selected;
   const routeSel = splitStoredValue(profile.admission_route, routeOptions).selected;
   const statusSel = splitStoredValue(profile.current_status, statusOptions).selected;
   const fieldSel = splitStoredValue(profile.field, fieldOptions).selected;
@@ -532,24 +543,39 @@ export default function ProfilePage() {
             required
           />
 
+          {/* Not marked required here: someone reading for CA has no college
+              and no degree, and a star next to an unfillable field just reads
+              as an error they cannot clear. */}
           <EntitySearchField
             table="colleges"
             label="College / University"
-            hint="start typing to search"
+            hint="leave blank if you didn't join one"
             value={profile.college_name}
             onChange={(v) => updateField('college_name', v)}
             searchShortNames
-            required
           />
 
           <SelectWithOther
             label="Degree" options={degreeOptions} value={degreeSel}
             onChange={(v) => updateField('degree', v)}
             otherValue={others.degree} onOtherChange={(v) => updateOther('degree', v)}
-            required
           />
 
           <FloatingField label="Branch / Department" hint="optional" value={profile.branch} onChange={(v) => updateField('branch', v)} />
+
+          <SelectWithOther
+            label="Professional qualification" options={professionalOptions} value={professionalSel}
+            onChange={(v) => updateField('professional_course', v)}
+            otherValue={others.professional_course} onOtherChange={(v) => updateOther('professional_course', v)}
+          />
+          {professionalSel && (
+            <SelectField
+              label="How far along?" value={profile.professional_stage}
+              onChange={(v) => updateField('professional_stage', v)}
+              options={PROFESSIONAL_STAGES}
+              placeholder="Select stage"
+            />
+          )}
 
           <SelectWithOther
             label="How you got in" options={routeOptions} value={routeSel}
@@ -751,6 +777,24 @@ function FloatingSelect({ label, value, onChange, options }: {
 }
 
 /** A dropdown that reveals a "please specify" box when "Other" is chosen. */
+function SelectField({ label, value, onChange, options, placeholder }: {
+  label: string; value: string; onChange: (v: string) => void; options: string[];
+  placeholder?: string;
+}) {
+  const id = `f-${label.replace(/\s+/g, '-').toLowerCase()}`;
+  return (
+    <div className="field">
+      <div className="f-field f-field--active">
+        <select id={id} value={value} onChange={(e) => onChange(e.target.value)}>
+          {placeholder && <option value="">{placeholder}</option>}
+          {options.map((o) => <option key={o} value={o}>{o}</option>)}
+        </select>
+        <label htmlFor={id}>{label}</label>
+      </div>
+    </div>
+  );
+}
+
 function SelectWithOther({
   label, options, value, onChange, otherValue, onOtherChange, required,
 }: {

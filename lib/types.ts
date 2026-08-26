@@ -141,6 +141,10 @@ export interface Alumnus {
   school_note: string | null;
   /** The alumnus's own words about their college experience. */
   college_thoughts: string | null;
+  /** CA / CS / CMA / ACCA - coexists with a degree rather than replacing it. */
+  professional_course: string | null;
+  /** Foundation, Intermediate, Articleship, Final, Qualified. */
+  professional_stage: string | null;
   admission_route: string | null;
   admission_rank: string | null;
   board_marks: string | null;
@@ -214,6 +218,20 @@ export function collegeDetailsOf(a: Alumnus): CollegeDetails | null {
 }
 
 /** Initials for the avatar fallback. */
+/**
+ * "CA · Intermediate", or just "CA" when the stage is unknown.
+ *
+ * Deliberately independent of degree: a row can carry both, and a student
+ * reading for CA alongside a B.Com should see both, not one standing in for
+ * the other.
+ */
+export function professionalLabel(a: Alumnus): string | null {
+  const course = (a.professional_course || '').trim();
+  if (!course) return null;
+  const stage = (a.professional_stage || '').trim();
+  return stage ? `${course} · ${stage}` : course;
+}
+
 export function initialsOf(name: string): string {
   return name
     .trim()
