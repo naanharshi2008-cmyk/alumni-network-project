@@ -265,10 +265,17 @@ export default function AdminPage() {
     // Note: we deliberately no longer copy the whole row into original_data.
     // That snapshot included personal_email and phone_number, and original_data
     // was readable through the same public path as the rest of the profile.
-    const { error } = await supabase.from('alumni')
+    // .select() is what turns "the statement ran" into "a row actually
+    // changed". Without it PostgREST answers success with zero rows affected
+    // whenever a row is filtered out, and the card below disappears from the
+    // queue either way - so the dashboard would report an approval that never
+    // happened, and only a page reload would give it away.
+    const { data: hit, error } = await supabase.from('alumni')
       .update({ approval_status: 'approved', modification_status: 'none' })
-      .eq('id', id);
+      .eq('id', id)
+      .select('id');
     if (error) { setActionError('Could not approve: ' + error.message); return; }
+    if (!hit?.length) { setActionError('Nothing was approved — that profile may have been changed or removed. Reload and try again.'); return; }
     const person = pending.find((p) => p.id === id);
     setActionNote(`Approved ${person?.full_name ?? 'that registration'} — they're live on the directory now.`);
     setPending((prev) => prev.filter((p) => p.id !== id));
@@ -282,12 +289,19 @@ export default function AdminPage() {
     setBulkBusy(true);
     // One statement rather than a loop: a partial batch is worse than an
     // obvious failure, and the admin needs to know exactly what happened.
-    const { error } = await supabase.from('alumni')
+    const { data: hits, error } = await supabase.from('alumni')
       .update({ approval_status: 'approved', modification_status: 'none' })
-      .in('id', ids);
+      .in('id', ids)
+      .select('id');
     setBulkBusy(false);
     if (error) { setActionError('Could not approve the selected people: ' + error.message); return; }
-    setActionNote(`Approved ${ids.length} ${ids.length === 1 ? 'person' : 'people'} — they're live on the directory now.`);
+    // A partial batch is worth saying out loud rather than rounding up.
+    const done = hits?.length ?? 0;
+    if (done === 0) { setActionError('Nothing was approved — reload and try again.'); return; }
+    if (done < ids.length) {
+      setActionError(`Only ${done} of ${ids.length} were approved. Reload to see which are still waiting.`);
+    }
+    setActionNote(`Approved ${done} ${done === 1 ? 'person' : 'people'} — they're live on the directory now.`);
     setPending((prev) => prev.filter((p) => !selected.has(p.id)));
     setSelected(new Set());
   }
@@ -295,10 +309,12 @@ export default function AdminPage() {
   async function handleReject(id: string, reason: string) {
     setActionError('');
     const person = pending.find((p) => p.id === id);
-    const { error } = await supabase.from('alumni')
+    const { data: hit, error } = await supabase.from('alumni')
       .update({ approval_status: 'rejected', rejection_reason: reason.trim() || null })
-      .eq('id', id);
+      .eq('id', id)
+      .select('id');
     if (error) { setActionError('Could not reject: ' + error.message); return; }
+    if (!hit?.length) { setActionError('Nothing was rejected — reload and try again.'); return; }
     setActionNote(`Rejected ${person?.full_name ?? 'that registration'}.`);
     setPending((prev) => prev.filter((p) => p.id !== id));
   }
@@ -356,13 +372,15 @@ export default function AdminPage() {
 
     // Publish the staged values into the live columns the directory reads.
     const { higher_studies, work_experience, ...columns } = staged;
-    const { error } = await supabase.from('alumni')
+    const { data: published, error } = await supabase.from('alumni')
       // last_updated sits AFTER the spread on purpose: publishing is the
       // moment the public content changes, so publish time always wins - even
       // over anything a stale staged blob might carry.
       .update({ ...columns, modification_status: 'none', pending_changes: null, last_updated: new Date().toISOString() })
-      .eq('id', person.id);
+      .eq('id', person.id)
+      .select('id');
     if (error) { setActionError('Could not approve edits: ' + error.message); return; }
+    if (!published?.length) { setActionError('Nothing was published — reload and try again.'); return; }
 
     // Timelines are stored whole, so replace rather than merge.
     //
@@ -402,10 +420,12 @@ export default function AdminPage() {
     setActionError('');
     // The live columns were never touched, so discarding is just clearing the
     // staging area - no restore step and nothing for the public to notice.
-    const { error } = await supabase.from('alumni')
+    const { data: hit, error } = await supabase.from('alumni')
       .update({ modification_status: 'rejected', pending_changes: null })
-      .eq('id', id);
+      .eq('id', id)
+      .select('id');
     if (error) { setActionError('Could not discard the edits: ' + error.message); return; }
+    if (!hit?.length) { setActionError('Nothing was discarded — reload and try again.'); return; }
     setPendingEdits((prev) => prev.filter((p) => p.id !== id));
   }
 
@@ -1415,11 +1435,13 @@ function PendingOptionRow({
     try {
       // Fix the spelling on the profiles that already carry the raw value.
       if (finalValue !== option.value) await rewriteProfiles(option.value, finalValue);
-      const { error } = await supabase
+      const { data: approved, error } = await supabase
         .from('field_options')
         .update({ value: finalValue, status: 'approved', canonical_value: finalValue })
-        .eq('id', option.id);
+        .eq('id', option.id)
+        .select('id');
       if (error) throw error;
+      if (!approved?.length) throw new Error('the option row was not updated — reload and try again');
       onApprovedValue(option.category, finalValue);
       onResolved(option.id);
     } catch (e: any) {
@@ -1574,11 +1596,13 @@ function UnmatchedEntityRow({
         entityId = data.id;
       }
 
-      const { error: updateError } = await supabase
+      const { data: linked, error: updateError } = await supabase
         .from('alumni')
         .update({ [linkColumn]: entityId, [nameColumn]: finalName })
-        .in('id', alumniIds);
+        .in('id', alumniIds)
+        .select('id');
       if (updateError) throw updateError;
+      if (!linked?.length) throw new Error('no profiles were linked — reload and try again');
 
       onResolved(groupKey);
     } catch (e: any) {
