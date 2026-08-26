@@ -13,6 +13,7 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 /** True when the deployment has been given a service role key. */
 export const isAdminConfigured = Boolean(supabaseUrl && serviceRoleKey);
@@ -37,26 +38,62 @@ export function isAdminEmail(email: string | null | undefined): boolean {
 }
 
 /**
+ * A Supabase error caused by the SERVER's own credentials rather than the
+ * caller's. Worth naming, because the two look identical from the outside: an
+ * invalid service role key makes every privileged call answer 401, which reads
+ * exactly like an expired login.
+ */
+export function isServiceKeyProblem(error: { message?: string } | null | undefined): boolean {
+  return /invalid api key/i.test(error?.message ?? '');
+}
+
+/** What to tell an admin when the deployment's own key is the problem. */
+export const SERVICE_KEY_MESSAGE =
+  "The site's Supabase service key is missing or invalid, so admin actions cannot run. " +
+  'An administrator needs to set SUPABASE_SERVICE_ROLE_KEY in Vercel (Project → Settings → ' +
+  'Environment Variables) to the service_role key from Supabase → Project Settings → API keys, ' +
+  'then redeploy.';
+
+/**
  * Verify the caller of an API route is a signed-in admin.
  *
  * The browser sends its Supabase access token; we ask Supabase who it belongs
  * to and check the address. Trusting a client-supplied "I am an admin" flag
  * would be no protection at all, since anyone can craft that request.
+ *
+ * The token is checked with the PUBLIC anon key on purpose. Validating a JWT
+ * needs no privilege, and doing it with the service role meant that a wrong
+ * SUPABASE_SERVICE_ROLE_KEY reported "Session is invalid or expired" - blaming
+ * the admin's login for a server misconfiguration and sending them off to sign
+ * in again, over and over, with nothing to fix at their end. Now a bad server
+ * key is reported as a server key problem.
  */
 export async function requireAdmin(
   request: Request,
 ): Promise<{ ok: true; email: string } | { ok: false; status: number; message: string }> {
-  const admin = getAdminClient();
-  if (!admin) {
+  if (!supabaseUrl || !anonKey) {
     return { ok: false, status: 503, message: 'Server is not configured for admin actions yet.' };
+  }
+  if (!serviceRoleKey) {
+    return { ok: false, status: 503, message: SERVICE_KEY_MESSAGE };
   }
 
   const header = request.headers.get('authorization') ?? '';
   const token = header.toLowerCase().startsWith('bearer ') ? header.slice(7).trim() : '';
   if (!token) return { ok: false, status: 401, message: 'Not signed in.' };
 
-  const { data, error } = await admin.auth.getUser(token);
-  if (error || !data?.user) return { ok: false, status: 401, message: 'Session is invalid or expired.' };
+  const publicClient = createClient(supabaseUrl, anonKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+  const { data, error } = await publicClient.auth.getUser(token);
+  if (error || !data?.user) {
+    // The anon key is the one the browser itself uses, so if THIS call blames
+    // the API key the deployment's public config is broken, not the login.
+    if (isServiceKeyProblem(error)) {
+      return { ok: false, status: 503, message: 'Server is not configured for admin actions yet.' };
+    }
+    return { ok: false, status: 401, message: 'Session is invalid or expired.' };
+  }
   if (!isAdminEmail(data.user.email)) {
     return { ok: false, status: 403, message: 'This account is not an administrator.' };
   }

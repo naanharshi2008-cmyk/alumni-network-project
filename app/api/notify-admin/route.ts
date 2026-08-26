@@ -16,6 +16,16 @@ import { NextResponse } from 'next/server';
 
 export const runtime = 'nodejs';
 
+// What each Resend rejection actually means, in words an admin can act on.
+const PROVIDER_HINTS: Record<number, string> = {
+  401: 'RESEND_API_KEY is not valid — regenerate it in Resend and update it in Vercel.',
+  403: 'Resend is refusing the recipient. Until a sending domain is verified, '
+     + 'onboarding@resend.dev can only email the Resend account owner: either set '
+     + 'ADMIN_EMAIL to that address, or verify a domain and set ADMIN_EMAIL_FROM.',
+  422: 'Resend rejected the message shape — check ADMIN_EMAIL and ADMIN_EMAIL_FROM are real addresses.',
+  429: 'Resend rate limit reached; the next registration will try again.',
+};
+
 type Payload = {
   fullName?: string;
   classOf?: string | number;
@@ -97,7 +107,16 @@ export async function POST(request: Request) {
     if (!res.ok) {
       const detail = await res.text().catch(() => '');
       console.error('notify-admin: Resend rejected the request', res.status, detail);
-      return NextResponse.json({ sent: false, reason: 'provider-error' });
+      // The status travels back, the body does not. "provider-error" alone gave
+      // no way to tell a dead API key (401) from Resend's testing-mode rule that
+      // onboarding@resend.dev may only mail the account owner (403) - and the
+      // body would leak the configured admin address to anyone who called this.
+      return NextResponse.json({
+        sent: false,
+        reason: 'provider-error',
+        status: res.status,
+        hint: PROVIDER_HINTS[res.status] ?? 'Check the Resend dashboard for the rejected message.',
+      });
     }
     return NextResponse.json({ sent: true });
   } catch (err) {

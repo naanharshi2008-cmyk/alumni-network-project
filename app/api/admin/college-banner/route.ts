@@ -3,6 +3,8 @@ import {
   getAdminClient,
   requireAdmin,
   storagePathFromPublicUrl,
+  isServiceKeyProblem,
+  SERVICE_KEY_MESSAGE,
 } from '../../../../lib/supabaseAdmin';
 
 // Uploads, replaces or removes a college's banner image, and saves the
@@ -57,6 +59,9 @@ export async function POST(request: Request) {
     .eq('id', collegeId)
     .maybeSingle();
   if (readErr) {
+    if (isServiceKeyProblem(readErr)) {
+      return NextResponse.json({ error: SERVICE_KEY_MESSAGE }, { status: 503 });
+    }
     return NextResponse.json({ error: `Could not read the college: ${readErr.message}` }, { status: 500 });
   }
   if (!college) return NextResponse.json({ error: 'That college no longer exists.' }, { status: 404 });
