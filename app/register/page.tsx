@@ -33,6 +33,7 @@ interface FormState {
   degree_other: string;
   professional_course: string;
   professional_course_other: string;
+  professional_org: string;
   professional_stage: string;
   branch: string;
   admission_route: string;
@@ -65,7 +66,7 @@ const initialForm: FormState = {
   full_name: '', school_name: '', school_board: '', school_board_other: '',
   class_of: '', stream: '', stream_other: '',
   field: '', field_other: '', joined_college: 'yes', college_name: '', degree: '', degree_other: '', branch: '',
-  professional_course: '', professional_course_other: '', professional_stage: '',
+  professional_course: '', professional_course_other: '', professional_stage: '', professional_org: '',
   admission_route: '', admission_route_other: '', admission_rank: '', board_marks: '', board_cutoff: '',
   current_status: '', current_status_other: '', expected_finish_year: '',
   currently_at: '', designation: '',
@@ -478,6 +479,7 @@ export default function RegisterPage() {
         college_name_raw: typedCollege,
         professional_course: resolveValue(form.professional_course, form.professional_course_other) || null,
         professional_stage: form.professional_course ? (form.professional_stage || null) : null,
+        professional_org: form.professional_course ? (cleanProperNoun(form.professional_org) || null) : null,
         degree: finalDegree || null,
         branch: cleanProperNoun(form.branch),
         field: finalField || null,
@@ -796,6 +798,14 @@ function StepStudies({
             onChange={(v) => update('professional_stage', v)}
             options={PROFESSIONAL_STAGES}
             placeholder="Select stage"
+          />
+        )}
+        {form.professional_course && (
+          <Field
+            label="Articling / studying at" optional
+            hint="the firm or institute, if you'd like to name it"
+            value={form.professional_org} onChange={(v) => update('professional_org', v)}
+            onBlur={() => markTouched('professional_org')} error="" valid={false}
           />
         )}
         </div>
