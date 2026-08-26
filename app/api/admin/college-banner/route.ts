@@ -5,6 +5,7 @@ import {
   storagePathFromPublicUrl,
   isServiceKeyProblem,
   SERVICE_KEY_MESSAGE,
+  safeErrorMessage,
 } from '../../../../lib/supabaseAdmin';
 
 // Uploads, replaces or removes a college's banner image, and saves the
@@ -62,7 +63,7 @@ export async function POST(request: Request) {
     if (isServiceKeyProblem(readErr)) {
       return NextResponse.json({ error: SERVICE_KEY_MESSAGE }, { status: 503 });
     }
-    return NextResponse.json({ error: `Could not read the college: ${readErr.message}` }, { status: 500 });
+    return NextResponse.json({ error: `Could not read the college: ${safeErrorMessage(readErr)}` }, { status: 500 });
   }
   if (!college) return NextResponse.json({ error: 'That college no longer exists.' }, { status: 404 });
 
@@ -77,7 +78,7 @@ export async function POST(request: Request) {
       .update({ description })
       .eq('id', collegeId);
     if (descErr) {
-      return NextResponse.json({ error: `Could not save the description: ${descErr.message}` }, { status: 500 });
+      return NextResponse.json({ error: `Could not save the description: ${safeErrorMessage(descErr)}` }, { status: 500 });
     }
   }
 
@@ -102,7 +103,7 @@ export async function POST(request: Request) {
       cacheControl: '31536000',
     });
     if (upErr) {
-      return NextResponse.json({ error: `Upload failed: ${upErr.message}` }, { status: 500 });
+      return NextResponse.json({ error: `Upload failed: ${safeErrorMessage(upErr)}` }, { status: 500 });
     }
 
     const { data: pub } = admin.storage.from(BUCKET).getPublicUrl(path);
@@ -113,14 +114,14 @@ export async function POST(request: Request) {
     if (dbErr) {
       // Don't leave an orphan object behind a failed pointer update.
       await admin.storage.from(BUCKET).remove([path]).catch(() => undefined);
-      return NextResponse.json({ error: `Could not save the banner: ${dbErr.message}` }, { status: 500 });
+      return NextResponse.json({ error: `Could not save the banner: ${safeErrorMessage(dbErr)}` }, { status: 500 });
     }
 
     // Best-effort cleanup of the file being replaced.
     const oldPath = storagePathFromPublicUrl(college.banner_url, BUCKET);
     if (oldPath) {
       const { error: rmErr } = await admin.storage.from(BUCKET).remove([oldPath]);
-      if (rmErr) warnings.push(`The previous banner file could not be removed (${rmErr.message}).`);
+      if (rmErr) warnings.push(`The previous banner file could not be removed (${safeErrorMessage(rmErr)}).`);
     }
     bannerUrl = pub.publicUrl;
   }
@@ -153,7 +154,7 @@ export async function DELETE(request: Request) {
     .eq('id', collegeId)
     .maybeSingle();
   if (readErr) {
-    return NextResponse.json({ error: `Could not read the college: ${readErr.message}` }, { status: 500 });
+    return NextResponse.json({ error: `Could not read the college: ${safeErrorMessage(readErr)}` }, { status: 500 });
   }
   if (!college) return NextResponse.json({ error: 'That college no longer exists.' }, { status: 404 });
 
@@ -161,7 +162,7 @@ export async function DELETE(request: Request) {
   const oldPath = storagePathFromPublicUrl(college.banner_url, BUCKET);
   if (oldPath) {
     const { error: rmErr } = await admin.storage.from(BUCKET).remove([oldPath]);
-    if (rmErr) warnings.push(`The banner file could not be removed (${rmErr.message}).`);
+    if (rmErr) warnings.push(`The banner file could not be removed (${safeErrorMessage(rmErr)}).`);
   }
 
   const { error: dbErr } = await admin
@@ -169,7 +170,7 @@ export async function DELETE(request: Request) {
     .update({ banner_url: null })
     .eq('id', collegeId);
   if (dbErr) {
-    return NextResponse.json({ error: `Could not clear the banner: ${dbErr.message}` }, { status: 500 });
+    return NextResponse.json({ error: `Could not clear the banner: ${safeErrorMessage(dbErr)}` }, { status: 500 });
   }
 
   return NextResponse.json({ removed: true, warnings });

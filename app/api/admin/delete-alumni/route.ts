@@ -5,6 +5,7 @@ import {
   storagePathFromPublicUrl,
   isServiceKeyProblem,
   SERVICE_KEY_MESSAGE,
+  safeErrorMessage,
 } from '../../../../lib/supabaseAdmin';
 
 // Permanently remove an alumni record.
@@ -54,7 +55,7 @@ export async function POST(request: Request) {
     if (isServiceKeyProblem(readErr)) {
       return NextResponse.json({ error: SERVICE_KEY_MESSAGE }, { status: 503 });
     }
-    return NextResponse.json({ error: `Could not read the profile: ${readErr.message}` }, { status: 500 });
+    return NextResponse.json({ error: `Could not read the profile: ${safeErrorMessage(readErr)}` }, { status: 500 });
   }
   if (!person) {
     return NextResponse.json({ error: 'That profile no longer exists.' }, { status: 404 });
@@ -66,7 +67,7 @@ export async function POST(request: Request) {
   const photoPath = storagePathFromPublicUrl(person.photo_url);
   if (photoPath) {
     const { error } = await admin.storage.from('photos').remove([photoPath]);
-    if (error) warnings.push(`photo not removed (${error.message})`);
+    if (error) warnings.push(`photo not removed (${safeErrorMessage(error)})`);
   }
 
   // 2. The profile row. higher_studies / work_experience rows disappear with it
@@ -76,13 +77,13 @@ export async function POST(request: Request) {
     if (isServiceKeyProblem(delErr)) {
       return NextResponse.json({ error: SERVICE_KEY_MESSAGE }, { status: 503 });
     }
-    return NextResponse.json({ error: `Could not delete the profile: ${delErr.message}` }, { status: 500 });
+    return NextResponse.json({ error: `Could not delete the profile: ${safeErrorMessage(delErr)}` }, { status: 500 });
   }
 
   // 3. The login account, so the username is free again.
   if (person.user_id) {
     const { error } = await admin.auth.admin.deleteUser(person.user_id);
-    if (error) warnings.push(`login account not removed (${error.message})`);
+    if (error) warnings.push(`login account not removed (${safeErrorMessage(error)})`);
   }
 
   return NextResponse.json({ deleted: true, name: person.full_name, warnings });

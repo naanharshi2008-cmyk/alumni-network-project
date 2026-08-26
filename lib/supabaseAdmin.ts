@@ -37,6 +37,13 @@ export function isAdminEmail(email: string | null | undefined): boolean {
   return Boolean(email && email.toLowerCase().endsWith(`@${ADMIN_EMAIL_DOMAIN}`));
 }
 
+/** What to tell an admin when the deployment's own key is the problem. */
+export const SERVICE_KEY_MESSAGE =
+  "The site's Supabase service key is missing or invalid, so admin actions cannot run. " +
+  'An administrator needs to set SUPABASE_SERVICE_ROLE_KEY in Vercel (Project → Settings → ' +
+  'Environment Variables) to the service_role key from Supabase → Project Settings → API keys, ' +
+  'pasted as a single line with no spaces or line breaks, then redeploy.';
+
 /**
  * A Supabase error caused by the SERVER's own credentials rather than the
  * caller's. Worth naming, because the two look identical from the outside: an
@@ -44,15 +51,33 @@ export function isAdminEmail(email: string | null | undefined): boolean {
  * exactly like an expired login.
  */
 export function isServiceKeyProblem(error: { message?: string } | null | undefined): boolean {
-  return /invalid api key/i.test(error?.message ?? '');
+  const m = error?.message ?? '';
+  return (
+    /invalid api key/i.test(m) ||
+    /no api key/i.test(m) ||
+    // A key pasted with a line break in it never reaches Supabase at all: fetch
+    // refuses to build the request. Seen in production, where the deployed
+    // SUPABASE_SERVICE_ROLE_KEY had a newline in the middle of it.
+    /invalid header value/i.test(m) ||
+    /header .*(invalid|illegal)/i.test(m)
+  );
 }
 
-/** What to tell an admin when the deployment's own key is the problem. */
-export const SERVICE_KEY_MESSAGE =
-  "The site's Supabase service key is missing or invalid, so admin actions cannot run. " +
-  'An administrator needs to set SUPABASE_SERVICE_ROLE_KEY in Vercel (Project → Settings → ' +
-  'Environment Variables) to the service_role key from Supabase → Project Settings → API keys, ' +
-  'then redeploy.';
+/**
+ * An error message safe to hand back over HTTP.
+ *
+ * Supabase puts the offending value into "invalid header value" errors, so the
+ * raw message for a malformed key contained the SERVICE ROLE KEY ITSELF, and
+ * the delete route echoed it straight into its JSON response. Credentials must
+ * never ride out on an error path, so anything key-shaped is redacted and
+ * key-related failures collapse to the actionable message instead.
+ */
+export function safeErrorMessage(error: { message?: string } | null | undefined): string {
+  if (isServiceKeyProblem(error)) return SERVICE_KEY_MESSAGE;
+  return (error?.message ?? 'Unknown error')
+    .replace(/sb_(secret|publishable)_[A-Za-z0-9_\-]*/g, '[redacted key]')
+    .replace(/eyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]*\.?[A-Za-z0-9_\-]*/g, '[redacted token]');
+}
 
 /**
  * Verify the caller of an API route is a signed-in admin.
