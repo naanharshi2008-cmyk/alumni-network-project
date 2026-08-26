@@ -81,6 +81,7 @@ const FIELD_LABELS: Record<string, string> = {
   class_of: 'Class Of', stream: 'Stream', degree: 'Degree', branch: 'Branch',
   field: 'Field', college_name_raw: 'College', currently_at: 'Currently At',
   professional_course: 'Professional course', professional_stage: 'Stage',
+  professional_org: 'Articling / studying at',
   designation: 'Designation', current_status: 'Status',
   expected_finish_year: 'Expected Finish', admission_route: 'Admission Route',
   admission_rank: 'Rank', board_marks: 'Board Marks', board_cutoff: 'Cutoff',

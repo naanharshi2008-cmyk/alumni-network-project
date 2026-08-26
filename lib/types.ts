@@ -145,6 +145,7 @@ export interface Alumnus {
   professional_course: string | null;
   /** Foundation, Intermediate, Articleship, Final, Qualified. */
   professional_stage: string | null;
+  professional_org: string | null;
   admission_route: string | null;
   admission_rank: string | null;
   board_marks: string | null;

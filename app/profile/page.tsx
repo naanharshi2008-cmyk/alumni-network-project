@@ -32,6 +32,7 @@ interface AlumnusData {
   degree: string;
   professional_course: string;
   professional_stage: string;
+  professional_org: string;
   branch: string;
   field: string;
   admission_route: string;
@@ -92,6 +93,7 @@ function normalizeProfile(raw: any): AlumnusData {
     degree: str(raw.degree),
     professional_course: str(raw.professional_course),
     professional_stage: str(raw.professional_stage),
+    professional_org: str(raw.professional_org),
     branch: str(raw.branch),
     field: str(raw.field),
     admission_route: str(raw.admission_route),
@@ -301,6 +303,7 @@ export default function ProfilePage() {
         degree: finalDegree || null,
         professional_course: finalProfessional || null,
         professional_stage: finalProfessional ? (profile.professional_stage || null) : null,
+        professional_org: finalProfessional ? (cleanProperNoun(profile.professional_org) || null) : null,
         branch: cleanProperNoun(profile.branch),
         field: finalField || null,
         admission_route: finalRoute || null,
@@ -574,6 +577,13 @@ export default function ProfilePage() {
               onChange={(v) => updateField('professional_stage', v)}
               options={PROFESSIONAL_STAGES}
               placeholder="Select stage"
+            />
+          )}
+          {professionalSel && (
+            <FloatingField
+              label="Articling / studying at" hint="optional"
+              value={profile.professional_org}
+              onChange={(v) => updateField('professional_org', v)}
             />
           )}
 

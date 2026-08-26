@@ -1043,7 +1043,12 @@ function ProfileModal({
             )}
             {dept && <Row icon="🎓" label="Studied">{dept}</Row>}
             {professionalLabel(a) && (
-              <Row icon="📜" label={a.degree ? 'Also pursuing' : 'Pursuing'}>{professionalLabel(a)}</Row>
+              <Row icon="📜" label={a.degree ? 'Also pursuing' : 'Pursuing'}>
+                {professionalLabel(a)}
+                {a.professional_org && (
+                  <span style={{ color: 'var(--text-faint)' }}> · at {a.professional_org}</span>
+                )}
+              </Row>
             )}
             {a.expected_finish_year && (
               <Row icon="📅" label="Expected to finish">{a.expected_finish_year}</Row>
