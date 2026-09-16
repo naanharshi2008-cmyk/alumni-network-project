@@ -147,6 +147,22 @@ export function collegeLabel(a: Alumnus): string | null {
   return shortInstituteName(name, details?.aliases ?? []);
 }
 
+/**
+ * For the small hero cards: when a name has a word too long to wrap
+ * ("Thiruvananthapuram"), a readable alias whose words all fit
+ * ("IISER Trivandrum"). Otherwise the usual label.
+ */
+export function compactCollegeLabel(a: Alumnus): string | null {
+  const label = collegeLabel(a);
+  if (!label) return null;
+  const fits = (s: string) => s.split(/\s+/).every((w) => w.length <= 13);
+  if (fits(label)) return label;
+  const better = (collegeDetailsOf(a)?.aliases ?? [])
+    .filter((al) => al.length <= 20 && al.includes(' ') && fits(al))
+    .sort((x, y) => y.length - x.length)[0];
+  return better ?? label;
+}
+
 export function shortInstituteName(name: string, aliases: string[]): string {
   if (name.length <= 28) return name;
   const readable = aliases

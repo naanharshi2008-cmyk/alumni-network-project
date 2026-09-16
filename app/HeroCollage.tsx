@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { Alumnus } from '../lib/types';
-import { classTag, collegeLabel, pathLine, profileHref, shortName, type Quote } from '../lib/showcase';
+import { classTag, collegeLabel, compactCollegeLabel, pathLine, profileHref, shortName, type Quote } from '../lib/showcase';
 
 /**
  * The hero's right-hand side: real alumni photos floating around one real
@@ -26,7 +26,7 @@ export default function HeroCollage({ faces, quote }: { faces: Alumnus[] | null;
       )}
 
       {faces.map((a, i) => {
-        const college = collegeLabel(a);
+        const college = compactCollegeLabel(a);
         const path = pathLine(a);
         return (
           <Link
