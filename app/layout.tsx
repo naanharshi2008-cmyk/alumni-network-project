@@ -58,16 +58,13 @@ function Footer() {
             <h4>Explore</h4>
             <Link href="/">Home</Link>
             <Link href="/directory">Directory</Link>
-            <Link href="/register">Register</Link>
+            <Link href="/colleges">Colleges</Link>
           </div>
           <div className="footer__col">
-            <h4>About</h4>
-            <span style={{ display: 'block', color: 'var(--text-muted)', fontSize: '0.9rem', padding: '3px 0' }}>
-              Veveaham Group of Schools
-            </span>
-            <span style={{ display: 'block', color: 'var(--text-muted)', fontSize: '0.9rem', padding: '3px 0' }}>
-              Alumni Network
-            </span>
+            <h4>Network</h4>
+            <Link href="/about">About</Link>
+            <Link href="/register">Add your journey</Link>
+            <Link href="/login">Sign in</Link>
           </div>
         </div>
       </div>
