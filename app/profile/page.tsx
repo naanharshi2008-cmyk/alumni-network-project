@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase, isSupabaseConfigured } from '../../lib/supabaseClient';
 import EntitySearchField from '../../lib/EntitySearchField';
+import { linkFor, toPick, type InstitutePick } from '../../lib/institutes';
 import SchoolPicker from '../../lib/SchoolPicker';
 import { cleanFreeText, cleanProperNoun , formatFullDate } from '../../lib/text';
 import { fetchApprovedOptions, fetchOrganizationNames, proposeOption } from '../../lib/publicData';
@@ -139,6 +140,9 @@ export default function ProfilePage() {
   }, []);
 
   const [profile, setProfile] = useState<AlumnusData | null>(null);
+  // The institute each field is linked to. Seeded from the saved links, so an
+  // untouched field keeps its id instead of being re-matched by name on save.
+  const [picks, setPicks] = useState<{ college: InstitutePick; org: InstitutePick }>({ college: null, org: null });
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [higherStudies, setHigherStudies] = useState<HigherStudyEntry[]>([]);
   const [workExperience, setWorkExperience] = useState<WorkExperienceEntry[]>([]);
@@ -163,7 +167,7 @@ export default function ProfilePage() {
     try {
       const { data, error: profileErr } = await supabase
         .from('alumni')
-        .select('*, colleges(name)')
+        .select('*, colleges(name), organizations(name)')
         .eq('user_id', userId)
         .maybeSingle();
       if (profileErr) throw profileErr;
@@ -175,6 +179,10 @@ export default function ProfilePage() {
       const { higher_studies: stagedStudies, work_experience: stagedWork, ...stagedColumns } = staged;
       const merged = normalizeProfile({ ...data, ...stagedColumns });
       setProfile(merged);
+      setPicks({
+        college: data.college_id && data.colleges?.name ? { id: data.college_id, name: data.colleges.name } : null,
+        org: data.organization_id && data.organizations?.name ? { id: data.organization_id, name: data.organizations.name } : null,
+      });
 
       setOthers({
         stream: splitStoredValue(merged.stream, STREAMS, LEGACY_STREAM_MAP).other,
@@ -284,19 +292,12 @@ export default function ProfilePage() {
         photoUrl = supabase.storage.from('photos').getPublicUrl(fileName).data.publicUrl;
       }
 
-      // Match the typed college against the reference table.
-      let collegeId: string | null = null;
+      // Link institutes: the picked (or already-saved) row while the text still
+      // names it, else an unambiguous exact name or alias, else the admin queue.
       const typedCollege = cleanProperNoun(profile.college_name);
-      if (typedCollege) {
-        const { data: existing } = await supabase.from('colleges').select('id').ilike('name', typedCollege).maybeSingle();
-        if (existing) collegeId = existing.id;
-      }
-      let organizationId: string | null = null;
+      const collegeId = await linkFor('college', typedCollege, picks.college);
       const typedOrg = cleanProperNoun(profile.currently_at);
-      if (typedOrg) {
-        const { data: existing } = await supabase.from('organizations').select('id').ilike('name', typedOrg).maybeSingle();
-        if (existing) organizationId = existing.id;
-      }
+      const organizationId = await linkFor('organization', typedOrg, picks.org);
 
       const columns: Record<string, any> = {
         full_name: profile.full_name.trim(),
@@ -615,12 +616,12 @@ export default function ProfilePage() {
               and no degree, and a star next to an unfillable field just reads
               as an error they cannot clear. */}
           <EntitySearchField
-            table="colleges"
+            kind="college"
             label="College / University"
             hint="leave blank if you didn't join one"
             value={profile.college_name}
             onChange={(v) => updateField('college_name', v)}
-            searchShortNames
+            onSelect={(hit) => setPicks((p) => ({ ...p, college: toPick(hit) }))}
           />
 
           <SelectWithOther
@@ -708,11 +709,12 @@ export default function ProfilePage() {
           )}
 
           <EntitySearchField
-            table="organizations"
+            kind="organization"
             label="Currently at"
             hint="company / institute, optional"
             value={profile.currently_at}
             onChange={(v) => updateField('currently_at', v)}
+            onSelect={(hit) => setPicks((p) => ({ ...p, org: toPick(hit) }))}
           />
           <datalist id="profile-org-list">
             {orgOptions.map((o) => <option key={o} value={o} />)}

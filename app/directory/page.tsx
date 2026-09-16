@@ -6,6 +6,7 @@ import { isSupabaseConfigured } from '../../lib/supabaseClient';
 import { fetchApprovedAlumni, fetchTimelines } from '../../lib/publicData';
 import { boardForSchool, officialSchoolName, publicRouteLabel, SCHOOLS } from '../../lib/options';
 import { formatRankBand, formatMarksBand, formatRankSpan, formatMonthYear } from '../../lib/text';
+import { buildSearchDoc, searchItems, type SearchDoc } from '../../lib/search';
 import {
   Alumnus,
   CATEGORIES,
@@ -13,6 +14,7 @@ import {
   HigherStudy,
   WorkExperience,
   categorize,
+  collegeKeyer,
   collegeNameOf,
   collegeDetailsOf,
   initialsOf,
@@ -67,20 +69,25 @@ type ExplorerCollege = {
   seniors: Alumnus[];
 };
 
+// Grouped by college id, not by spelling: "IIT Madras" and "IITM" are one card.
 function buildExplorerColleges(items: EnrichedAlumnus[]): ExplorerCollege[] {
   const map = new Map<string, ExplorerCollege>();
+  const keyOf = collegeKeyer(items.map(({ a }) => a));
   for (const { a } of items) {
     const name = collegeNameOf(a) ?? a.college_name_raw;
-    if (!name) continue;
-    const key = name.trim().toLowerCase();
-    if (!key) continue;
+    const key = keyOf(a);
+    if (!name?.trim() || !key) continue;
     let entry = map.get(key);
     if (!entry) {
       entry = { key, name: name.trim(), details: collegeDetailsOf(a), seniors: [] };
       map.set(key, entry);
     }
-    // A matched college row carries state/website/etc; keep the richest version.
-    if (!entry.details) entry.details = collegeDetailsOf(a);
+    // A matched college row carries its official name, state, banner; prefer it
+    // over a typed spelling that happened to come first.
+    if (!entry.details && collegeDetailsOf(a)) {
+      entry.details = collegeDetailsOf(a);
+      entry.name = collegeNameOf(a) ?? entry.name;
+    }
     entry.seniors.push(a);
   }
   return [...map.values()].sort(
@@ -153,16 +160,25 @@ function matchesFilters(item: EnrichedAlumnus, filters: Filters, except?: Filter
 
 // Everything a student might type. Routes go through their PUBLIC label so
 // quota wording stays unfindable, and the college state is included so the
-// home page's "Where they studied" cards land on real results.
-function haystack(a: Alumnus): string {
-  return [
-    a.full_name, collegeNameOf(a), a.college_name_raw, a.degree, a.branch,
-    a.field, a.currently_at, a.designation, a.stream, officialSchoolName(a.school_name),
-    a.professional_course, a.professional_stage,
-    publicRouteLabel(a.admission_route), a.admission_rank,
-    collegeDetailsOf(a)?.state,
-    String(a.class_of ?? ''),
-  ].filter(Boolean).join(' ').toLowerCase();
+// home page's "Where they studied" cards land on real results. Institutes
+// carry their aliases, so "IITM" finds everyone at IIT Madras.
+function searchDocOf(a: Alumnus): SearchDoc {
+  const college = collegeDetailsOf(a);
+  return buildSearchDoc({
+    people: [a.full_name],
+    institutes: [
+      college?.name, ...(college?.aliases ?? []), a.college_name_raw,
+      a.organization?.name, ...(a.organization?.aliases ?? []),
+      a.currently_at, a.professional_org,
+    ],
+    other: [
+      a.degree, a.branch, a.field, a.designation, a.stream, officialSchoolName(a.school_name),
+      a.professional_course, a.professional_stage,
+      publicRouteLabel(a.admission_route), a.admission_rank,
+      college?.state, college?.district,
+      a.class_of ? String(a.class_of) : null,
+    ],
+  });
 }
 
 function catLabel(key: string): string {
@@ -265,13 +281,19 @@ export default function DirectoryPage() {
     [rows],
   );
 
+  // Built once per load, not per keystroke.
+  const searchDocs = useMemo(() => {
+    const docs = new WeakMap<Alumnus, SearchDoc>();
+    for (const { a } of enriched) docs.set(a, searchDocOf(a));
+    return docs;
+  }, [enriched]);
+
   // Searched but not yet filtered - the base every facet count is measured
   // against, so typing in the search box updates the numbers too.
-  const searched = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return enriched;
-    return enriched.filter(({ a }) => haystack(a).includes(q));
-  }, [enriched, query]);
+  const { results: searched, closeMatches } = useMemo(
+    () => searchItems(enriched, ({ a }) => searchDocs.get(a)!, query),
+    [enriched, searchDocs, query],
+  );
 
   const filtered = useMemo(
     () => searched.filter((item) => matchesFilters(item, filters)),
@@ -453,6 +475,7 @@ export default function DirectoryPage() {
             {showing === total
               ? `${total} ${total === 1 ? 'alum' : 'alumni'}`
               : `${showing} of ${total} alumni`}
+            {closeMatches && showing > 0 && ` · close matches for “${query.trim()}”`}
           </span>
           {activeFilters.map(({ key, value }) => (
             <button
