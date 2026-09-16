@@ -1,22 +1,27 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Alumnus } from '../lib/types';
 import { fetchApprovedAlumni } from '../lib/publicData';
-import HeroStats from './HeroStats';
+import {
+  featuredLineup, heroFaces, heroQuote, popularSearches, rotationWindow,
+} from '../lib/showcase';
+import HeroCollage from './HeroCollage';
+import FeaturedAlumni from './FeaturedAlumni';
+import HomeStats from './HomeStats';
 import HomeGalleries from './HomeGalleries';
 
+const FEATURED_COUNT = 4;
+
 /**
- * Gallery-first landing page.
+ * The landing page: who our seniors are, shown with their own faces and words.
  *
- * No profiles here any more: the home page's job is to show a class-11 visitor
- * the SHAPE of what exists - areas, exam routes, states, with honest counts -
- * and hand them to the directory one tap later. (The old "Meet a few seniors"
- * showcase moved out in round 3; profiles live in the directory.)
- *
- * One fetch feeds the stats strip and all three galleries.
+ * One fetch feeds everything. Every card, quote, chip and number comes from an
+ * approved profile; with fewer profiles the page shows less, never filler.
+ * Rotation is by a 3-hour window computed after the data arrives, so the page
+ * renders the same for everyone in that window and never flickers on reload.
  */
 export default function Home() {
   const router = useRouter();
@@ -32,6 +37,19 @@ export default function Home() {
     return () => { cancelled = true; };
   }, []);
 
+  const showcase = useMemo(() => {
+    if (!rows) return null;
+    const slot = rotationWindow();
+    const lineup = featuredLineup(rows, slot);
+    const featured = lineup.slice(0, FEATURED_COUNT);
+    return {
+      featured,
+      faces: heroFaces(lineup, featured.length),
+      quote: heroQuote(rows, slot),
+      popular: popularSearches(rows),
+    };
+  }, [rows]);
+
   function submitSearch(e: React.FormEvent) {
     e.preventDefault();
     const q = search.trim();
@@ -39,50 +57,67 @@ export default function Home() {
   }
 
   return (
-    <main className="container">
-      <section className="hero fade-up">
-        <span className="hero__eyebrow">
-          <img className="hero__eyebrow-crest" src="/brand/crest-96.png" alt="" width={96} height={96} />
-          Veveaham alumni · real paths, real ranks
-        </span>
-        <h1 className="hero__title">
-          Where our seniors are,
-          <br />
-          <span className="hero__grad">and how they got there.</span>
-        </h1>
-        <p className="hero__sub">
-          See which colleges seniors from your school got into, the exam or marks
-          they got in with, and what they would tell you to do differently.
-        </p>
-        <div className="hero__cta">
-          <Link href="/directory" className="btn btn--primary btn--lg">
-            <span className="btn__inner">Browse the directory →</span>
-          </Link>
-          <Link href="/register" className="btn btn--ghost btn--lg">
-            <span className="btn__inner">I&apos;m an alumnus</span>
-          </Link>
+    <main className="container container--wide">
+      <section className="hero2">
+        <div className="hero2__text fade-up">
+          <span className="hero__eyebrow">
+            <img className="hero__eyebrow-crest" src="/brand/crest-96.png" alt="" width={96} height={96} />
+            Veveaham alumni · real paths, real ranks
+          </span>
+          <h1 className="hero2__title">
+            Where our seniors are,
+            <br />
+            <span className="hero__grad">and how they got there.</span>
+          </h1>
+          <p className="hero2__sub">
+            See which colleges seniors from your school got into, the exam or marks
+            they got in with, and what they would tell you to do differently.
+          </p>
+          <div className="hero2__cta">
+            <Link href="/directory" className="btn btn--primary btn--lg">
+              <span className="btn__inner">Browse the directory →</span>
+            </Link>
+            <Link href="/register" className="btn btn--ghost btn--lg">
+              <span className="btn__inner">I&apos;m an alumnus</span>
+            </Link>
+          </div>
+
+          {/* One search, straight into the directory. It understands college
+              aliases and forgives typos, so "IITM" and "Anna Univesity" work. */}
+          <form className="pill-search" onSubmit={submitSearch} role="search">
+            <input
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Try “Anna University”, “NEET”, or a name…"
+              aria-label="Search the alumni directory"
+              enterKeyHint="search"
+            />
+            <button type="submit" className="pill-search__go" aria-label="Search">
+              <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden>
+                <circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" />
+              </svg>
+            </button>
+          </form>
+
+          {showcase && showcase.popular.length > 0 && (
+            <div className="popular">
+              <span className="popular__label">Popular searches:</span>
+              {showcase.popular.map((p) => (
+                <Link key={p.label} href={`/directory?q=${encodeURIComponent(p.label)}`} className="popular__chip">
+                  {p.label}
+                </Link>
+              ))}
+            </div>
+          )}
         </div>
 
-        {/* One search, straight into the directory: a college name, an exam,
-            a person, a state - the haystack matches all of them. */}
-        <form className="hero-search" onSubmit={submitSearch} role="search">
-          <input
-            type="search"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Try “Anna University”, “NEET”, or a name…"
-            aria-label="Search the alumni directory"
-          />
-          <button type="submit" className="btn btn--neutral">
-            <span className="btn__inner">Search</span>
-          </button>
-        </form>
-
-        <HeroStats alumni={rows} />
-
+        <HeroCollage faces={showcase?.faces ?? null} quote={showcase?.quote ?? null} />
         <div className="hero__glow" aria-hidden />
       </section>
 
+      {showcase && <FeaturedAlumni people={showcase.featured} />}
+      {rows && <HomeStats alumni={rows} />}
       <HomeGalleries alumni={rows} />
     </main>
   );

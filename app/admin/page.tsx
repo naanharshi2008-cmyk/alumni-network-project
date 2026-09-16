@@ -53,6 +53,7 @@ type AlumniRow = {
   last_confirmed_at: string | null;
   school_note: string | null;
   college_thoughts: string | null;
+  featured?: boolean | null;
 };
 
 type HigherStudyRow = {
@@ -391,6 +392,26 @@ export default function AdminPage() {
     );
   }
 
+  // Starred profiles lead the home page's Featured row; the rest of the row is
+  // filled automatically and the order rotates (lib/showcase.ts).
+  async function handleToggleFeatured(person: AlumniRow) {
+    setActionError('');
+    setActionNote('');
+    const next = !person.featured;
+    const { data, error } = await supabase.from('alumni')
+      .update({ featured: next })
+      .eq('id', person.id)
+      .select('id, featured');
+    if (error || !data?.length) {
+      setActionError('Could not change featuring: ' + (error?.message ?? 'no row was updated.'));
+      return;
+    }
+    setDecided((prev) => prev.map((p) => (p.id === person.id ? { ...p, featured: next } : p)));
+    setActionNote(next
+      ? `${person.full_name} is featured on the home page.`
+      : `${person.full_name} is no longer featured; the home page fills the place automatically.`);
+  }
+
   /* ── Edit-review actions ───────────────────────────────────────────────── */
   async function handleApproveEdit(person: AlumniRow) {
     setActionError('');
@@ -644,6 +665,7 @@ export default function AdminPage() {
                       <span className={`badge badge--sm${person.approval_status === 'approved' ? ' badge--ok' : ''}`}>
                         {person.approval_status === 'approved' ? 'In the directory' : 'Hidden'}
                       </span>
+                      {person.featured && <span className="badge badge--sm badge--star">★ Featured</span>}
                       <div className="subtitle" style={{ margin: '4px 0 0', fontSize: '0.84rem' }}>
                         {person.personal_email || 'no email'}{person.user_id ? '' : ' · no login yet'}
                         {person.class_of ? ` · Class of ${person.class_of}` : ''}
@@ -651,6 +673,14 @@ export default function AdminPage() {
                       </div>
                     </div>
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                      {person.approval_status === 'approved' && (
+                        <button type="button" className={`btn btn--ghost star-btn${person.featured ? ' star-btn--on' : ''}`}
+                          aria-pressed={!!person.featured}
+                          title={person.featured ? 'Remove from the home page' : 'Feature on the home page'}
+                          onClick={() => handleToggleFeatured(person)}>
+                          <span className="btn__inner">{person.featured ? '★ Featured' : '☆ Feature'}</span>
+                        </button>
+                      )}
                       {person.approval_status === 'approved' ? (
                         <button type="button" className="btn btn--ghost"
                           onClick={() => handleSetStatus(person, 'rejected')}>

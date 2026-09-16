@@ -162,6 +162,8 @@ export interface Alumnus {
   // The view builds this as a JSON object; older code paths may still hand us
   // an array from a PostgREST embed, so both shapes are accepted.
   colleges: CollegeDetails | CollegeDetails[] | null;
+  /** Starred by the school for the home page (migration 12). */
+  featured?: boolean | null;
   /** The matched company or organisation, with its other names. */
   organization?: { name: string; aliases: string[] | null } | null;
 }

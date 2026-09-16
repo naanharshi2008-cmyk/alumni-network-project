@@ -63,6 +63,9 @@ export default function NavAuth() {
   const links = (
     <>
       <Link href="/directory" className={linkClass('/directory')}>Directory</Link>
+      <Link href="/colleges" className={linkClass('/colleges')}>Colleges</Link>
+      <Link href="/about" className={linkClass('/about')}>About</Link>
+      <span className="nav__sep" aria-hidden />
       {who === 'unknown' && <span className="nav__link nav__link--placeholder" aria-hidden />}
       {who === 'guest' && (
         <>
