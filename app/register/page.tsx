@@ -3,10 +3,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase, isSupabaseConfigured } from '../../lib/supabaseClient';
 import EntitySearchField from '../../lib/EntitySearchField';
+import SchoolPicker from '../../lib/SchoolPicker';
 import { cleanFreeText, cleanProperNoun } from '../../lib/text';
 import { fetchApprovedOptions, proposeOption } from '../../lib/publicData';
 import {
-  SCHOOLS, STREAMS, DEGREES, ADMISSION_ROUTES, STATUSES, SCHOOL_BOARDS,
+  STREAMS, DEGREES, ADMISSION_ROUTES, STATUSES, boardForSchool,
   COUNTRY_CODES, OTHER_OPTION, isInProgressStatus, mergeOptions, resolveValue,
   PROFESSIONAL_COURSES, PROFESSIONAL_STAGES,
 } from '../../lib/options';
@@ -20,8 +21,6 @@ interface FormState {
   password_val: string;
   full_name: string;
   school_name: string;
-  school_board: string;
-  school_board_other: string;
   class_of: string;
   stream: string;
   stream_other: string;
@@ -63,7 +62,7 @@ const emptyWorkExperience = (): WorkExperienceEntry => ({ company: '', role: '',
 
 const initialForm: FormState = {
   username: '', password_val: '',
-  full_name: '', school_name: '', school_board: '', school_board_other: '',
+  full_name: '', school_name: '',
   class_of: '', stream: '', stream_other: '',
   field: '', field_other: '', joined_college: 'yes', college_name: '', degree: '', degree_other: '', branch: '',
   professional_course: '', professional_course_other: '', professional_stage: '', professional_org: '',
@@ -233,6 +232,9 @@ export default function RegisterPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [submitted, setSubmitted] = useState(false);
+  // Sections that failed to save after the profile itself did - reported on
+  // the success screen instead of being lost without a word.
+  const [unsavedSections, setUnsavedSections] = useState<string[]>([]);
   const [touched, setTouched] = useState<Partial<Record<FieldKey, boolean>>>({});
   // C4 - username availability, checked on blur rather than at submit.
   const [usernameState, setUsernameState] = useState<'idle' | 'checking' | 'free' | 'taken'>('idle');
@@ -457,7 +459,6 @@ export default function RegisterPage() {
       const finalField = resolveValue(form.field, form.field_other);
       const finalRoute = resolveValue(form.admission_route, form.admission_route_other);
       const finalStatus = resolveValue(form.current_status, form.current_status_other);
-      const finalBoard = resolveValue(form.school_board, form.school_board_other);
       const usesBoardMarks = finalRoute === 'Board Marks';
 
       // 5. The profile row.
@@ -466,7 +467,8 @@ export default function RegisterPage() {
         username,
         full_name: form.full_name.trim(),
         school_name: form.school_name,
-        school_board: finalBoard || null,
+        // Decided by the school, not asked for: see boardForSchool.
+        school_board: boardForSchool(form.school_name),
         class_of: parseInt(form.class_of, 10),
         stream: finalStream || null,
         show_photo: !!photoUrl,
@@ -502,7 +504,9 @@ export default function RegisterPage() {
       if (insErr) throw insErr;
       const newId = inserted?.id;
 
-      // 6. Optional timelines.
+      // 6. Optional timelines. The profile is already saved, so a failure here
+      //    must not fail the registration - but it must not vanish either.
+      const lostSections: string[] = [];
       if (newId && showHigherStudies) {
         const rows = higherStudies.filter((s) => s.degree_name.trim()).map((s) => ({
           alumni_id: newId,
@@ -511,7 +515,10 @@ export default function RegisterPage() {
           start_year: s.start_year ? parseInt(s.start_year, 10) : null,
           finish_year: s.finish_year ? parseInt(s.finish_year, 10) : null,
         }));
-        if (rows.length) await supabase.from('higher_studies').insert(rows);
+        if (rows.length) {
+          const { error: hsErr } = await supabase.from('higher_studies').insert(rows);
+          if (hsErr) { console.error('higher_studies insert', hsErr); lostSections.push('higher studies'); }
+        }
       }
       if (newId && showWorkExperience) {
         const rows = workExperience.filter((w) => w.company.trim()).map((w) => ({
@@ -522,8 +529,12 @@ export default function RegisterPage() {
           end_year: w.is_current ? null : (w.end_year ? parseInt(w.end_year, 10) : null),
           is_current: w.is_current,
         }));
-        if (rows.length) await supabase.from('work_experience').insert(rows);
+        if (rows.length) {
+          const { error: weErr } = await supabase.from('work_experience').insert(rows);
+          if (weErr) { console.error('work_experience insert', weErr); lostSections.push('work experience'); }
+        }
       }
+      setUnsavedSections(lostSections);
 
       // 7. Queue any free-typed values for staff review. They already show on
       //    this person's profile; this is only about joining the shared lists.
@@ -532,6 +543,7 @@ export default function RegisterPage() {
       if (form.admission_route === OTHER_OPTION) void proposeOption('admission_route', form.admission_route_other);
       if (form.current_status === OTHER_OPTION) void proposeOption('current_status', form.current_status_other);
       if (form.field === OTHER_OPTION) void proposeOption('field', form.field_other);
+      if (form.professional_course === OTHER_OPTION) void proposeOption('professional_course', form.professional_course_other);
 
       // 8. Tell an admin. Never allowed to fail the registration.
       void fetch('/api/notify-admin', {
@@ -564,7 +576,7 @@ export default function RegisterPage() {
     }
   }
 
-  if (submitted) return <SuccessScreen />;
+  if (submitted) return <SuccessScreen unsavedSections={unsavedSections} />;
 
   const isLast = step === STEPS.length - 1;
   const stepProps = { form, update, markTouched, errorFor, isValid };
@@ -686,8 +698,13 @@ function StepSchool({ form, update, markTouched, errorFor, isValid, streamOption
       />
 
       <div className="field">
-        <label className="field__label">Which school did you attend? <Req /></label>
-        <Chips options={[...SCHOOLS]} value={form.school_name} onChange={(v) => { update('school_name', v); markTouched('school_name'); }} />
+        <label className="field__label" id="school-label">Which school did you attend? <Req /></label>
+        <SchoolPicker
+          labelledBy="school-label"
+          value={form.school_name}
+          onChange={(v) => { update('school_name', v); markTouched('school_name'); }}
+          invalid={!!errorFor('school_name')}
+        />
         {errorFor('school_name') && <p className="field__error">{errorFor('school_name')}</p>}
       </div>
 
@@ -705,13 +722,6 @@ function StepSchool({ form, update, markTouched, errorFor, isValid, streamOption
         value={form.stream} onChange={(v) => { update('stream', v); markTouched('stream'); }}
         otherValue={form.stream_other} onOtherChange={(v) => update('stream_other', v)}
         error={errorFor('stream')}
-      />
-
-      <SelectWithOther
-        label="School board" options={SCHOOL_BOARDS} optional
-        value={form.school_board} onChange={(v) => update('school_board', v)}
-        otherValue={form.school_board_other} onOtherChange={(v) => update('school_board_other', v)}
-        error=""
       />
     </>
   );
@@ -736,7 +746,7 @@ function StepStudies({
       {/* Asked before the college fields, because the honest answer for a CA
           student is "no" - and the old form had no way to say that, forcing
           them to invent a college name to get past validation. */}
-      <div className="field">
+      <div className="field" data-field="joined_college">
         <label>After 12th, did you join a college?</label>
         <Chips
           options={['Yes', 'Not yet', 'No']}
@@ -1253,7 +1263,7 @@ function StepBar({ step }: { step: number }) {
 /* ─────────────────────────────────────────────────────────────────────────
    Success
 ───────────────────────────────────────────────────────────────────────── */
-function SuccessScreen() {
+function SuccessScreen({ unsavedSections = [] }: { unsavedSections?: string[] }) {
   const [copied, setCopied] = useState(false);
   const shareUrl = typeof window !== 'undefined' ? window.location.origin + '/register' : '';
   const shareText = 'Join the Veveaham Alumni network — add your own journey here:';
@@ -1276,6 +1286,12 @@ function SuccessScreen() {
         <div className="success-icon"><span>✓</span></div>
         <h1 className="success-title">Registration successful</h1>
         <p className="success-subtitle">Welcome to the Veveaham Alumni Network.</p>
+        {unsavedSections.length > 0 && (
+          <div className="alert alert--error" style={{ textAlign: 'left', marginTop: 16 }}>
+            Your profile is saved, but your {unsavedSections.join(' and ')} could not be.
+            Please add {unsavedSections.length === 1 ? 'it' : 'them'} again from your profile after you log in.
+          </div>
+        )}
         <p className="subtitle">
           Your profile has been submitted and is waiting for admin approval.
           <br />

@@ -124,12 +124,17 @@ p { line-height: 1.6; }
   border-bottom: 1px solid var(--border);
 }
 .nav__brand { display: flex; align-items: center; gap: 11px; font-family: var(--font-sora), sans-serif; font-weight: 700; letter-spacing: -0.01em; font-size: 1.02rem; }
+/* The crest sits on a cream plate: its navy border all but vanishes on the
+   near-black background, and the plate keeps the outline legible at 36px. */
 .nav__logo {
-  width: 36px; height: 36px; border-radius: 12px;
+  flex: 0 0 auto;
+  width: 38px; height: 38px; border-radius: 12px; padding: 3px;
   display: grid; place-items: center;
-  background: var(--grad); color: var(--primary-ink); font-size: 18px;
-  box-shadow: 0 6px 18px -6px var(--ring);
+  background: #fbf6ec;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.14), 0 6px 18px -8px rgba(242, 195, 78, 0.45);
 }
+.nav__logo img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.nav__logo--lg { width: 132px; height: 132px; border-radius: 30px; padding: 12px; }
 .nav__links { display: flex; align-items: center; gap: 6px; }
 .nav__link {
   padding: 8px 15px; border-radius: var(--r-full);
@@ -151,7 +156,7 @@ p { line-height: 1.6; }
   .nav { gap: 8px; padding: 10px 14px; }
   .nav__brand { font-size: 0.95rem; gap: 8px; }
   .nav__brand span:not(.nav__logo) { display: none; }
-  .nav__logo { width: 32px; height: 32px; font-size: 16px; border-radius: 10px; }
+  .nav__logo { width: 34px; height: 34px; border-radius: 10px; }
   .nav__links { gap: 2px; }
   .nav__link { padding: 10px 11px; font-size: 0.86rem; }
 }
@@ -303,8 +308,10 @@ button:focus-visible,
 .field > label { display: block; font-weight: 650; font-size: 0.9rem; margin-bottom: 8px; color: var(--text-muted); }
 .hint { font-weight: 400; color: var(--text-faint); font-size: 0.78rem; display: inline-block; margin-left: 6px; }
 
+/* search and password were missing here, so both fell back to the browser's
+   white box: the home search, and the login password field. */
 input[type='text'], input[type='email'], input[type='tel'],
-input[type='number'], input[type='url'],
+input[type='number'], input[type='url'], input[type='search'], input[type='password'],
 select, textarea {
   width: 100%;
   padding: 13px 15px;
@@ -531,6 +538,10 @@ textarea { min-height: 84px; resize: vertical; }
   z-index: -1;
   pointer-events: none;
   filter: blur(4px);
+}
+.hero__eyebrow-crest {
+  width: 20px; height: 20px; border-radius: 6px; padding: 1px;
+  background: #fbf6ec; object-fit: contain;
 }
 .hero__eyebrow {
   display: inline-flex; align-items: center; gap: 8px;
@@ -1375,7 +1386,7 @@ textarea { min-height: 84px; resize: vertical; }
 .hero-search {
   display: flex; gap: 8px; max-width: 480px; margin: 26px auto 0;
 }
-.hero-search input { flex: 1; }
+.hero-search input { flex: 1; border-radius: var(--r-full); padding-left: 22px; }
 
 @media (max-width: 560px) {
   .a-modal__banner { margin: -24px -24px 16px; height: 100px; }
@@ -1489,4 +1500,45 @@ textarea { min-height: 84px; resize: vertical; }
   .filter-bar { position: static; padding-top: 10px; }
   .filter-select { flex: 1 1 calc(50% - 5px); }
   .lens-switch__label { width: 100%; margin-bottom: 2px; }
+}
+
+/* ═══ School picker ═════════════════════════════════════════════════════
+   A radio list rather than chips: the official names are long and wrapped
+   badly as pills. The board pill makes the derived board visible. */
+.school-picker { display: flex; flex-direction: column; gap: 8px; }
+.school-picker__option {
+  display: grid; grid-template-columns: 22px 1fr auto; align-items: center; gap: 12px;
+  width: 100%; min-height: 56px; padding: 12px 14px;
+  text-align: left; font: inherit; color: var(--text);
+  background: var(--surface-2); border: 1px solid var(--border-strong);
+  border-radius: var(--r-sm); cursor: pointer;
+  transition: border-color 0.16s, background 0.16s, box-shadow 0.16s;
+}
+.school-picker__option:hover { border-color: rgba(242, 195, 78, 0.55); }
+.school-picker__option--checked {
+  border-color: var(--gold);
+  background: linear-gradient(0deg, rgba(242, 195, 78, 0.08), rgba(242, 195, 78, 0.08)), var(--surface-2);
+  box-shadow: 0 0 0 1px var(--gold);
+}
+.school-picker__dot {
+  width: 20px; height: 20px; border-radius: 50%;
+  border: 2px solid var(--border-strong); position: relative;
+}
+.school-picker__option--checked .school-picker__dot { border-color: var(--gold); }
+.school-picker__option--checked .school-picker__dot::after {
+  content: ''; position: absolute; inset: 3px; border-radius: 50%; background: var(--gold);
+}
+.school-picker__name { font-weight: 600; font-size: 0.95rem; line-height: 1.3; }
+.school-picker__board {
+  justify-self: end; white-space: nowrap;
+  padding: 3px 10px; border-radius: var(--r-full);
+  font-size: 0.74rem; font-weight: 700; letter-spacing: 0.01em;
+  color: color-mix(in srgb, var(--emerald) 78%, white);
+  background: color-mix(in srgb, var(--emerald) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--emerald) 36%, transparent);
+}
+.school-picker--invalid .school-picker__option { border-color: var(--danger-border); }
+@media (max-width: 480px) {
+  .school-picker__option { grid-template-columns: 22px 1fr; }
+  .school-picker__board { grid-column: 2; justify-self: start; }
 }

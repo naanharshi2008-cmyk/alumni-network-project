@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { isSupabaseConfigured } from '../../lib/supabaseClient';
 import { fetchApprovedAlumni, fetchTimelines } from '../../lib/publicData';
-import { officialSchoolName, publicRouteLabel, SCHOOLS } from '../../lib/options';
+import { boardForSchool, officialSchoolName, publicRouteLabel, SCHOOLS } from '../../lib/options';
 import { formatRankBand, formatMarksBand, formatRankSpan, formatMonthYear } from '../../lib/text';
 import {
   Alumnus,
@@ -1035,7 +1035,12 @@ function ProfileModal({
         <div className="a-modal__section">
           <h4>Education</h4>
           <div className="a-card__rows">
-            <Row icon="🏫" label="School">{officialSchoolName(a.school_name) || '—'}</Row>
+            <Row icon="🏫" label="School">
+              {officialSchoolName(a.school_name) || '—'}
+              {boardForSchool(a.school_name) && (
+                <span style={{ color: 'var(--text-faint)' }}> · {boardForSchool(a.school_name)}</span>
+              )}
+            </Row>
             {college && (
               <Row icon="🏛️" label="College">
                 {college}{collegeDet?.state ? ` · ${collegeDet.state}` : ''}

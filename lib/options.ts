@@ -30,6 +30,23 @@ export const LEGACY_SCHOOL_MAP: Record<string, string> = {
   'veveaham prime academy': 'Veveaham Prime Academy',
 };
 
+/**
+ * The board each school follows. It is decided by the school, so the forms no
+ * longer ask for it. The Boys school (Matriculation) and the Girls school (State
+ * Board) are one merged board in practice, hence the shared label.
+ */
+export const SCHOOL_BOARD_BY_SCHOOL: Record<(typeof SCHOOLS)[number], string> = {
+  'Veveaham Matric Higher Secondary School (Boys)': 'Matric / State Board',
+  'Veveaham Higher Secondary School (Girls)': 'Matric / State Board',
+  'Veveaham Prime Academy': 'CBSE',
+};
+
+/** The board for a stored school value (legacy spellings included), or null. */
+export function boardForSchool(value: string | null | undefined): string | null {
+  const official = officialSchoolName(value) as (typeof SCHOOLS)[number];
+  return SCHOOL_BOARD_BY_SCHOOL[official] ?? null;
+}
+
 /** Normalise any stored school value to an official name for display. */
 export function officialSchoolName(value: string | null | undefined): string {
   const raw = (value ?? '').trim();
@@ -162,12 +179,10 @@ export function isInProgressStatus(status: string | null | undefined): boolean {
   return l.includes('studying') || l.includes('higher studies') || l.includes('preparing');
 }
 
-export const SCHOOL_BOARDS = ['State Board', 'CBSE', 'ICSE', 'Matriculation', OTHER_OPTION];
-
 export const COUNTRY_CODES = ['+91', '+1', '+44', '+61', '+971', '+65', '+49', '+33', '+81', '+86'];
 
 /** The `category` keys used in the `field_options` table. */
-export type OptionCategory = 'stream' | 'degree' | 'admission_route' | 'current_status' | 'field' | 'school_board' | 'professional_course';
+export type OptionCategory = 'stream' | 'degree' | 'admission_route' | 'current_status' | 'field' | 'professional_course';
 
 /** Built-in defaults per category, for the admin "is this already known?" check. */
 export const BUILT_IN_OPTIONS: Record<OptionCategory, string[]> = {
@@ -175,7 +190,6 @@ export const BUILT_IN_OPTIONS: Record<OptionCategory, string[]> = {
   degree: DEGREES,
   admission_route: ADMISSION_ROUTES,
   current_status: STATUSES,
-  school_board: SCHOOL_BOARDS,
   professional_course: PROFESSIONAL_COURSES,
   field: [], // filled from CATEGORIES in lib/types.ts to avoid a circular import
 };
@@ -187,7 +201,6 @@ export const OPTION_CATEGORY_LABELS: Record<OptionCategory, string> = {
   admission_route: 'Admission route',
   current_status: 'Current status',
   field: 'Broad field',
-  school_board: 'School board',
   professional_course: 'Professional course',
 };
 
