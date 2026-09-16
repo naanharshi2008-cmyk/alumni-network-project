@@ -82,6 +82,8 @@ RETURNS trigger
 LANGUAGE plpgsql
 SET search_path = public
 AS $$
+DECLARE
+  requested public.alumni;
 BEGIN
   -- Trusted writers: admins in the dashboard, and anything that is not a
   -- PostgREST end-user role (the service-role API routes, the SQL editor,
@@ -111,16 +113,21 @@ BEGIN
   -- edits, confirm the profile is still correct, and keep their private
   -- contact details current - and nothing else. Starting from OLD means any
   -- column added later is protected by default.
+  --
+  -- Copied field by field, not rebuilt with jsonb_populate_record(OLD, ...):
+  -- that reads a column added later WITH a default as NULL on rows written
+  -- before it (Postgres keeps such defaults outside the stored row), which
+  -- made every approved profile save fail in testing.
   IF OLD.approval_status = 'approved' THEN
-    NEW := jsonb_populate_record(OLD, jsonb_build_object(
-      'pending_changes',     NEW.pending_changes,
-      'modification_status', CASE WHEN NEW.modification_status = 'pending'
-                                  THEN 'pending' ELSE OLD.modification_status END,
-      'last_confirmed_at',   NEW.last_confirmed_at,
-      'personal_email',      NEW.personal_email,
-      'phone_country_code',  NEW.phone_country_code,
-      'phone_number',        NEW.phone_number
-    ));
+    requested := NEW;
+    NEW := OLD;
+    NEW.pending_changes     := requested.pending_changes;
+    NEW.modification_status := CASE WHEN requested.modification_status = 'pending'
+                                    THEN 'pending' ELSE OLD.modification_status END;
+    NEW.last_confirmed_at   := requested.last_confirmed_at;
+    NEW.personal_email      := requested.personal_email;
+    NEW.phone_country_code  := requested.phone_country_code;
+    NEW.phone_number        := requested.phone_number;
   END IF;
 
   RETURN NEW;

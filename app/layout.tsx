@@ -3,6 +3,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Sora, Manrope } from 'next/font/google';
 import Crest from '../lib/Crest';
+import NavAuth from './NavAuth';
 
 // next/font manages <head> injection itself (self-hosted at build time), so
 // it never fights with Next's dev-overlay scripts the way a hand-written
@@ -27,11 +28,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <Crest />
             <span>Veveaham Alumni</span>
           </Link>
-          <div className="nav__links">
-            <Link href="/directory" className="nav__link">Directory</Link>
-            <Link href="/login" className="nav__link">Login</Link>
-            <Link href="/register" className="nav__link nav__link--cta">Register</Link>
-          </div>
+          <NavAuth />
         </nav>
         {children}
         <Footer />

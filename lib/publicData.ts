@@ -14,7 +14,7 @@ import type { Alumnus, HigherStudy, WorkExperience } from './types';
  * `*` so adding a column to the view can never silently start publishing it.
  */
 export const PUBLIC_ALUMNI_SELECT = [
-  'id', 'full_name', 'username', 'school_name', 'class_of', 'stream', 'degree',
+  'id', 'full_name', 'username', 'public_slug', 'school_name', 'class_of', 'stream', 'degree',
   'branch', 'field', 'current_status', 'currently_at', 'designation',
   'expected_finish_year', 'show_photo', 'photo_url', 'linkedin_url',
   'message_1', 'message_2', 'last_updated', 'last_confirmed_at', 'school_note', 'college_thoughts', 'professional_course', 'professional_stage', 'professional_org', 'admission_route', 'admission_rank', 'board_marks',

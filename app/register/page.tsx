@@ -7,7 +7,7 @@ import SchoolPicker from '../../lib/SchoolPicker';
 import { cleanFreeText, cleanProperNoun } from '../../lib/text';
 import { fetchApprovedOptions, proposeOption } from '../../lib/publicData';
 import {
-  STREAMS, DEGREES, ADMISSION_ROUTES, STATUSES, boardForSchool,
+  STREAMS, DEGREES, ADMISSION_ROUTES, STATUSES, boardForSchool, publicRouteLabel,
   COUNTRY_CODES, OTHER_OPTION, isInProgressStatus, mergeOptions, resolveValue,
   PROFESSIONAL_COURSES, PROFESSIONAL_STAGES,
 } from '../../lib/options';
@@ -17,7 +17,6 @@ import { CATEGORIES } from '../../lib/types';
    Form model
 ───────────────────────────────────────────────────────────────────────── */
 interface FormState {
-  username: string;
   password_val: string;
   full_name: string;
   school_name: string;
@@ -61,7 +60,7 @@ const emptyHigherStudy = (): HigherStudyEntry => ({ degree_name: '', institution
 const emptyWorkExperience = (): WorkExperienceEntry => ({ company: '', role: '', start_year: '', end_year: '', is_current: false });
 
 const initialForm: FormState = {
-  username: '', password_val: '',
+  password_val: '',
   full_name: '', school_name: '',
   class_of: '', stream: '', stream_other: '',
   field: '', field_other: '', joined_college: 'yes', college_name: '', degree: '', degree_other: '', branch: '',
@@ -74,16 +73,16 @@ const initialForm: FormState = {
 };
 
 const CURRENT_YEAR = new Date().getFullYear();
-// Internal domain used to build a Supabase Auth email from a username, so login
-// never depends on the personal email. Must match app/login/page.tsx.
+// Accounts sign in through an opaque internal address on this domain; people
+// type their real email or phone, and the login_handle RPC maps it across.
 const ALUMNI_LOGIN_DOMAIN = 'veveaham-alumni-network.com';
+const MIN_PASSWORD = 8;
 
 const STEPS = [
-  { title: 'Account', blurb: 'So you can edit your profile later.' },
+  { title: 'You', blurb: "Your name, and the email or phone you'll sign in with." },
   { title: 'School', blurb: 'Your Veveaham years.' },
-  { title: 'Studies', blurb: 'Where you went after school.' },
-  { title: 'Now', blurb: 'What you are doing today.' },
-  { title: 'Finish', blurb: 'A photo, some advice, and you are done.' },
+  { title: 'After 12th', blurb: "Where you went, how you got in, and what you're doing now." },
+  { title: 'Finish', blurb: "A photo, a word for your juniors, and you're done." },
 ];
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -97,14 +96,8 @@ type FieldKey = keyof FormState;
 function validateField(key: FieldKey, form: FormState): string {
   const val = (v: unknown) => String(v ?? '').trim();
   switch (key) {
-    case 'username': {
-      const v = val(form.username);
-      if (!v) return 'Choose a username.';
-      if (v.length < 3) return 'At least 3 characters.';
-      return '';
-    }
     case 'password_val':
-      return form.password_val.length < 6 ? 'At least 6 characters.' : '';
+      return form.password_val.length < MIN_PASSWORD ? `Use at least ${MIN_PASSWORD} characters.` : '';
     case 'full_name': {
       const v = val(form.full_name);
       if (!v) return 'Please tell us your name.';
@@ -187,11 +180,10 @@ function validateField(key: FieldKey, form: FormState): string {
 
 // Which fields belong to which step, so "Continue" checks exactly that step.
 const STEP_FIELDS: FieldKey[][] = [
-  ['username', 'password_val'],
-  ['full_name', 'school_name', 'class_of', 'stream'],
-  ['field', 'college_name', 'degree', 'professional_course', 'admission_route', 'admission_rank', 'board_marks'],
-  ['current_status', 'personal_email', 'phone_number', 'linkedin_url'],
-  [],
+  ['full_name', 'personal_email', 'phone_number', 'password_val'],
+  ['school_name', 'class_of', 'stream'],
+  ['field', 'college_name', 'degree', 'professional_course', 'admission_route', 'admission_rank', 'board_marks', 'current_status'],
+  ['linkedin_url'],
 ];
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -206,12 +198,20 @@ const STEP_FIELDS: FieldKey[][] = [
  * which is both frightening and unactionable.
  */
 // Versioned so a future field rename cannot resurrect an incompatible draft.
-const DRAFT_KEY = 'veveaham.register.draft.v1';
+// v2: usernames removed and the steps reordered, so a v1 draft would land on
+// the wrong step.
+const DRAFT_KEY = 'veveaham.register.draft.v2';
 
 function friendlySubmitError(raw: string): string {
   const t = raw.toLowerCase();
-  if (t.includes('alumni_username_key') || t.includes('duplicate key') || t.includes('already registered')) {
-    return 'That username has just been taken. Go back to step 1 and pick another — everything else you typed is still here.';
+  if (t.includes('alumni_email_key_unique') || t.includes('already-registered-email')) {
+    return 'That email is already registered. Sign in instead, or reset your password if you have forgotten it.';
+  }
+  if (t.includes('alumni_phone_key_unique') || t.includes('already-registered-phone')) {
+    return 'That phone number is already registered. Sign in instead, or reset your password if you have forgotten it.';
+  }
+  if (t.includes('duplicate key')) {
+    return 'That email or phone number is already registered. Sign in instead, or reset your password.';
   }
   if (t.includes('failed to fetch') || t.includes('networkerror') || t.includes('load failed')) {
     return 'Could not reach the server. Check your connection and tap Submit again — nothing has been lost.';
@@ -232,12 +232,10 @@ export default function RegisterPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [submitted, setSubmitted] = useState(false);
-  // Sections that failed to save after the profile itself did - reported on
-  // the success screen instead of being lost without a word.
-  const [unsavedSections, setUnsavedSections] = useState<string[]>([]);
   const [touched, setTouched] = useState<Partial<Record<FieldKey, boolean>>>({});
-  // C4 - username availability, checked on blur rather than at submit.
-  const [usernameState, setUsernameState] = useState<'idle' | 'checking' | 'free' | 'taken'>('idle');
+  // Email and phone are now how people sign in, so they must be unique.
+  // Checked on blur so nobody fills in four steps before finding out.
+  const [contactState, setContactState] = useState<{ email: ContactCheck; phone: ContactCheck }>({ email: 'idle', phone: 'idle' });
   const [tagOptions, setTagOptions] = useState<Record<string, string[]>>({});
 
   // A ref (not state) so a double-click can't slip through before React
@@ -296,7 +294,9 @@ export default function RegisterPage() {
       const parsed = JSON.parse(saved) as { form?: Partial<FormState>; step?: number };
       if (!parsed.form) return;
       setForm((f) => ({ ...f, ...parsed.form, password_val: '', photo_file: null }));
-      if (typeof parsed.step === 'number') setStep(Math.min(parsed.step, STEPS.length - 1));
+      // The password is never saved, and step 1 is where it is asked, so a
+      // restored draft starts there with everything else still filled in.
+      setStep(0);
       setRestored(true);
     } catch {
       // A corrupt draft should never block registration.
@@ -314,19 +314,25 @@ export default function RegisterPage() {
     }
   }, [form, step, submitted]);
 
-  // Debounce-free: this only fires on blur, so at most one request per field
-  // exit. Failures fall back to 'idle' rather than blocking - submit() still
-  // does the authoritative check, this is purely to save a wasted five steps.
-  async function checkUsername(candidate: string) {
-    const v = candidate.trim();
-    if (v.length < 3) { setUsernameState('idle'); return; }
-    setUsernameState('checking');
+  // Fires on blur only. A failed check falls back to 'idle' rather than
+  // blocking: submit() checks again, and the database enforces uniqueness.
+  async function checkContact(which: 'email' | 'phone') {
+    const email = which === 'email' ? form.personal_email.trim() : '';
+    const phone = which === 'phone' ? form.phone_number.trim() : '';
+    if ((which === 'email' && !EMAIL_RE.test(email)) || (which === 'phone' && phone.replace(/\D/g, '').length < 7)) {
+      setContactState((c) => ({ ...c, [which]: 'idle' }));
+      return;
+    }
+    setContactState((c) => ({ ...c, [which]: 'checking' }));
     try {
-      const { data, error: rpcErr } = await supabase.rpc('username_available', { candidate: v });
-      if (rpcErr) { setUsernameState('idle'); return; }
-      setUsernameState(data ? 'free' : 'taken');
+      const { data, error: rpcErr } = await supabase.rpc('contact_available', {
+        p_email: email || null, p_phone_code: form.phone_country_code, p_phone: phone || null,
+      });
+      if (rpcErr || !data) { setContactState((c) => ({ ...c, [which]: 'idle' })); return; }
+      const free = which === 'email' ? data.email_free : data.phone_free;
+      setContactState((c) => ({ ...c, [which]: free ? 'free' : 'taken' }));
     } catch {
-      setUsernameState('idle');
+      setContactState((c) => ({ ...c, [which]: 'idle' }));
     }
   }
 
@@ -334,7 +340,9 @@ export default function RegisterPage() {
     // Reveal every problem on this step at once rather than one at a time.
     const fields = STEP_FIELDS[step];
     setTouched((prev) => ({ ...prev, ...Object.fromEntries(fields.map((f) => [f, true])) }));
-    const firstBadField = fields.find((k) => validateField(k, form));
+    const taken = step === 0 && (contactState.email === 'taken' || contactState.phone === 'taken');
+    const firstBadField = fields.find((k) => validateField(k, form))
+      ?? (taken ? (contactState.email === 'taken' ? 'personal_email' : 'phone_number') : undefined);
     if (firstBadField) {
       // Take the person to the problem. goNext does not change `step`, so the
       // scroll-to-top effect never fires here - without this the error can sit
@@ -388,41 +396,29 @@ export default function RegisterPage() {
 
     setSubmitting(true);
     try {
-      const username = form.username.trim();
-
-      // 1. Is the username free? Asked through an RPC because the browser can
-      //    no longer read the alumni table directly (that is what leaked
-      //    everyone's email and phone number).
-      const { data: available, error: checkErr } = await supabase.rpc('username_available', { candidate: username });
-      if (checkErr) throw checkErr;
-      if (available === false) throw new Error('That username is already taken. Please choose another one.');
-
-      // 2. Create the login. The email is synthesised from the username so the
-      //    real address stays optional-to-verify and private.
-      const authEmail = `${username}@${ALUMNI_LOGIN_DOMAIN}`;
-      let userId: string;
-      const { data: authData, error: authErr } = await supabase.auth.signUp({
-        email: authEmail,
-        password: form.password_val,
-        options: { data: { username, full_name: form.full_name.trim() } },
+      // 1. Email and phone are sign-in identifiers now, so they must be free.
+      const { data: contacts, error: checkErr } = await supabase.rpc('contact_available', {
+        p_email: form.personal_email.trim(), p_phone_code: form.phone_country_code, p_phone: form.phone_number.trim(),
       });
+      if (checkErr) throw checkErr;
+      if (contacts && contacts.email_free === false) throw new Error('already-registered-email');
+      if (contacts && contacts.phone_free === false) throw new Error('already-registered-phone');
 
-      if (authErr) {
-        // "Already registered" can mean this same person tried before and the
-        // profile insert failed afterwards, leaving an account with no profile.
-        // Signing in with the credentials they just typed proves it is theirs.
-        const isDuplicate = /already registered|already exists/i.test(authErr.message);
-        if (!isDuplicate) throw authErr;
-        const { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({
-          email: authEmail, password: form.password_val,
-        });
-        if (signInErr || !signInData.user) {
-          throw new Error('That username is already taken. Please choose another one.');
-        }
-        userId = signInData.user.id;
-      } else {
-        if (!authData.user) throw new Error('Could not create your account. Please try again.');
-        userId = authData.user.id;
+      // 2. Create the login under an opaque internal address. People never see
+      //    or type it: they sign in with their email or phone, which
+      //    login_handle maps to this address.
+      const handle = `${crypto.randomUUID()}@${ALUMNI_LOGIN_DOMAIN}`;
+      const { data: authData, error: authErr } = await supabase.auth.signUp({
+        email: handle,
+        password: form.password_val,
+        options: { data: { full_name: form.full_name.trim() } },
+      });
+      if (authErr) throw authErr;
+      if (!authData.user) throw new Error('Could not create your account. Please try again.');
+      const userId = authData.user.id;
+      if (!authData.session) {
+        const { error: signInErr } = await supabase.auth.signInWithPassword({ email: handle, password: form.password_val });
+        if (signInErr) throw signInErr;
       }
 
       // 3. Photo (optional).
@@ -432,8 +428,7 @@ export default function RegisterPage() {
         if (!file.type.startsWith('image/')) throw new Error('Please upload an image file (JPG, PNG, WEBP…).');
         if (file.size > 5 * 1024 * 1024) throw new Error('That photo is over 5MB — please pick a smaller one.');
         const ext = (file.name.match(/\.([a-zA-Z0-9]{1,5})$/)?.[1] ?? 'jpg').toLowerCase();
-        const safeUsername = username.replace(/[^a-zA-Z0-9-_]/g, '_');
-        const fileName = `${safeUsername}-${Date.now()}.${ext}`;
+        const fileName = `${userId}-${Date.now()}.${ext}`;
         const { error: upErr } = await supabase.storage.from('photos').upload(fileName, file, { contentType: file.type });
         if (upErr) throw upErr;
         photoUrl = supabase.storage.from('photos').getPublicUrl(fileName).data.publicUrl;
@@ -464,7 +459,6 @@ export default function RegisterPage() {
       // 5. The profile row.
       const { data: inserted, error: insErr } = await supabase.from('alumni').insert({
         user_id: userId,
-        username,
         full_name: form.full_name.trim(),
         school_name: form.school_name,
         // Decided by the school, not asked for: see boardForSchool.
@@ -473,7 +467,7 @@ export default function RegisterPage() {
         stream: finalStream || null,
         show_photo: !!photoUrl,
         photo_url: photoUrl,
-        personal_email: form.personal_email.trim(),
+        personal_email: form.personal_email.trim().toLowerCase(),
         phone_country_code: form.phone_country_code,
         phone_number: form.phone_number.trim(),
         linkedin_url: cleanFreeText(form.linkedin_url),
@@ -501,7 +495,12 @@ export default function RegisterPage() {
         modification_status: 'none',
       }).select('id').single();
 
-      if (insErr) throw insErr;
+      if (insErr) {
+        // The login exists but the profile did not save; sign out so a retry
+        // starts clean instead of half-signed-in.
+        await supabase.auth.signOut().catch(() => undefined);
+        throw insErr;
+      }
       const newId = inserted?.id;
 
       // 6. Optional timelines. The profile is already saved, so a failure here
@@ -534,7 +533,6 @@ export default function RegisterPage() {
           if (weErr) { console.error('work_experience insert', weErr); lostSections.push('work experience'); }
         }
       }
-      setUnsavedSections(lostSections);
 
       // 7. Queue any free-typed values for staff review. They already show on
       //    this person's profile; this is only about joining the shared lists.
@@ -545,21 +543,24 @@ export default function RegisterPage() {
       if (form.field === OTHER_OPTION) void proposeOption('field', form.field_other);
       if (form.professional_course === OTHER_OPTION) void proposeOption('professional_course', form.professional_course_other);
 
-      // 8. Tell an admin. Never allowed to fail the registration.
-      void fetch('/api/notify-admin', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fullName: form.full_name.trim(),
-          classOf: form.class_of,
-          school: form.school_name,
-          college: typedCollege ?? '',
-          currentStatus: finalStatus,
-        }),
-      }).catch(() => {});
+      // 8. Alert the school and welcome the new alumnus. The route reads the
+      //    details from the database using this session, so it can only ever
+      //    email this person. Never allowed to fail the registration.
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (sessionData.session) {
+        await fetch('/api/notify/registered', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${sessionData.session.access_token}` },
+          keepalive: true,
+        }).catch(() => undefined);
+      }
 
       try { window.localStorage.removeItem(DRAFT_KEY); } catch { /* nothing to lose */ }
       setSubmitted(true);
+      // Straight to their profile: they are already signed in.
+      const params = new URLSearchParams({ welcome: '1' });
+      if (lostSections.length) params.set('unsaved', lostSections.join(','));
+      window.location.assign(`/profile?${params.toString()}`);
     } catch (err) {
       console.error(err);
       // Supabase errors are plain objects with a `message`, not Error
@@ -576,7 +577,15 @@ export default function RegisterPage() {
     }
   }
 
-  if (submitted) return <SuccessScreen unsavedSections={unsavedSections} />;
+  if (submitted) {
+    return (
+      <main className="container container--narrow">
+        <div className="card" style={{ textAlign: 'center' }}>
+          <span className="spinner spinner--neutral" /> <p className="subtitle">Opening your profile…</p>
+        </div>
+      </main>
+    );
+  }
 
   const isLast = step === STEPS.length - 1;
   const stepProps = { form, update, markTouched, errorFor, isValid };
@@ -592,24 +601,39 @@ export default function RegisterPage() {
           <p className="step-sub">{STEPS[step].blurb}</p>
         </div>
 
+        {restored && step === 0 && !error && (
+          <div className="alert alert--success" role="status">
+            Welcome back — your answers are still here. Enter a password again to continue.
+          </div>
+        )}
         {error && <div className="alert alert--error" role="alert">{error}</div>}
 
         <form onSubmit={handleFormSubmit} noValidate>
           <div key={step} className="fade-up">
-            {step === 0 && <StepAccount {...stepProps} usernameState={usernameState} checkUsername={checkUsername} />}
-            {step === 1 && <StepSchool {...stepProps} streamOptions={streamOptions} />}
-            {step === 2 && <StepStudies {...stepProps} fieldOptions={fieldOptions} degreeOptions={degreeOptions} routeOptions={routeOptions} professionalOptions={professionalOptions} />}
-            {step === 3 && (
-              <StepNow
+            {step === 0 && (
+              <StepYou
                 {...stepProps}
-                statusOptions={statusOptions}
-                showHigherStudies={showHigherStudies} setShowHigherStudies={setShowHigherStudies}
-                higherStudies={higherStudies} setHigherStudies={setHigherStudies}
-                showWorkExperience={showWorkExperience} setShowWorkExperience={setShowWorkExperience}
-                workExperience={workExperience} setWorkExperience={setWorkExperience}
+                contactState={contactState}
+                checkContact={checkContact}
+                resetContact={(which) => setContactState((c) => (c[which] === 'idle' ? c : { ...c, [which]: 'idle' }))}
               />
             )}
-            {step === 4 && <StepFinish {...stepProps} />}
+            {step === 1 && <StepSchool {...stepProps} streamOptions={streamOptions} />}
+            {step === 2 && (
+              <>
+                <StepStudies {...stepProps} fieldOptions={fieldOptions} degreeOptions={degreeOptions} routeOptions={routeOptions} professionalOptions={professionalOptions} />
+                <h3 className="step-subhead">What you&apos;re doing now</h3>
+                <StepNow
+                  {...stepProps}
+                  statusOptions={statusOptions}
+                  showHigherStudies={showHigherStudies} setShowHigherStudies={setShowHigherStudies}
+                  higherStudies={higherStudies} setHigherStudies={setHigherStudies}
+                  showWorkExperience={showWorkExperience} setShowWorkExperience={setShowWorkExperience}
+                  workExperience={workExperience} setWorkExperience={setWorkExperience}
+                />
+              </>
+            )}
+            {step === 3 && <StepFinish {...stepProps} />}
           </div>
 
           <div className="wizard-nav">
@@ -649,44 +673,19 @@ type StepProps = {
   isValid: (key: FieldKey) => boolean;
 };
 
-function StepAccount({
-  form, update, markTouched, errorFor, isValid, usernameState, checkUsername,
-}: StepProps & {
-  usernameState: 'idle' | 'checking' | 'free' | 'taken';
-  checkUsername: (v: string) => void;
-}) {
-  return (
-    <>
-      <Field
-        label="Choose a username" required autoFocus autoComplete="username"
-        hint={
-          usernameState === 'checking' ? 'checking if that one is free…'
-          : usernameState === 'free' ? '✓ that one is free'
-          : 'letters, numbers, - and _ only'
-        }
-        value={form.username}
-        onChange={(v) => { update('username', v.toLowerCase().replace(/[^a-z0-9_-]/g, '')); }}
-        onBlur={() => { markTouched('username'); checkUsername(form.username); }}
-        error={usernameState === 'taken' ? 'That username is already taken — try another.' : errorFor('username')}
-        valid={usernameState === 'free' && isValid('username')}
-      />
-      <Field
-        label="Choose a password" required type="password" revealable autoComplete="new-password"
-        hint="at least 6 characters"
-        value={form.password_val}
-        onChange={(v) => update('password_val', v)}
-        onBlur={() => markTouched('password_val')}
-        error={errorFor('password_val')} valid={isValid('password_val')}
-      />
-      <p className="form-note">
-        You&apos;ll use these to sign in later and update your journey — there&apos;s no
-        email verification step to wait for.
-      </p>
-    </>
-  );
-}
+type ContactCheck = 'idle' | 'checking' | 'free' | 'taken';
 
-function StepSchool({ form, update, markTouched, errorFor, isValid, streamOptions }: StepProps & { streamOptions: string[] }) {
+function StepYou({
+  form, update, markTouched, errorFor, isValid, contactState, checkContact, resetContact,
+}: StepProps & {
+  contactState: { email: ContactCheck; phone: ContactCheck };
+  checkContact: (which: 'email' | 'phone') => void;
+  // Editing after a check makes the old answer stale; it is re-checked on blur.
+  resetContact: (which: 'email' | 'phone') => void;
+}) {
+  const takenNote = (what: string) => (
+    <>That {what} is already registered — <a href="/login">sign in</a> or <a href="/forgot-password">reset your password</a>.</>
+  );
   return (
     <>
       <Field
@@ -697,6 +696,57 @@ function StepSchool({ form, update, markTouched, errorFor, isValid, streamOption
         error={errorFor('full_name')} valid={isValid('full_name')}
       />
 
+      <div data-field="personal_email">
+        <Field
+          label="Email" required type="email" autoComplete="email" inputMode="email"
+          hint={contactState.email === 'checking' ? 'checking…' : 'you can sign in with this'}
+          value={form.personal_email}
+          onChange={(v) => { update('personal_email', v); resetContact('email'); }}
+          onBlur={() => { markTouched('personal_email'); checkContact('email'); }}
+          error={errorFor('personal_email')}
+          valid={isValid('personal_email') && contactState.email !== 'taken'}
+        />
+        {contactState.email === 'taken' && <p className="field__error field__error--static">{takenNote('email')}</p>}
+      </div>
+
+      <div className="two-col two-col--code" data-field="phone_number">
+        <SelectField
+          label="Code" value={form.phone_country_code}
+          onChange={(v) => update('phone_country_code', v)} options={COUNTRY_CODES}
+        />
+        <Field
+          label="Phone number" required type="tel" inputMode="tel" autoComplete="tel-national"
+          hint={contactState.phone === 'checking' ? 'checking…' : 'or sign in with this'}
+          value={form.phone_number}
+          onChange={(v) => { update('phone_number', v.replace(/[^\d\s]/g, '')); resetContact('phone'); }}
+          onBlur={() => { markTouched('phone_number'); checkContact('phone'); }}
+          error={errorFor('phone_number')}
+          valid={isValid('phone_number') && contactState.phone !== 'taken'}
+        />
+      </div>
+      {contactState.phone === 'taken' && <p className="field__error field__error--static">{takenNote('phone number')}</p>}
+
+      <Field
+        label="Choose a password" required type="password" revealable autoComplete="new-password"
+        hint={`at least ${MIN_PASSWORD} characters`}
+        value={form.password_val}
+        onChange={(v) => update('password_val', v)}
+        onBlur={() => markTouched('password_val')}
+        error={errorFor('password_val')} valid={isValid('password_val')}
+      />
+
+      <p className="form-note">
+        🔒 Your email and phone number are only for signing in and for the school
+        office. They are never shown on the public directory.
+      </p>
+    </>
+  );
+
+}
+
+function StepSchool({ form, update, markTouched, errorFor, isValid, streamOptions }: StepProps & { streamOptions: string[] }) {
+  return (
+    <>
       <div className="field">
         <label className="field__label" id="school-label">Which school did you attend? <Req /></label>
         <SchoolPicker
@@ -985,49 +1035,50 @@ function StepNow({
         </button>
       </OptionalSection>
 
-      <div className="contact-block">
-        <h3 className="contact-block__title">How the school can reach you</h3>
-        <p className="contact-block__note">
-          🔒 Your email and phone number are for the school office only. They are never
-          shown on the public directory.
-        </p>
-
-        <Field
-          label="Email" required type="email" autoComplete="email"
-          value={form.personal_email} onChange={(v) => update('personal_email', v)}
-          onBlur={() => markTouched('personal_email')}
-          error={errorFor('personal_email')} valid={isValid('personal_email')}
-        />
-        <div className="two-col">
-          <SelectField
-            label="Country code" value={form.phone_country_code}
-            onChange={(v) => update('phone_country_code', v)} options={COUNTRY_CODES}
-          />
-          <Field
-            label="Phone number" required type="tel" inputMode="tel" autoComplete="tel-national"
-            value={form.phone_number}
-            onChange={(v) => update('phone_number', v.replace(/\D/g, ''))}
-            onBlur={() => markTouched('phone_number')}
-            error={errorFor('phone_number')} valid={isValid('phone_number')}
-          />
-        </div>
-        <Field
-          label="LinkedIn" optional type="url" autoComplete="url" hint="shown publicly if you add it"
-          value={form.linkedin_url} onChange={(v) => update('linkedin_url', v)}
-          onBlur={() => markTouched('linkedin_url')}
-          error={errorFor('linkedin_url')} valid={isValid('linkedin_url')}
-        />
-      </div>
     </>
   );
 }
 
-function StepFinish({ form, update }: StepProps) {
+function StepFinish({ form, update, markTouched, errorFor, isValid }: StepProps) {
   // Local: only meaningful while this step is on screen, and it should reset
   // if the person leaves and comes back with a different file in mind.
   const [photoError, setPhotoError] = useState('');
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (!form.photo_file) { setPreviewUrl(null); return; }
+    const url = URL.createObjectURL(form.photo_file);
+    setPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [form.photo_file]);
+
+  const route = publicRouteLabel(resolveValue(form.admission_route, form.admission_route_other));
+  const college = form.joined_college === 'yes' ? cleanProperNoun(form.college_name) : null;
+  const initials = form.full_name.trim().split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase() || '?';
+
   return (
     <>
+      {/* Photos are what the home page shows, so show people exactly how theirs
+          will look before they decide whether to add one. */}
+      <div className="photo-preview">
+        <p className="photo-preview__label">How you&apos;ll appear on the home page</p>
+        <div className="photo-preview__card">
+          <div className="photo-preview__avatar">
+            {previewUrl ? <img src={previewUrl} alt="" /> : <span>{initials}</span>}
+          </div>
+          <div>
+            <div className="photo-preview__name">{form.full_name.trim() || 'Your name'}</div>
+            <div className="photo-preview__meta">
+              {[college, route ? `via ${route}` : null, form.class_of ? `Class of ${form.class_of}` : null].filter(Boolean).join(' · ') || 'Veveaham alumnus'}
+            </div>
+          </div>
+        </div>
+        {!previewUrl && (
+          <p className="photo-preview__nudge">
+            Profiles with a photo are the ones juniors stop and read. It stays optional.
+          </p>
+        )}
+      </div>
+
       <div className="field" style={{ marginBottom: 24 }}>
         <label className="field__label">Photo <Optional /></label>
         <label className="upload">
@@ -1078,6 +1129,13 @@ function StepFinish({ form, update }: StepProps) {
           This is the part juniors read most.
         </p>
       </div>
+
+      <Field
+        label="LinkedIn" optional type="url" autoComplete="url" hint="shown publicly if you add it"
+        value={form.linkedin_url} onChange={(v) => update('linkedin_url', v)}
+        onBlur={() => markTouched('linkedin_url')}
+        error={errorFor('linkedin_url')} valid={isValid('linkedin_url')}
+      />
 
       <div className="consent" style={{ marginTop: 20 }}>
         <label className="cbox">
@@ -1257,80 +1315,5 @@ function StepBar({ step }: { step: number }) {
         </div>
       ))}
     </div>
-  );
-}
-
-/* ─────────────────────────────────────────────────────────────────────────
-   Success
-───────────────────────────────────────────────────────────────────────── */
-function SuccessScreen({ unsavedSections = [] }: { unsavedSections?: string[] }) {
-  const [copied, setCopied] = useState(false);
-  const shareUrl = typeof window !== 'undefined' ? window.location.origin + '/register' : '';
-  const shareText = 'Join the Veveaham Alumni network — add your own journey here:';
-  const whatsapp = `https://wa.me/?text=${encodeURIComponent(shareText + ' ' + shareUrl)}`;
-  const email = `mailto:?subject=${encodeURIComponent('Join the Veveaham Alumni network')}&body=${encodeURIComponent(shareText + '\n\n' + shareUrl)}`;
-
-  async function copyLink() {
-    try {
-      await navigator.clipboard.writeText(shareUrl);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // Clipboard API needs HTTPS and permission; the link is visible anyway.
-    }
-  }
-
-  return (
-    <main className="container container--narrow">
-      <div className="card fade-up" style={{ textAlign: 'center' }}>
-        <div className="success-icon"><span>✓</span></div>
-        <h1 className="success-title">Registration successful</h1>
-        <p className="success-subtitle">Welcome to the Veveaham Alumni Network.</p>
-        {unsavedSections.length > 0 && (
-          <div className="alert alert--error" style={{ textAlign: 'left', marginTop: 16 }}>
-            Your profile is saved, but your {unsavedSections.join(' and ')} could not be.
-            Please add {unsavedSections.length === 1 ? 'it' : 'them'} again from your profile after you log in.
-          </div>
-        )}
-        <p className="subtitle">
-          Your profile has been submitted and is waiting for admin approval.
-          <br />
-          You can sign in any time with your username and password.
-        </p>
-
-        <hr style={{ border: 'none', borderBottom: '1px solid var(--border)', margin: '28px 0 20px' }} />
-
-        <h3 style={{ marginBottom: 4 }}>Help grow the network</h3>
-        <p className="hint" style={{ marginBottom: 14 }}>
-          Invite your classmates — the more journeys juniors can see, the better.
-        </p>
-
-        <div className="share-row">
-          <div className="share-link">🔗 Your alumni invite link</div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <button type="button" onClick={copyLink} className="btn btn--ghost">
-              <span className="btn__inner">{copied ? '✓ Copied' : 'Copy link'}</span>
-            </button>
-            <a className="icon-share-btn" href={whatsapp} target="_blank" rel="noopener noreferrer" aria-label="Share on WhatsApp" title="Share on WhatsApp">
-              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2 22l5.25-1.38c1.45.79 3.08 1.21 4.79 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.816 9.816 0 0012.04 2zm0 1.67c2.24 0 4.35.87 5.93 2.45a8.24 8.24 0 012.42 5.85c0 4.55-3.7 8.25-8.35 8.25a8.3 8.3 0 01-4.24-1.16l-.3-.18-3.12.82.83-3.04-.2-.31a8.18 8.18 0 01-1.27-4.4c0-4.55 3.7-8.25 8.3-8.28zm-4.6 4.7c-.17 0-.45.06-.68.32-.23.26-.9.88-.9 2.14 0 1.26.92 2.48 1.05 2.65.13.17 1.8 2.86 4.42 3.9 2.18.87 2.62.7 3.1.65.47-.04 1.5-.61 1.72-1.2.21-.59.21-1.1.15-1.2-.06-.11-.24-.17-.5-.3-.26-.13-1.5-.74-1.74-.82-.23-.09-.4-.13-.57.13-.17.26-.65.82-.8 1-.15.17-.29.19-.55.06-.26-.13-1.09-.4-2.07-1.28-.77-.68-1.28-1.53-1.43-1.79-.15-.26-.02-.4.11-.53.12-.12.26-.31.39-.47.13-.15.17-.26.26-.43.09-.17.04-.33-.02-.46-.06-.13-.57-1.4-.79-1.9-.2-.5-.42-.43-.57-.44l-.48-.01z" /></svg>
-            </a>
-            <a className="icon-share-btn" href={email} aria-label="Share via email" title="Share via email">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="2" /><path d="m22 6-10 7L2 6" /></svg>
-            </a>
-          </div>
-        </div>
-
-        <div className="success-next">
-          <h3>What happens next?</h3>
-          <div className="next-item"><span>1.</span> An administrator reviews your profile.</div>
-          <div className="next-item"><span>2.</span> Once approved, you appear in the alumni directory.</div>
-          <div className="next-item"><span>3.</span> Sign in any time to keep your journey up to date.</div>
-        </div>
-
-        <div className="success-login">
-          <a className="success-login-btn" href="/login">Continue to login →</a>
-        </div>
-      </div>
-    </main>
   );
 }

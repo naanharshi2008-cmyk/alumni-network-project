@@ -117,6 +117,8 @@ export interface Alumnus {
   id?: string;
   full_name: string;
   username: string | null;
+  /** Share-link identifier ("elanchearan-r-s-k3f9"). Replaced usernames in links. */
+  public_slug: string | null;
   school_name: string | null;
   school_board: string | null;
   class_of: number | null;

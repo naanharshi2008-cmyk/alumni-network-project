@@ -18,7 +18,6 @@ import { CATEGORIES } from '../../lib/types';
 interface AlumnusData {
   id: string;
   full_name: string;
-  username: string;
   school_name: string;
   admission_number: string;
   class_of: string;
@@ -78,7 +77,6 @@ function normalizeProfile(raw: any): AlumnusData {
   return {
     ...raw,
     full_name: str(raw.full_name),
-    username: str(raw.username),
     school_name: officialSchoolName(raw.school_name),
     admission_number: str(raw.admission_number),
     class_of: raw.class_of ? String(raw.class_of) : '',
@@ -122,6 +120,23 @@ export default function ProfilePage() {
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [notice, setNotice] = useState<{ welcome: boolean; unsaved: string[]; passwordUpdated: boolean }>({
+    welcome: false, unsaved: [], passwordUpdated: false,
+  });
+  const [inviteCopied, setInviteCopied] = useState(false);
+
+  // Read once, then drop them from the address bar so a refresh or a shared
+  // link doesn't show "Welcome" again.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const welcome = params.get('welcome') === '1';
+    const unsaved = (params.get('unsaved') ?? '').split(',').filter(Boolean);
+    const passwordUpdated = params.get('password') === 'updated';
+    if (welcome || unsaved.length || passwordUpdated) {
+      setNotice({ welcome, unsaved, passwordUpdated });
+      window.history.replaceState(null, '', '/profile');
+    }
+  }, []);
 
   const [profile, setProfile] = useState<AlumnusData | null>(null);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
@@ -261,8 +276,7 @@ export default function ProfilePage() {
         if (photoFile.size > MAX_BYTES) throw new Error('Photo is too large, please pick one under 5MB.');
         const extMatch = photoFile.name.match(/\.([a-zA-Z0-9]{1,5})$/);
         const ext = (extMatch?.[1] ?? 'jpg').toLowerCase();
-        const safeUsername = profile.username.replace(/[^a-zA-Z0-9-_]/g, '_');
-        const fileName = `${safeUsername}-${Date.now()}.${ext}`;
+        const fileName = `${profile.id}-${Date.now()}.${ext}`;
         const { error: upErr } = await supabase.storage.from('photos').upload(fileName, photoFile, {
           contentType: photoFile.type,
         });
@@ -335,7 +349,26 @@ export default function ProfilePage() {
         is_current: w.is_current,
       }));
 
+      // Email and phone are how this person signs in, and they are private, so
+      // they save immediately instead of waiting in the review queue - and they
+      // must stay unique across accounts.
+      const contact = {
+        personal_email: profile.personal_email.trim().toLowerCase(),
+        phone_country_code: profile.phone_country_code,
+        phone_number: profile.phone_number || null,
+      };
+      const { data: contactCheck, error: contactErr } = await supabase.rpc('contact_available', {
+        p_email: contact.personal_email, p_phone_code: contact.phone_country_code, p_phone: contact.phone_number,
+      });
+      if (contactErr) throw contactErr;
+      if (contactCheck?.email_free === false) throw new Error('That email is already used by another account.');
+      if (contactCheck?.phone_free === false) throw new Error('That phone number is already used by another account.');
+      const { personal_email: _e, phone_country_code: _c, phone_number: _p, ...contentColumns } = columns;
+
       if (isApproved) {
+        const { error: contactSaveErr } = await supabase.from('alumni').update(contact).eq('id', profile.id);
+        if (contactSaveErr) throw contactSaveErr;
+
         // ── Already published: stage, don't publish. ──────────────────────
         // The live columns stay exactly as they are, so the directory keeps
         // showing the approved version. This is what makes the "Edits under
@@ -344,7 +377,7 @@ export default function ProfilePage() {
         const { error: saveErr } = await supabase
           .from('alumni')
           .update({
-            pending_changes: { ...columns, higher_studies: studiesPayload, work_experience: workPayload },
+            pending_changes: { ...contentColumns, higher_studies: studiesPayload, work_experience: workPayload },
             modification_status: 'pending',
             // Saving is the alumnus attesting their info - that stands even
             // while the edits wait for review. last_updated is deliberately
@@ -468,6 +501,43 @@ export default function ProfilePage() {
 
         <StatusBanner approval={profile.approval_status} pendingReview={pendingReview} />
 
+        {notice.welcome && (
+          <div className="welcome-card">
+            <h2 className="welcome-card__title">You&apos;re in, {profile.full_name.split(' ')[0]} 🎉</h2>
+            <p>
+              The school will review your profile before it appears in the directory.
+              Sign in any time with your email or phone number to add to it.
+            </p>
+            <button
+              type="button"
+              className="btn btn--ghost"
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(`${window.location.origin}/register`);
+                  setInviteCopied(true);
+                  setTimeout(() => setInviteCopied(false), 2000);
+                } catch { /* clipboard needs permission; the link is simple to type */ }
+              }}
+            >
+              <span className="btn__inner">{inviteCopied ? '✓ Link copied' : 'Invite a batchmate'}</span>
+            </button>
+          </div>
+        )}
+        {notice.unsaved.length > 0 && (
+          <div className="alert alert--error">
+            Your profile saved, but your {notice.unsaved.join(' and ')} could not. Please add
+            {notice.unsaved.length === 1 ? ' it' : ' them'} again below.
+          </div>
+        )}
+        {notice.passwordUpdated && <div className="alert alert--success">Your new password is saved.</div>}
+
+        <ProfileChecklist
+          profile={profile}
+          hasHigherStudies={higherStudies.some((h) => h.degree_name.trim())}
+          hasWork={workExperience.some((w) => w.company.trim())}
+          photoPending={!!photoFile}
+        />
+
         {/* Freshness, shown plainly to the owner (public surfaces keep it
             subtle). The one-tap confirm exists so an unchanged-but-accurate
             profile never has to look stale. */}
@@ -493,7 +563,7 @@ export default function ProfilePage() {
 
         <form onSubmit={handleSave}>
           {/* Photo */}
-          <div className="field" style={{ display: 'flex', alignItems: 'center', gap: 20, marginBottom: 20 }}>
+          <div id="profile-photo" className="field" style={{ display: 'flex', alignItems: 'center', gap: 20, marginBottom: 20 }}>
             <div className="avatar" style={{ width: 80, height: 80, fontSize: '2rem' }}>
               {profile.photo_url
                 ? <img src={profile.photo_url} alt="" />
@@ -600,7 +670,7 @@ export default function ProfilePage() {
           )}
 
           <Divider />
-          <h3>Higher studies <span className="hint">optional — add as many as you&apos;ve done</span></h3>
+          <h3 id="profile-higher-studies">Higher studies <span className="hint">optional — add as many as you&apos;ve done</span></h3>
           {higherStudies.map((entry, i) => (
             <div key={entry.id ?? `new-${i}`} className="entry-card">
               <FloatingField label="Degree" hint="e.g. MS, MBA, PhD" value={entry.degree_name} onChange={(v) => setHigherStudies((p) => p.map((x, j) => j === i ? { ...x, degree_name: v } : x))} />
@@ -650,7 +720,7 @@ export default function ProfilePage() {
 
           <FloatingField label="Role / Designation" hint="optional" value={profile.designation} onChange={(v) => updateField('designation', v)} />
 
-          <h4 style={{ marginTop: 20 }}>Work experience <span className="hint">optional — like a LinkedIn timeline</span></h4>
+          <h4 id="profile-work" style={{ marginTop: 20 }}>Work experience <span className="hint">optional — like a LinkedIn timeline</span></h4>
           {workExperience.map((entry, i) => (
             <div key={entry.id ?? `new-${i}`} className="entry-card">
               <FloatingField label="Company / Organisation" value={entry.company} onChange={(v) => setWorkExperience((p) => p.map((x, j) => j === i ? { ...x, company: v } : x))} />
@@ -680,6 +750,7 @@ export default function ProfilePage() {
           <Divider />
           <h3>Contact <span className="hint">never shown publicly</span></h3>
 
+          <div id="profile-linkedin" />
           <FloatingField label="LinkedIn profile URL" hint="optional, shown publicly" type="url" value={profile.linkedin_url} onChange={(v) => updateField('linkedin_url', v)} />
           <FloatingField label="Email" type="email" value={profile.personal_email} onChange={(v) => updateField('personal_email', v)} required />
           <div className="two-col">
@@ -687,7 +758,7 @@ export default function ProfilePage() {
             <FloatingField label="Phone number" type="tel" value={profile.phone_number} onChange={(v) => updateField('phone_number', v.replace(/\D/g, ''))} required />
           </div>
 
-          <div className="field" style={{ marginTop: 20 }}>
+          <div id="profile-advice" className="field" style={{ marginTop: 20 }}>
             <label>One thing you&apos;d tell your junior self?</label>
             <textarea value={profile.message_1} onChange={(e) => updateField('message_1', e.target.value)} placeholder="e.g. don't stress over one bad exam, or start applying early…" />
             <span className="hint">This is the part juniors actually read.</span>
@@ -703,7 +774,7 @@ export default function ProfilePage() {
             <span className="hint">Shown under your first piece of advice.</span>
           </div>
 
-          <div className="field" style={{ marginTop: 20 }}>
+          <div id="profile-college-thoughts" className="field" style={{ marginTop: 20 }}>
             <label>Your experience at your college <span className="opt">optional</span></label>
             <textarea
               value={profile.college_thoughts}
@@ -839,5 +910,53 @@ function Chips({ options, value, onChange }: {
         </button>
       ))}
     </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Profile checklist
+   What a junior would miss on this profile, in the order it matters to them,
+   each with a jump to the field. Hidden once everything is done.
+───────────────────────────────────────────────────────────────────────── */
+function ProfileChecklist({
+  profile, hasHigherStudies, hasWork, photoPending,
+}: {
+  profile: AlumnusData;
+  hasHigherStudies: boolean;
+  hasWork: boolean;
+  photoPending: boolean;
+}) {
+  const confirmedRecently = !!profile.last_confirmed_at
+    && Date.now() - new Date(profile.last_confirmed_at).getTime() < 365 * 24 * 3600 * 1000;
+  const items = [
+    { done: !!profile.photo_url || photoPending, label: 'Add a photo', why: 'what juniors notice first', href: '#profile-photo' },
+    { done: !!profile.message_1.trim(), label: 'A line of advice for your junior self', why: 'the part juniors read most', href: '#profile-advice' },
+    { done: !!profile.college_thoughts.trim(), label: 'What your college is really like', why: 'helps someone choosing it', href: '#profile-college-thoughts' },
+    { done: hasHigherStudies || hasWork, label: 'Higher studies or work experience', why: 'shows where the path led', href: hasWork ? '#profile-work' : '#profile-higher-studies' },
+    { done: !!profile.linkedin_url.trim(), label: 'Your LinkedIn', why: 'so juniors can reach out', href: '#profile-linkedin' },
+    { done: confirmedRecently, label: 'Confirm your details this year', why: 'keeps your profile trusted', href: '#' },
+  ];
+  const done = items.filter((i) => i.done).length;
+  if (done === items.length) return null;
+  const pct = Math.round((done / items.length) * 100);
+
+  return (
+    <section className="checklist" aria-label="Profile checklist">
+      <div className="checklist__head">
+        <strong>Your profile is {pct}% complete</strong>
+        <span>{done} of {items.length}</span>
+      </div>
+      <div className="checklist__bar" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
+        <span style={{ width: `${pct}%` }} />
+      </div>
+      <ul className="checklist__items">
+        {items.filter((i) => !i.done).map((i) => (
+          <li key={i.label}>
+            <a href={i.href}>{i.label}</a>
+            <span> — {i.why}</span>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }

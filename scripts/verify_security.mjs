@@ -79,22 +79,47 @@ console.log('\nChecking as an anonymous visitor…\n');
     fail(`public_alumni is not readable (HTTP ${status}) — the directory will be empty`);
   } else {
     pass(`public_alumni is readable (HTTP ${status})`);
-    const bad = ['personal_email', 'phone_number', 'phone_country_code', 'admission_number', 'user_id', 'original_data', 'pending_changes'];
+    const bad = ['personal_email', 'phone_number', 'phone_country_code', 'email_key', 'phone_key', 'admission_number', 'user_id', 'original_data', 'pending_changes'];
     const found = body.length ? bad.filter((c) => c in body[0]) : [];
     if (found.length) fail(`public_alumni exposes private columns: ${found.join(', ')}`);
     else pass('public_alumni exposes no private columns');
   }
 }
 
-// 4. Registration's username check must work without table access.
+// 4. Sign-in and registration lookups must work without table access, and
+//    must never hand back anyone's contact details.
 {
-  const res = await fetch(`${rest}/rpc/username_available`, {
-    method: 'POST',
-    headers: { ...headers, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ candidate: 'zzz_probably_free_zzz' }),
+  const post = (fn, payload) => fetch(`${rest}/rpc/${fn}`, {
+    method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
   });
-  if (res.status === 200) pass('username_available RPC works (registration can check names)');
-  else fail(`username_available RPC failed (HTTP ${res.status}) — registration will break`);
+  const probe = `nobody-${Date.now()}@example.invalid`;
+
+  const lh = await post('login_handle', { p_identifier: probe });
+  const lhBody = await lh.json().catch(() => undefined);
+  if (lh.status !== 200) fail(`login_handle RPC failed (HTTP ${lh.status}) — nobody can sign in with email or phone`);
+  else if (lhBody !== null) fail('login_handle returned something for an address that is not registered');
+  else pass('login_handle works and returns nothing for an unknown contact');
+
+  const ca = await post('contact_available', { p_email: probe, p_phone_code: '+91', p_phone: '1234512345' });
+  const caBody = await ca.json().catch(() => undefined);
+  const keys = caBody && typeof caBody === 'object' ? Object.keys(caBody).sort().join(',') : '';
+  if (ca.status !== 200) fail(`contact_available RPC failed (HTTP ${ca.status}) — registration will break`);
+  else if (keys !== 'email_free,phone_free') fail(`contact_available returned unexpected fields: ${keys}`);
+  else pass('contact_available works and returns only two booleans');
+}
+
+// 4b. Anonymous visitors must not be able to write profiles or colleges. Each
+//     probe sends a row missing a required column, so even if the write were
+//     permitted nothing could be saved: permission errors (401/403) pass, a
+//     not-null error means the write got past the permission check.
+for (const [table, payload] of [['alumni', { full_name: null }], ['colleges', { name: null }]]) {
+  const res = await fetch(`${rest}/${table}`, {
+    method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (body?.code === '23502') fail(`anonymous visitors can INSERT into ${table} — migrations/07 is not applied`);
+  else if (res.status === 401 || res.status === 403 || body?.code === '42501') pass(`anonymous INSERT into ${table} is refused (HTTP ${res.status})`);
+  else fail(`unexpected answer to anonymous INSERT into ${table}: HTTP ${res.status} ${body?.code ?? ''}`);
 }
 
 // 5. The directory must not merely "work" — it must actually return people.

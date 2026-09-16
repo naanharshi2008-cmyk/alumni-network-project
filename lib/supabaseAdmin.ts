@@ -79,6 +79,38 @@ export function safeErrorMessage(error: { message?: string } | null | undefined)
     .replace(/eyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]*\.?[A-Za-z0-9_\-]*/g, '[redacted token]');
 }
 
+export type RequestUser = {
+  id: string;
+  email: string | null;
+  app_metadata: Record<string, unknown>;
+};
+
+/**
+ * Verify the caller of an API route is signed in (any account) and return who
+ * they are. Validated with the public anon key, for the reason given on
+ * requireAdmin below.
+ */
+export async function requireUser(
+  request: Request,
+): Promise<{ ok: true; user: RequestUser } | { ok: false; status: number; message: string }> {
+  if (!supabaseUrl || !anonKey) {
+    return { ok: false, status: 503, message: 'Server is not configured yet.' };
+  }
+  const header = request.headers.get('authorization') ?? '';
+  const token = header.toLowerCase().startsWith('bearer ') ? header.slice(7).trim() : '';
+  if (!token) return { ok: false, status: 401, message: 'Not signed in.' };
+
+  const publicClient = createClient(supabaseUrl, anonKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+  const { data, error } = await publicClient.auth.getUser(token);
+  if (error || !data?.user) return { ok: false, status: 401, message: 'Session is invalid or expired.' };
+  return {
+    ok: true,
+    user: { id: data.user.id, email: data.user.email ?? null, app_metadata: data.user.app_metadata ?? {} },
+  };
+}
+
 /**
  * Verify the caller of an API route is a signed-in admin.
  *
