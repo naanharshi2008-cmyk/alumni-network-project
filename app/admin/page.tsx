@@ -16,6 +16,8 @@ type AlumniRow = {
   id: string;
   full_name: string;
   username: string | null;
+  user_id: string | null;
+  public_slug?: string | null;
   admission_number: string | null;
   school_name: string | null;
   class_of: number;
@@ -120,6 +122,8 @@ export default function AdminPage() {
   // and description, plus the students there (for the school's per-alumnus note).
   const [collegesInfo, setCollegesInfo] = useState<CollegeInfoRow[]>([]);
 
+  const [mailHealth, setMailHealth] = useState<{ domainStatus: string; apiKeySet: boolean; hint: string } | null>(null);
+
   // "New since you last looked" marker. Stored per-browser; the dashboard is
   // the only notification channel that works before email keys are configured.
   const [lastVisit, setLastVisit] = useState<number | null>(null);
@@ -147,6 +151,10 @@ export default function AdminPage() {
       setLastVisit(stored ? Number(stored) : null);
 
       void loadAll();
+      void fetch('/api/admin/mail-health', { headers: { Authorization: `Bearer ${session.access_token}` } })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((h) => { if (active && h) setMailHealth(h); })
+        .catch(() => undefined);
     });
 
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -250,7 +258,7 @@ export default function AdminPage() {
     const q = decidedQuery.trim().toLowerCase();
     if (!q) return decided;
     return decided.filter((p) => [
-      p.full_name, p.username, p.college_name_raw, p.currently_at,
+      p.full_name, p.personal_email, p.phone_number, p.college_name_raw, p.currently_at,
       String(p.class_of ?? ''), p.approval_status,
     ].filter(Boolean).join(' ').toLowerCase().includes(q));
   }, [decided, decidedQuery]);
@@ -261,6 +269,21 @@ export default function AdminPage() {
   }, [pending, lastVisit]);
 
   /* ── Registration actions ──────────────────────────────────────────────── */
+  // "You're live" emails. Never blocks the approval, and the route itself
+  // checks each row really is approved before emailing anyone.
+  async function notifyApproved(ids: string[]) {
+    if (!ids.length) return;
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      await fetch('/api/admin/notify-approved', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ ids }),
+      });
+    } catch { /* email is a courtesy; the approval already stands */ }
+  }
+
   async function handleApprove(id: string) {
     setActionError('');
     // Note: we deliberately no longer copy the whole row into original_data.
@@ -278,6 +301,7 @@ export default function AdminPage() {
     if (error) { setActionError('Could not approve: ' + error.message); return; }
     if (!hit?.length) { setActionError('Nothing was approved — that profile may have been changed or removed. Reload and try again.'); return; }
     const person = pending.find((p) => p.id === id);
+    void notifyApproved([id]);
     setActionNote(`Approved ${person?.full_name ?? 'that registration'} — they're live on the directory now.`);
     setPending((prev) => prev.filter((p) => p.id !== id));
     setSelected((prev) => { const n = new Set(prev); n.delete(id); return n; });
@@ -302,6 +326,7 @@ export default function AdminPage() {
     if (done < ids.length) {
       setActionError(`Only ${done} of ${ids.length} were approved. Reload to see which are still waiting.`);
     }
+    void notifyApproved((hits ?? []).map((h: { id: string }) => h.id));
     setActionNote(`Approved ${done} ${done === 1 ? 'person' : 'people'} — they're live on the directory now.`);
     setPending((prev) => prev.filter((p) => !selected.has(p.id)));
     setSelected(new Set());
@@ -502,6 +527,14 @@ export default function AdminPage() {
           label="🖼 Colleges" count={collegesInfo.length} />
       </div>
 
+      {mailHealth && mailHealth.domainStatus !== 'verified' && (
+        <div className="alert alert--warn" role="status">
+          <strong>Email is not working yet.</strong> {mailHealth.hint} Until it is, password-reset links,
+          welcome emails and new-registration alerts are not delivered — use <em>Reset password</em> in
+          All Alumni to help someone who is locked out.
+        </div>
+      )}
+
       {actionError && <div className="alert alert--error">{actionError}</div>}
       {actionNote && <div className="alert alert--success">{actionNote}</div>}
 
@@ -584,7 +617,7 @@ export default function AdminPage() {
           <div className="search" style={{ marginBottom: 18 }}>
             <input
               type="text"
-              placeholder="Search name, username, college…"
+              placeholder="Search name, email, phone, college…"
               value={decidedQuery}
               onChange={(e) => setDecidedQuery(e.target.value)}
               aria-label="Search alumni"
@@ -611,7 +644,7 @@ export default function AdminPage() {
                         {person.approval_status === 'approved' ? 'In the directory' : 'Hidden'}
                       </span>
                       <div className="subtitle" style={{ margin: '4px 0 0', fontSize: '0.84rem' }}>
-                        {person.username ? `@${person.username}` : 'no login'}
+                        {person.personal_email || 'no email'}{person.user_id ? '' : ' · no login yet'}
                         {person.class_of ? ` · Class of ${person.class_of}` : ''}
                         {person.college_name_raw ? ` · ${person.college_name_raw}` : ''}
                       </div>
@@ -628,6 +661,7 @@ export default function AdminPage() {
                           <span className="btn__inner">Restore</span>
                         </button>
                       )}
+                      <AccountButton person={person} />
                       <DeleteButton person={person} onDelete={handleDelete} />
                     </div>
                   </div>
@@ -1045,7 +1079,6 @@ function PersonHeader({ person, isNew }: { person: AlumniRow; isNew?: boolean })
           {isNew && <span className="badge badge--xs badge--ok" style={{ marginLeft: 8 }}>NEW</span>}
         </h3>
         <p className="subtitle" style={{ margin: 0, fontSize: '0.86rem' }}>
-          {person.username && <><strong>@{person.username}</strong> · </>}
           Class of {person.class_of} · {person.stream}
           {/* The one field the office can actually verify someone against. */}
           {person.admission_number && <> · Adm. no. <strong>{person.admission_number}</strong></>}
@@ -1654,6 +1687,86 @@ function UnmatchedEntityRow({
           </div>
           {message && <p className="alert alert--error" style={{ marginTop: 10 }}>{message}</p>}
         </div>
+      )}
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Account help: reset a password, or give an account-less profile a login.
+   Works before school email is set up - the admin passes the temporary
+   password on privately, and it must be replaced at next sign-in.
+───────────────────────────────────────────────────────────────────────── */
+function AccountButton({ person }: { person: AlumniRow }) {
+  const hasLogin = !!person.user_id;
+  const [state, setState] = useState<'idle' | 'confirm' | 'busy' | 'done'>('idle');
+  const [temp, setTemp] = useState('');
+  const [err, setErr] = useState('');
+  const [copied, setCopied] = useState(false);
+
+  async function run() {
+    setState('busy'); setErr('');
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) { setErr('Your session expired, please sign in again.'); setState('confirm'); return; }
+    const res = await fetch(hasLogin ? '/api/admin/reset-password' : '/api/admin/create-login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify({ alumniId: person.id }),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) { setErr(body.error ?? 'That did not work. Please try again.'); setState('confirm'); return; }
+    setTemp(body.temporaryPassword);
+    setState('done');
+  }
+
+  if (state === 'idle') {
+    return (
+      <button type="button" className="btn btn--ghost" onClick={() => setState('confirm')}>
+        <span className="btn__inner">{hasLogin ? 'Reset password' : 'Create login'}</span>
+      </button>
+    );
+  }
+
+  return (
+    <div className="account-help">
+      {state === 'done' ? (
+        <>
+          <p style={{ margin: '0 0 8px' }}>
+            Temporary password for <strong>{person.full_name}</strong>:
+          </p>
+          <div className="account-help__temp">
+            <code>{temp}</code>
+            <button type="button" className="btn btn--ghost" onClick={async () => {
+              try { await navigator.clipboard.writeText(temp); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch { /* select it by hand */ }
+            }}>
+              <span className="btn__inner">{copied ? '✓ Copied' : 'Copy'}</span>
+            </button>
+          </div>
+          <p className="hint" style={{ display: 'block', margin: '8px 0 0' }}>
+            Send it to them privately. They sign in with their email or phone and this password, then choose their own.
+            It will not be shown again.
+          </p>
+          <button type="button" className="btn btn--ghost" style={{ marginTop: 10 }} onClick={() => { setTemp(''); setState('idle'); }}>
+            <span className="btn__inner">Done</span>
+          </button>
+        </>
+      ) : (
+        <>
+          <p style={{ margin: '0 0 10px' }}>
+            {hasLogin
+              ? <>Give <strong>{person.full_name}</strong> a temporary password? Their current password stops working.</>
+              : <>Create a login for <strong>{person.full_name}</strong>? They will sign in with the email or phone on this profile.</>}
+          </p>
+          {err && <p className="field__error field__error--static">{err}</p>}
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button type="button" className="btn btn--neutral" disabled={state === 'busy'} onClick={run}>
+              <span className="btn__inner">{state === 'busy' ? 'Working…' : hasLogin ? 'Yes, reset it' : 'Yes, create it'}</span>
+            </button>
+            <button type="button" className="btn btn--ghost" disabled={state === 'busy'} onClick={() => { setErr(''); setState('idle'); }}>
+              <span className="btn__inner">Cancel</span>
+            </button>
+          </div>
+        </>
       )}
     </div>
   );

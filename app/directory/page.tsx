@@ -88,6 +88,16 @@ function buildExplorerColleges(items: EnrichedAlumnus[]): ExplorerCollege[] {
   );
 }
 
+/* ── Share links ──────────────────────────────────────────────────────────── */
+function shareParam(a: Alumnus): string | null {
+  return a.public_slug || a.username || null;
+}
+function findByShareParam(items: EnrichedAlumnus[], param: string): EnrichedAlumnus | undefined {
+  const p = param.toLowerCase();
+  return items.find(({ a }) => (a.public_slug ?? '').toLowerCase() === p)
+    ?? items.find(({ a }) => (a.username ?? '').toLowerCase() === p);
+}
+
 /* ── Filters and lenses ──────────────────────────────────────────────────
    One set of alumni, sliced four ways.
 
@@ -227,7 +237,8 @@ export default function DirectoryPage() {
     // ?q= pre-fills the search box - the home galleries and hero search land here.
     const q = params.get('q');
     if (q) setQuery(q);
-    // ?p=<username> is a shareable profile link; resolved once rows arrive.
+    // ?p=<slug> is a shareable profile link, resolved once rows arrive. Links
+    // shared before usernames were removed carry ?p=<username> and still work.
     const p = params.get('p');
     if (p) setPendingProfileParam(p.toLowerCase());
   }, []);
@@ -342,7 +353,7 @@ export default function DirectoryPage() {
   // stale link should never error, just land on the directory.
   useEffect(() => {
     if (!pendingProfileParam || !rows) return;
-    const hit = enriched.find(({ a }) => (a.username ?? '').toLowerCase() === pendingProfileParam);
+    const hit = findByShareParam(enriched, pendingProfileParam);
     if (hit) setExpanded(hit);
     setPendingProfileParam(null);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -353,7 +364,7 @@ export default function DirectoryPage() {
   useEffect(() => {
     const url = new URL(window.location.href);
     const current = url.searchParams.get('p');
-    const wanted = expanded?.a.username ?? null;
+    const wanted = expanded ? shareParam(expanded.a) : null;
     if (wanted && current !== wanted) {
       url.searchParams.set('p', wanted);
       window.history.pushState({ p: wanted }, '', url);
@@ -369,7 +380,7 @@ export default function DirectoryPage() {
       const p = new URLSearchParams(window.location.search).get('p');
       if (!p) setExpanded(null);
       else {
-        const hit = enriched.find(({ a }) => (a.username ?? '').toLowerCase() === p.toLowerCase());
+        const hit = findByShareParam(enriched, p);
         if (hit) setExpanded(hit);
       }
     };
@@ -983,12 +994,12 @@ function ProfileModal({
               Class of {a.class_of ?? '–'}{a.stream ? ` · ${a.stream}` : ''}
             </div>
           </div>
-          {a.username && (
+          {shareParam(a) && (
             <button
               type="button"
               className="btn btn--ghost a-modal__share"
               onClick={async () => {
-                const url = `${window.location.origin}/directory?p=${encodeURIComponent(a.username!)}`;
+                const url = `${window.location.origin}/directory?p=${encodeURIComponent(shareParam(a)!)}`;
                 // Native share sheet on phones; clipboard everywhere else.
                 try {
                   if (navigator.share) await navigator.share({ title: `${a.full_name} — Veveaham Alumni`, url });
