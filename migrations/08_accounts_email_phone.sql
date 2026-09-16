@@ -122,6 +122,8 @@ RETURNS trigger
 LANGUAGE plpgsql
 SET search_path = public
 AS $$
+DECLARE
+  requested public.alumni;
 BEGIN
   IF public.is_school_admin() OR current_user NOT IN ('anon', 'authenticated') THEN
     -- Trusted writers: admins, service-role API routes, the SQL editor.
@@ -150,16 +152,18 @@ BEGIN
     -- A published profile changes only through review. Its owner may stage
     -- edits, confirm the profile, and keep their private contact details
     -- current. Starting from OLD protects any column added later by default.
+    -- Copied field by field: jsonb_populate_record(OLD, ...) reads a column
+    -- added later with a default as NULL on older rows (see 07).
     IF OLD.approval_status = 'approved' THEN
-      NEW := jsonb_populate_record(OLD, jsonb_build_object(
-        'pending_changes',     NEW.pending_changes,
-        'modification_status', CASE WHEN NEW.modification_status = 'pending'
-                                    THEN 'pending' ELSE OLD.modification_status END,
-        'last_confirmed_at',   NEW.last_confirmed_at,
-        'personal_email',      NEW.personal_email,
-        'phone_country_code',  NEW.phone_country_code,
-        'phone_number',        NEW.phone_number
-      ));
+      requested := NEW;
+      NEW := OLD;
+      NEW.pending_changes     := requested.pending_changes;
+      NEW.modification_status := CASE WHEN requested.modification_status = 'pending'
+                                      THEN 'pending' ELSE OLD.modification_status END;
+      NEW.last_confirmed_at   := requested.last_confirmed_at;
+      NEW.personal_email      := requested.personal_email;
+      NEW.phone_country_code  := requested.phone_country_code;
+      NEW.phone_number        := requested.phone_number;
     END IF;
   END IF;
 
