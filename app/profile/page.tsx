@@ -4,10 +4,11 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase, isSupabaseConfigured } from '../../lib/supabaseClient';
 import EntitySearchField from '../../lib/EntitySearchField';
+import SchoolPicker from '../../lib/SchoolPicker';
 import { cleanFreeText, cleanProperNoun , formatFullDate } from '../../lib/text';
 import { fetchApprovedOptions, fetchOrganizationNames, proposeOption } from '../../lib/publicData';
 import {
-  SCHOOLS, STREAMS, DEGREES, ADMISSION_ROUTES, STATUSES, SCHOOL_BOARDS,
+  STREAMS, DEGREES, ADMISSION_ROUTES, STATUSES, boardForSchool,
   COUNTRY_CODES, OTHER_OPTION, LEGACY_STREAM_MAP, officialSchoolName,
   PROFESSIONAL_COURSES, PROFESSIONAL_STAGES,
   isInProgressStatus, mergeOptions, splitStoredValue, resolveValue,
@@ -22,7 +23,6 @@ interface AlumnusData {
   admission_number: string;
   class_of: string;
   stream: string;
-  school_board: string;
   personal_email: string;
   phone_country_code: string;
   phone_number: string;
@@ -83,7 +83,6 @@ function normalizeProfile(raw: any): AlumnusData {
     admission_number: str(raw.admission_number),
     class_of: raw.class_of ? String(raw.class_of) : '',
     stream: str(raw.stream),
-    school_board: str(raw.school_board),
     personal_email: str(raw.personal_email),
     phone_country_code: str(raw.phone_country_code) || '+91',
     phone_number: str(raw.phone_number),
@@ -134,7 +133,7 @@ export default function ProfilePage() {
   // Free-typed "Other" values, kept beside the dropdown selection. The old
   // editor had no such box: choosing "Other" stored the literal word "Other"
   // and wiped whatever the person had actually written.
-  const [others, setOthers] = useState({ stream: '', degree: '', admission_route: '', current_status: '', field: '', school_board: '', professional_course: '' });
+  const [others, setOthers] = useState({ stream: '', degree: '', admission_route: '', current_status: '', field: '', professional_course: '' });
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -169,7 +168,6 @@ export default function ProfilePage() {
         admission_route: splitStoredValue(merged.admission_route, ADMISSION_ROUTES).other,
         current_status: splitStoredValue(merged.current_status, STATUSES).other,
         field: splitStoredValue(merged.field, CATEGORIES.map((c) => c.label)).other,
-        school_board: splitStoredValue(merged.school_board, SCHOOL_BOARDS).other,
       });
 
       // Timelines: staged version if present, else what's published.
@@ -250,7 +248,6 @@ export default function ProfilePage() {
       const finalRoute = resolveValue(profile.admission_route, others.admission_route);
       const finalStatus = resolveValue(profile.current_status, others.current_status);
       const finalField = resolveValue(profile.field, others.field);
-      const finalBoard = resolveValue(profile.school_board, others.school_board);
 
       if (!profile.full_name.trim()) throw new Error('Please keep your full name filled in.');
       if (!profile.personal_email.trim()) throw new Error('Please keep an email address on file.');
@@ -290,7 +287,8 @@ export default function ProfilePage() {
       const columns: Record<string, any> = {
         full_name: profile.full_name.trim(),
         school_name: profile.school_name,
-        school_board: finalBoard || null,
+        // Decided by the school, not asked for: see boardForSchool.
+        school_board: boardForSchool(profile.school_name),
         admission_number: cleanFreeText(profile.admission_number),
         class_of: profile.class_of ? parseInt(profile.class_of, 10) : null,
         stream: finalStream || null,
@@ -453,7 +451,6 @@ export default function ProfilePage() {
   const routeSel = splitStoredValue(profile.admission_route, routeOptions).selected;
   const statusSel = splitStoredValue(profile.current_status, statusOptions).selected;
   const fieldSel = splitStoredValue(profile.field, fieldOptions).selected;
-  const boardSel = splitStoredValue(profile.school_board, SCHOOL_BOARDS).selected;
   const pendingReview = profile.modification_status === 'pending';
 
   return (
@@ -513,8 +510,12 @@ export default function ProfilePage() {
           <h3>Basics</h3>
 
           <div className="field">
-            <label>School</label>
-            <Chips options={[...SCHOOLS]} value={profile.school_name} onChange={(v) => updateField('school_name', v)} />
+            <label id="profile-school-label">School</label>
+            <SchoolPicker
+              labelledBy="profile-school-label"
+              value={profile.school_name}
+              onChange={(v) => updateField('school_name', v)}
+            />
           </div>
 
           <FloatingField label="Full name" value={profile.full_name} onChange={(v) => updateField('full_name', v)} required />
@@ -528,12 +529,6 @@ export default function ProfilePage() {
             label="Stream at school" options={streamOptions} value={streamSel}
             onChange={(v) => updateField('stream', v)}
             otherValue={others.stream} onOtherChange={(v) => updateOther('stream', v)}
-          />
-
-          <SelectWithOther
-            label="School board" options={SCHOOL_BOARDS} value={boardSel}
-            onChange={(v) => updateField('school_board', v)}
-            otherValue={others.school_board} onOtherChange={(v) => updateOther('school_board', v)}
           />
 
           <Divider />

@@ -7,6 +7,7 @@ import EntitySearchField from '../../lib/EntitySearchField';
 import { toTitleCase, formatMonthYear } from '../../lib/text';
 import { officialSchoolName, BUILT_IN_OPTIONS, OPTION_CATEGORY_LABELS, OptionCategory } from '../../lib/options';
 import { CATEGORIES } from '../../lib/types';
+import Crest from '../../lib/Crest';
 
 const ADMIN_LOGIN_DOMAIN = 'veveaham-admin.local';
 const LAST_VISIT_KEY = 'veveaham.admin.lastVisit';
@@ -77,7 +78,7 @@ type Tab = 'registrations' | 'edits' | 'directory' | 'options' | 'colleges' | 'c
 
 // Fields the profile editor may change, and how to label them in the diff.
 const FIELD_LABELS: Record<string, string> = {
-  full_name: 'Full Name', school_name: 'School', school_board: 'School Board',
+  full_name: 'Full Name', school_name: 'School',
   class_of: 'Class Of', stream: 'Stream', degree: 'Degree', branch: 'Branch',
   field: 'Field', college_name_raw: 'College', currently_at: 'Currently At',
   professional_course: 'Professional course', professional_stage: 'Stage',
@@ -470,7 +471,7 @@ export default function AdminPage() {
     <div className="container">
       <div className="admin-head">
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span className="nav__logo">🎓</span>
+          <Crest />
           <h1 style={{ margin: 0 }}>Admin Dashboard</h1>
         </div>
         <button type="button" onClick={handleLogout} className="btn btn--neutral">

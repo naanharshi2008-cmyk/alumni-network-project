@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../lib/supabaseClient';
+import Crest from '../../lib/Crest';
 
 const ADMIN_LOGIN_DOMAIN = 'veveaham-admin.local';
 const ALUMNI_LOGIN_DOMAIN = 'veveaham-alumni-network.com';
@@ -71,7 +72,7 @@ export default function LoginPage() {
     <div className="container container--narrow" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '70vh' }}>
       <div className="card fade-up" style={{ width: '100%', maxWidth: 380 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 11, marginBottom: 6 }}>
-          <span className="nav__logo">🎓</span>
+          <Crest />
           <h1 style={{ fontSize: '1.4rem', margin: 0 }}>Alumni & Staff Login</h1>
         </div>
         <p className="subtitle" style={{ marginBottom: 24 }}>

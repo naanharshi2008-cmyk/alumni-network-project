@@ -2,6 +2,7 @@ import './globals.css';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Sora, Manrope } from 'next/font/google';
+import Crest from '../lib/Crest';
 
 // next/font manages <head> injection itself (self-hosted at build time), so
 // it never fights with Next's dev-overlay scripts the way a hand-written
@@ -13,11 +14,8 @@ const manrope = Manrope({ subsets: ['latin'], weight: ['400', '500', '600', '700
 export const metadata: Metadata = {
   title: 'Veveaham Alumni',
   description: 'See where our seniors went and what they are doing now.',
-  icons: {
-    icon: 'data:image/svg+xml,' + encodeURIComponent(
-      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="22" fill="black"/><text x="50" y="66" font-size="58" text-anchor="middle">🎓</text></svg>'
-    ),
-  },
+  // Favicon and home-screen icon come from app/icon.png and app/apple-icon.png
+  // (Next's file convention), both cut from the school crest.
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -26,7 +24,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         <nav className="nav">
           <Link href="/" className="nav__brand">
-            <span className="nav__logo">🎓</span>
+            <Crest />
             <span>Veveaham Alumni</span>
           </Link>
           <div className="nav__links">
@@ -49,7 +47,7 @@ function Footer() {
       <div className="footer__inner">
         <div>
           <div className="footer__brand">
-            <span className="nav__logo">🎓</span>
+            <Crest />
             <span>Veveaham Alumni</span>
           </div>
           <p className="footer__tag">

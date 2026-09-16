@@ -41,7 +41,10 @@ export default function Home() {
   return (
     <main className="container">
       <section className="hero fade-up">
-        <span className="hero__eyebrow">🎓 Veveaham alumni · real paths, real ranks</span>
+        <span className="hero__eyebrow">
+          <img className="hero__eyebrow-crest" src="/brand/crest-96.png" alt="" width={96} height={96} />
+          Veveaham alumni · real paths, real ranks
+        </span>
         <h1 className="hero__title">
           Where our seniors are,
           <br />
