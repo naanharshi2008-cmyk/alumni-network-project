@@ -18,7 +18,7 @@ export const PUBLIC_ALUMNI_SELECT = [
   'branch', 'field', 'current_status', 'currently_at', 'designation',
   'expected_finish_year', 'show_photo', 'photo_url', 'linkedin_url',
   'message_1', 'message_2', 'last_updated', 'last_confirmed_at', 'school_note', 'college_thoughts', 'professional_course', 'professional_stage', 'professional_org', 'admission_route', 'admission_rank', 'board_marks',
-  'board_cutoff', 'college_id', 'college_name_raw', 'colleges',
+  'board_cutoff', 'college_id', 'college_name_raw', 'colleges', 'organization_id', 'organization',
 ].join(', ');
 
 export type PublicDataResult<T> = { data: T; error: string };

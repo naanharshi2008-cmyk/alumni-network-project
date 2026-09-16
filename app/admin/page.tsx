@@ -3,7 +3,8 @@
 import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../lib/supabaseClient';
-import EntitySearchField from '../../lib/EntitySearchField';
+import EntitySearchField, { type EntityHit } from '../../lib/EntitySearchField';
+import { instKey } from '../../lib/instituteKey';
 import { toTitleCase, formatMonthYear } from '../../lib/text';
 import { officialSchoolName, BUILT_IN_OPTIONS, OPTION_CATEGORY_LABELS, OptionCategory } from '../../lib/options';
 import { CATEGORIES } from '../../lib/types';
@@ -524,7 +525,7 @@ export default function AdminPage() {
         <TabButton active={tab === 'companies'} onClick={() => setTab('companies')}
           label="🏢 Unmatched Companies" count={unmatchedCompanies.length} />
         <TabButton active={tab === 'colleges_info'} onClick={() => setTab('colleges_info')}
-          label="🖼 Colleges" count={collegesInfo.length} />
+          label="🏛 Institutes" count={collegesInfo.length} />
       </div>
 
       {mailHealth && mailHealth.domainStatus !== 'verified' && (
@@ -769,11 +770,13 @@ export default function AdminPage() {
       {/* ===== Colleges: banners, descriptions, school notes ===== */}
       {tab === 'colleges_info' && (
         <div className="stagger">
-          <TabIntro title="Colleges our alumni attend">
-            Give each college a banner photo and a line about it — both show on the
-            public site. Under each college you can also write a short
-            &ldquo;Note from Veveaham&rdquo; about a student, shown on their profile.
+          <TabIntro title="Institutes">
+            Fix how a college or company is named, add the other names people type
+            for it (&ldquo;IITM&rdquo;, &ldquo;NIT Trichy&rdquo;), and merge duplicates. Colleges our
+            alumni attend also get a banner, a line about them, and a &ldquo;Note from
+            Veveaham&rdquo; for each student.
           </TabIntro>
+          <FindInstitute onError={setActionError} onNote={setActionNote} onMerged={() => void loadAll()} />
           {collegesInfo.length === 0 ? (
             <EmptyCard emoji="🖼" text="No matched colleges yet — link some in the Unmatched Colleges tab first." />
           ) : (
@@ -793,6 +796,7 @@ export default function AdminPage() {
                 }
                 onError={setActionError}
                 onNote={setActionNote}
+                onMerged={() => void loadAll()}
               />
             ))
           )}
@@ -812,13 +816,14 @@ export default function AdminPage() {
  * disturb the staged-edits flow.
  */
 function CollegeInfoCard({
-  college, onChanged, onNoteSaved, onError, onNote,
+  college, onChanged, onNoteSaved, onError, onNote, onMerged,
 }: {
   college: CollegeInfoRow;
   onChanged: (patch: Partial<CollegeInfoRow>) => void;
   onNoteSaved: (studentId: string, note: string | null) => void;
   onError: (msg: string) => void;
   onNote: (msg: string) => void;
+  onMerged: () => void;
 }) {
   const [description, setDescription] = useState(college.description ?? '');
   const [busy, setBusy] = useState(false);
@@ -932,6 +937,16 @@ function CollegeInfoCard({
         </div>
       </div>
 
+      <InstituteNamesEditor
+        kind="college"
+        id={college.id}
+        name={college.name}
+        onRenamed={(name) => onChanged({ name })}
+        onMerged={onMerged}
+        onError={onError}
+        onNote={onNote}
+      />
+
       {college.banner_url
         ? <img src={college.banner_url} alt="" style={{ width: '100%', height: 84, objectFit: 'cover', borderRadius: 'var(--r-sm)', margin: '12px 0 10px' }} loading="lazy" />
         : <p className="subtitle" style={{ fontSize: '0.82rem', margin: '12px 0 10px' }}>No banner yet.</p>}
@@ -1041,7 +1056,8 @@ function groupByTypedName(rows: any[], column: string) {
   for (const row of rows) {
     const raw = (row[column] ?? '').trim();
     if (!raw) continue;
-    const key = raw.toLowerCase();
+    // Spacing, case and punctuation never make a different institute.
+    const key = instKey(raw) || raw.toLowerCase();
     if (!groups[key]) groups[key] = { display: raw, alumniIds: [] };
     groups[key].alumniIds.push(row.id);
   }
@@ -1604,44 +1620,49 @@ function UnmatchedEntityRow({
   alumniIds: string[];
   onResolved: (key: string) => void;
 }) {
-  const [mode, setMode] = useState<'idle' | 'editing' | 'saving' | 'error'>('idle');
+  const rpcKind = kind === 'colleges' ? 'college' : 'organization';
+  const [mode, setMode] = useState<'idle' | 'editing' | 'saving'>('idle');
   const [draft, setDraft] = useState(display);
+  const [pick, setPick] = useState<EntityHit | null>(null);
+  // Remembering a 2-3 letter spelling as an alias is how "CIT" ends up meaning
+  // two colleges, so short ones start unticked.
+  const [remember, setRemember] = useState(instKey(display).length > 3);
   const [message, setMessage] = useState('');
 
-  const linkColumn = kind === 'colleges' ? 'college_id' : 'organization_id';
-  const nameColumn = kind === 'colleges' ? 'college_name_raw' : 'currently_at';
-
-  async function handleSave() {
-    const finalName = toTitleCase(draft.trim());
-    if (!finalName) return;
-    setMode('saving');
+  async function open() {
+    setMode('editing');
     setMessage('');
+    // Start from the best existing match, so most links are one click.
+    const { data } = await supabase.rpc('search_institutes', { p_query: display, p_kind: rpcKind, p_limit: 1 });
+    const top = (data as EntityHit[] | null)?.[0];
+    if (top) { setPick(top); setDraft(top.name); }
+  }
+
+  async function link(entityId: string) {
+    const { error } = await supabase.rpc('admin_link_alumni', {
+      p_kind: rpcKind, p_alumni_ids: alumniIds, p_entity_id: entityId, p_typed: display, p_remember: remember,
+    });
+    if (error) throw error;
+    onResolved(groupKey);
+  }
+
+  async function linkToPick() {
+    if (!pick) return;
+    setMode('saving'); setMessage('');
+    try { await link(pick.id); } catch (e: any) { setMessage(e?.message ?? 'Something went wrong.'); setMode('editing'); }
+  }
+
+  async function createAndLink() {
+    const name = toTitleCase(draft.trim());
+    if (!name) return;
+    setMode('saving'); setMessage('');
     try {
-      // Reuse an existing row when one already matches, so correcting a typo
-      // links to the real record instead of creating a near-duplicate.
-      const { data: existing } = await supabase
-        .from(kind).select('id, name').ilike('name', finalName).maybeSingle();
-
-      let entityId = existing?.id;
-      if (!entityId) {
-        const { data, error } = await supabase
-          .from(kind).insert({ name: finalName, added_by_admin: true }).select('id').single();
-        if (error || !data) throw error ?? new Error('Could not create the record.');
-        entityId = data.id;
-      }
-
-      const { data: linked, error: updateError } = await supabase
-        .from('alumni')
-        .update({ [linkColumn]: entityId, [nameColumn]: finalName })
-        .in('id', alumniIds)
-        .select('id');
-      if (updateError) throw updateError;
-      if (!linked?.length) throw new Error('no profiles were linked — reload and try again');
-
-      onResolved(groupKey);
+      const { data: newId, error } = await supabase.rpc('admin_create_institute', { p_kind: rpcKind, p_name: name });
+      if (error) throw error;
+      await link(newId as string);
     } catch (e: any) {
       setMessage(e?.message ?? 'Something went wrong.');
-      setMode('error');
+      setMode('editing');
     }
   }
 
@@ -1654,31 +1675,43 @@ function UnmatchedEntityRow({
             Typed by {alumniIds.length} {alumniIds.length === 1 ? 'person' : 'people'}
           </p>
         </div>
-
         {mode === 'idle' && (
-          <button type="button" onClick={() => setMode('editing')} className="btn btn--ghost">
-            <span className="btn__inner">✎ Correct &amp; link for all</span>
+          <button type="button" onClick={open} className="btn btn--ghost">
+            <span className="btn__inner">Link to an institute</span>
           </button>
         )}
       </div>
 
-      {(mode === 'editing' || mode === 'saving' || mode === 'error') && (
+      {mode !== 'idle' && (
         <div style={{ marginTop: 12 }}>
           <EntitySearchField
-            table={kind}
-            label={kind === 'colleges' ? 'Correct college name' : 'Correct organisation name'}
-            hint="pick an existing record where possible"
+            kind={rpcKind}
+            label={kind === 'colleges' ? 'Which college is this?' : 'Which organisation is this?'}
+            hint="pick the existing record — short names and typos are fine"
             value={draft}
             onChange={setDraft}
-            searchShortNames={kind === 'colleges'}
+            onSelect={setPick}
           />
-          <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
-            <button type="button" onClick={handleSave} disabled={mode === 'saving'} className="btn btn--primary">
-              <span className="btn__inner">{mode === 'saving' ? 'Saving…' : '✓ Save for all'}</span>
-            </button>
+          <label className="cbox-row" style={{ marginTop: 10 }}>
+            <span className="cbox">
+              <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
+              <span className="cbox__mark" />
+            </span>
+            <span>Remember “{display}” as another name for it, so the next person who types it is matched automatically</span>
+          </label>
+          <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+            {pick ? (
+              <button type="button" onClick={linkToPick} disabled={mode === 'saving'} className="btn btn--primary">
+                <span className="btn__inner">{mode === 'saving' ? 'Linking…' : `✓ Link ${alumniIds.length === 1 ? 'them' : `all ${alumniIds.length}`} to ${pick.name}`}</span>
+              </button>
+            ) : (
+              <button type="button" onClick={createAndLink} disabled={mode === 'saving' || !draft.trim()} className="btn btn--neutral">
+                <span className="btn__inner">{mode === 'saving' ? 'Creating…' : `+ Create “${toTitleCase(draft.trim()) || '…'}” as a new ${kind === 'colleges' ? 'college' : 'organisation'}`}</span>
+              </button>
+            )}
             <button
               type="button"
-              onClick={() => { setMode('idle'); setDraft(display); setMessage(''); }}
+              onClick={() => { setMode('idle'); setDraft(display); setPick(null); setMessage(''); }}
               disabled={mode === 'saving'}
               className="btn btn--ghost"
             >
@@ -1767,6 +1800,203 @@ function AccountButton({ person }: { person: AlumniRow }) {
             </button>
           </div>
         </>
+      )}
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Institute names: the display name, the other names people type, and merging
+   duplicates. All writes go through migration 10's admin functions or the
+   aliases table (admin-only by row-level security).
+───────────────────────────────────────────────────────────────────────── */
+type AliasRow = { id: string; alias: string; source: string };
+
+function InstituteNamesEditor({
+  kind, id, name, onRenamed, onMerged, onError, onNote,
+}: {
+  kind: 'college' | 'organization';
+  id: string;
+  name: string;
+  onRenamed: (name: string) => void;
+  onMerged: () => void;
+  onError: (msg: string) => void;
+  onNote: (msg: string) => void;
+}) {
+  const [aliases, setAliases] = useState<AliasRow[] | null>(null);
+  const [nameDraft, setNameDraft] = useState(name);
+  const [aliasDraft, setAliasDraft] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [dup, setDup] = useState<EntityHit | null>(null);
+  const [dupText, setDupText] = useState('');
+  const [confirmMerge, setConfirmMerge] = useState(false);
+  const fk = kind === 'college' ? 'college_id' : 'organization_id';
+
+  const loadAliases = useCallback(async () => {
+    const { data, error } = await supabase.from('institute_aliases').select('id, alias, source').eq(fk, id).order('alias');
+    if (error) { onError('Could not load the other names: ' + error.message); return; }
+    setAliases((data as AliasRow[]) ?? []);
+  }, [fk, id, onError]);
+
+  useEffect(() => { void loadAliases(); }, [loadAliases]);
+  useEffect(() => { setNameDraft(name); }, [name]);
+
+  async function rename() {
+    const next = nameDraft.trim();
+    if (!next || next === name) return;
+    setBusy(true);
+    const { error } = await supabase.rpc('admin_rename_institute', { p_kind: kind, p_id: id, p_name: next });
+    setBusy(false);
+    if (error) { onError(error.message); return; }
+    onRenamed(next);
+    onNote(`Renamed to “${next}”. The old name still finds it.`);
+    void loadAliases();
+  }
+
+  async function addAlias() {
+    const alias = aliasDraft.trim();
+    if (!alias) return;
+    if (instKey(alias) === instKey(name)) { onError('That is already its name.'); return; }
+    if (instKey(alias).length < 2) { onError('That is too short to be a useful name.'); return; }
+    setBusy(true);
+    const { error } = await supabase.from('institute_aliases').insert({ [fk]: id, alias, source: 'admin' });
+    setBusy(false);
+    if (error) {
+      onError(error.code === '23505' ? `“${alias}” is already listed for it.` : 'Could not add that name: ' + error.message);
+      return;
+    }
+    setAliasDraft('');
+    void loadAliases();
+  }
+
+  async function removeAlias(row: AliasRow) {
+    setBusy(true);
+    const { data, error } = await supabase.from('institute_aliases').delete().eq('id', row.id).select('id');
+    setBusy(false);
+    if (error || !data?.length) { onError('Could not remove that name.'); return; }
+    setAliases((prev) => (prev ?? []).filter((a) => a.id !== row.id));
+  }
+
+  async function merge() {
+    if (!dup) return;
+    setBusy(true);
+    const { data, error } = await supabase.rpc('merge_institute', { p_kind: kind, p_from: dup.id, p_into: id });
+    setBusy(false);
+    setConfirmMerge(false);
+    if (error) { onError(error.message); return; }
+    const moved = (data as { moved_alumni?: number } | null)?.moved_alumni ?? 0;
+    onNote(`Merged “${dup.name}” into “${name}”. ${moved} profile${moved === 1 ? '' : 's'} moved; its old name still finds this one.`);
+    setDup(null); setDupText('');
+    void loadAliases();
+    onMerged();
+  }
+
+  return (
+    <div className="inst-names">
+      <div className="inst-names__row">
+        <input
+          type="text" value={nameDraft} onChange={(e) => setNameDraft(e.target.value)}
+          aria-label="Display name" disabled={busy}
+        />
+        <button type="button" className="btn btn--ghost" disabled={busy || !nameDraft.trim() || nameDraft.trim() === name} onClick={rename}>
+          <span className="btn__inner">Rename</span>
+        </button>
+      </div>
+
+      <p className="inst-names__label">Also known as</p>
+      <div className="inst-names__chips">
+        {aliases === null && <span className="hint">loading…</span>}
+        {aliases?.length === 0 && <span className="hint">no other names yet</span>}
+        {aliases?.map((a) => (
+          <span key={a.id} className="alias-chip" title={`added: ${a.source}`}>
+            {a.alias}
+            <button type="button" aria-label={`Remove ${a.alias}`} disabled={busy} onClick={() => removeAlias(a)}>×</button>
+          </span>
+        ))}
+      </div>
+      <div className="inst-names__row">
+        <input
+          type="text" value={aliasDraft} placeholder="Add a name people type, e.g. NIT Trichy"
+          onChange={(e) => setAliasDraft(e.target.value)} disabled={busy}
+          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void addAlias(); } }}
+          aria-label="Add another name"
+        />
+        <button type="button" className="btn btn--ghost" disabled={busy || !aliasDraft.trim()} onClick={addAlias}>
+          <span className="btn__inner">Add</span>
+        </button>
+      </div>
+
+      <details className="inst-names__merge">
+        <summary>Merge a duplicate into this one</summary>
+        <EntitySearchField
+          kind={kind} label="Find the duplicate" hint="its alumni, aliases and old name move here"
+          value={dupText} onChange={setDupText}
+          onSelect={(hit) => { setDup(hit && hit.id !== id ? hit : null); setConfirmMerge(false); }}
+        />
+        {dup && !confirmMerge && (
+          <button type="button" className="btn btn--neutral" style={{ marginTop: 8 }} onClick={() => setConfirmMerge(true)}>
+            <span className="btn__inner">Merge “{dup.name}” into this…</span>
+          </button>
+        )}
+        {dup && confirmMerge && (
+          <div className="delete-confirm" style={{ marginTop: 8 }}>
+            <p style={{ margin: '0 0 10px' }}>
+              Merge <strong>{dup.name}</strong> into <strong>{name}</strong>? Its profiles and other names
+              move here and it disappears from search. This cannot be undone from the dashboard.
+            </p>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button type="button" className="btn btn--neutral" disabled={busy} onClick={merge}>
+                <span className="btn__inner">{busy ? 'Merging…' : 'Yes, merge'}</span>
+              </button>
+              <button type="button" className="btn btn--ghost" disabled={busy} onClick={() => setConfirmMerge(false)}>
+                <span className="btn__inner">Cancel</span>
+              </button>
+            </div>
+          </div>
+        )}
+      </details>
+    </div>
+  );
+}
+
+/** Open any college or company for name editing, including ones no alumnus has yet. */
+function FindInstitute({ onError, onNote, onMerged }: {
+  onError: (msg: string) => void;
+  onNote: (msg: string) => void;
+  onMerged: () => void;
+}) {
+  const [kind, setKind] = useState<'college' | 'organization'>('college');
+  const [text, setText] = useState('');
+  const [picked, setPicked] = useState<EntityHit | null>(null);
+
+  return (
+    <div className="card" style={{ marginBottom: 18, padding: '16px 20px' }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+        {(['college', 'organization'] as const).map((k) => (
+          <button key={k} type="button" className={`chip${kind === k ? ' chip--active' : ''}`}
+            onClick={() => { setKind(k); setPicked(null); setText(''); }}>
+            {k === 'college' ? 'Colleges' : 'Companies & organisations'}
+          </button>
+        ))}
+      </div>
+      <EntitySearchField
+        kind={kind} label={kind === 'college' ? 'Find any college' : 'Find any organisation'}
+        hint="to rename it, add other names, or merge a duplicate"
+        value={text} onChange={setText} onSelect={setPicked}
+      />
+      {picked && (
+        <div style={{ marginTop: 12 }}>
+          <p style={{ margin: '0 0 4px', fontWeight: 700 }}>{picked.name}</p>
+          <InstituteNamesEditor
+            kind={kind}
+            id={picked.id}
+            name={picked.name}
+            onRenamed={(name) => { setPicked({ ...picked, name }); setText(name); }}
+            onMerged={onMerged}
+            onError={onError}
+            onNote={onNote}
+          />
+        </div>
       )}
     </div>
   );

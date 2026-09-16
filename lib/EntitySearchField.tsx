@@ -3,53 +3,62 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { supabase } from './supabaseClient';
 
-export type EntityHit = { id: string; name: string; state?: string | null };
+export type InstituteKind = 'college' | 'organization';
+
+export type EntityHit = {
+  id: string;
+  name: string;
+  state?: string | null;
+  district?: string | null;
+  matched_alias?: string | null;
+};
 
 /**
- * Type-ahead over a reference table (colleges or organizations).
+ * Type-ahead over colleges or organisations, backed by the search_institutes
+ * RPC (migration 10).
  *
- * Replaces three near-identical copies that had drifted apart - the register
- * page searched the `short_names` column, the profile page did not, so the same
- * query gave different results depending on which form you were standing in.
- *
- * The list is searched server-side on every keystroke (debounced) rather than
- * pre-loaded, because `colleges` holds ~47,000 rows and any client-side copy
- * silently stops at PostgREST's 1,000-row cap.
+ * What the old version got wrong, and this one fixes:
+ *  - It was an alphabetical substring match, so "IITMadras", "IITM" or
+ *    "Indian Institute of Technology Madras" found nothing, and a typo found
+ *    nothing. The RPC understands spacing, aliases, acronyms and typos, and
+ *    ranks the institute our alumni actually attend first.
+ *  - It threw the picked row away and the form re-matched the name on submit,
+ *    which failed whenever a name existed twice. onSelect now hands the row
+ *    back, and the forms keep its id.
+ *  - A failed search looked exactly like "no match". It now says so.
  *
  * Free text is always allowed: an unmatched name is kept as typed and lands in
- * the admin's "unmatched" queue, so a real-but-missing college never blocks a
- * student mid-registration.
+ * the admin's queue, so a missing college never blocks a registration.
  */
 export default function EntitySearchField({
-  table,
+  kind,
   label,
   hint,
   value,
   onChange,
   onSelect,
-  searchShortNames = false,
   required,
   invalid,
 }: {
-  table: 'colleges' | 'organizations';
+  kind: InstituteKind;
   label: string;
   hint?: string;
   value: string;
   onChange: (v: string) => void;
-  /** Fires with the matched row when the user picks a suggestion, null when they free-type. */
+  /** The row when a suggestion is picked; null as soon as the text is edited. */
   onSelect?: (hit: EntityHit | null) => void;
-  searchShortNames?: boolean;
   required?: boolean;
   invalid?: boolean;
 }) {
   const [results, setResults] = useState<EntityHit[]>([]);
   const [open, setOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [status, setStatus] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
   const [focused, setFocused] = useState(false);
   const [highlight, setHighlight] = useState(-1);
   const id = useId();
-  // Set while we apply a suggestion, so the effect below doesn't immediately
-  // re-open the dropdown for the name we just filled in.
+  const listId = `${id}-list`;
+  // Set while a suggestion is applied, so the effect below doesn't reopen the
+  // list for the name that was just filled in.
   const justPicked = useRef(false);
 
   useEffect(() => {
@@ -58,35 +67,30 @@ export default function EntitySearchField({
       return;
     }
     const query = value.trim();
-    if (query.length < 3) {
+    if (query.replace(/[^a-z0-9]/gi, '').length < 2) {
       setResults([]);
-      setLoading(false);
+      setStatus('idle');
       return;
     }
-    setLoading(true);
-    let cancelled = false;
+    setStatus('loading');
+    const controller = new AbortController();
     const timer = setTimeout(async () => {
-      // Escape PostgREST's `or` filter delimiters. A college with a comma or a
-      // parenthesis in its name - "IIT (ISM) Dhanbad" - would otherwise be read
-      // as extra filter syntax and error the request out.
-      const safe = query.replace(/[(),*]/g, ' ').trim();
-      if (!safe) { if (!cancelled) { setResults([]); setLoading(false); } return; }
-
-      const request = searchShortNames
-        ? supabase.from(table).select('id, name, state')
-            .or(`name.ilike.%${safe}%,short_names.ilike.%${safe}%`)
-        : supabase.from(table).select(table === 'colleges' ? 'id, name, state' : 'id, name')
-            .ilike('name', `%${safe}%`);
-
-      const { data } = await request.order('name').limit(12);
-      if (cancelled) return;
+      const { data, error } = await supabase
+        .rpc('search_institutes', { p_query: query, p_kind: kind, p_limit: 8 })
+        .abortSignal(controller.signal);
+      if (controller.signal.aborted) return;
+      if (error) {
+        setResults([]);
+        setStatus('error');
+        return;
+      }
       setResults((data as EntityHit[]) ?? []);
       setHighlight(-1);
-      setLoading(false);
+      setStatus('done');
     }, 250);
 
-    return () => { cancelled = true; clearTimeout(timer); };
-  }, [value, table, searchShortNames]);
+    return () => { controller.abort(); clearTimeout(timer); };
+  }, [value, kind]);
 
   function pick(hit: EntityHit) {
     justPicked.current = true;
@@ -94,6 +98,7 @@ export default function EntitySearchField({
     onSelect?.(hit);
     setOpen(false);
     setResults([]);
+    setStatus('idle');
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
@@ -113,7 +118,7 @@ export default function EntitySearchField({
   }
 
   const active = focused || value.trim().length > 0;
-  const showList = open && value.trim().length >= 3;
+  const showList = open && status !== 'idle';
 
   return (
     <div
@@ -133,37 +138,55 @@ export default function EntitySearchField({
         autoComplete="off"
         role="combobox"
         aria-expanded={showList}
+        aria-controls={listId}
         aria-autocomplete="list"
+        aria-activedescendant={highlight >= 0 ? `${listId}-${highlight}` : undefined}
         aria-required={required}
       />
       <label htmlFor={id}>{label}{required && <span className="req" aria-hidden> *</span>}</label>
       {hint && <span className="hint">{hint}</span>}
 
       {showList && (
-        <div className="typeahead" role="listbox">
-          {loading && <div className="typeahead__msg">Searching…</div>}
+        <div className="typeahead" role="listbox" id={listId}>
+          {status === 'loading' && <div className="typeahead__msg">Searching…</div>}
 
-          {!loading && results.length === 0 && (
+          {status === 'error' && (
+            <div className="typeahead__msg">
+              Search isn&apos;t available right now — type the full name and continue.
+            </div>
+          )}
+
+          {status === 'done' && results.length === 0 && (
             <div className="typeahead__msg">
               No match — that&apos;s fine, keep what you typed and continue.
             </div>
           )}
 
-          {!loading && results.map((r, i) => (
-            <button
-              key={r.id}
-              type="button"
-              role="option"
-              aria-selected={i === highlight}
-              className={`typeahead__item${i === highlight ? ' typeahead__item--on' : ''}`}
-              onMouseDown={(e) => e.preventDefault()} // keep focus so onBlur doesn't beat the click
-              onMouseEnter={() => setHighlight(i)}
-              onClick={() => pick(r)}
-            >
-              {r.name}
-              {r.state && <span className="typeahead__meta"> — {r.state}</span>}
-            </button>
-          ))}
+          {status === 'done' && results.map((r, i) => {
+            const place = [r.district, r.state].filter(Boolean).join(', ');
+            return (
+              <button
+                key={r.id}
+                id={`${listId}-${i}`}
+                type="button"
+                role="option"
+                aria-selected={i === highlight}
+                className={`typeahead__item${i === highlight ? ' typeahead__item--on' : ''}`}
+                onMouseDown={(e) => e.preventDefault()} // keep focus so onBlur doesn't beat the click
+                onMouseEnter={() => setHighlight(i)}
+                onClick={() => pick(r)}
+              >
+                <span className="typeahead__name">{r.name}</span>
+                {(place || r.matched_alias) && (
+                  <span className="typeahead__meta">
+                    {place}
+                    {place && r.matched_alias ? ' · ' : ''}
+                    {r.matched_alias && <>matched “{r.matched_alias}”</>}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
       )}
     </div>

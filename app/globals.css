@@ -1645,3 +1645,26 @@ textarea { min-height: 84px; resize: vertical; }
   padding: 8px 12px; border-radius: var(--r-sm); background: #0c0a10;
   border: 1px dashed var(--gold); font-size: 1.05rem; letter-spacing: 0.04em; color: var(--gold);
 }
+
+/* Type-ahead rows: name, then place and which alias matched. */
+.typeahead__name { display: block; }
+.typeahead__item .typeahead__meta { display: block; font-size: 0.78rem; margin-top: 1px; }
+
+/* ═══ Admin: institute names ═══ */
+.inst-names { margin: 12px 0 4px; padding: 12px 14px; border-radius: var(--r-sm); background: var(--surface-2); border: 1px solid var(--border); }
+.inst-names__row { display: flex; gap: 8px; align-items: center; }
+.inst-names__row input { flex: 1; min-width: 0; }
+.inst-names__label { margin: 12px 0 6px; font-size: 0.74rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-faint); }
+.inst-names__chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.alias-chip {
+  display: inline-flex; align-items: center; gap: 4px; padding: 3px 4px 3px 11px;
+  border-radius: var(--r-full); background: rgba(255,255,255,0.06); border: 1px solid var(--border-strong);
+  font-size: 0.82rem;
+}
+.alias-chip button {
+  width: 24px; height: 24px; border-radius: 50%; border: none; cursor: pointer;
+  background: transparent; color: var(--text-muted); font-size: 1rem; line-height: 1;
+}
+.alias-chip button:hover { background: rgba(255,255,255,0.1); color: var(--text); }
+.inst-names__merge { margin-top: 12px; }
+.inst-names__merge summary { cursor: pointer; font-size: 0.86rem; font-weight: 600; color: var(--text-muted); margin-bottom: 8px; }

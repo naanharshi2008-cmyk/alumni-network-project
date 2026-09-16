@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import { Alumnus, collegeNameOf } from '../lib/types';
+import { Alumnus, collegeKeyer } from '../lib/types';
 import { EXAM_ROUTES } from '../lib/options';
 
 /**
@@ -23,9 +23,10 @@ export default function HeroStats({ alumni }: { alumni: Alumnus[] | null }) {
 
     const colleges = new Set<string>();
     const exams = new Set<string>();
+    const collegeKey = collegeKeyer(alumni);
     for (const a of alumni) {
-      const college = collegeNameOf(a) ?? a.college_name_raw;
-      if (college) colleges.add(college.trim().toLowerCase());
+      const college = collegeKey(a);
+      if (college) colleges.add(college);
       // Only count actual entrance exams: "Board Marks" and "Merit / Direct"
       // are routes, not exams, and counting them would overstate this.
       if (a.admission_route && (EXAM_ROUTES as readonly string[]).includes(a.admission_route)) {

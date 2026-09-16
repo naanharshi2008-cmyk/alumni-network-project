@@ -1,3 +1,5 @@
+import { instKey } from './instituteKey';
+
 // Broad academic areas ("category / area" in the brief). Each alumnus is
 // bucketed into one of these so the directory can filter with a single tap.
 
@@ -102,6 +104,8 @@ export interface CollegeDetails {
   banner_url: string | null;
   /** Admin-written paragraph about the college. */
   description: string | null;
+  /** Other names it goes by ("IITM", "IIT Madras"). Present from migration 10. */
+  aliases?: string[] | null;
 }
 
 /**
@@ -153,10 +157,13 @@ export interface Alumnus {
   board_marks: string | null;
   board_cutoff: string | null;
   college_id: string | null;
+  organization_id?: string | null;
   college_name_raw: string | null;
   // The view builds this as a JSON object; older code paths may still hand us
   // an array from a PostgREST embed, so both shapes are accepted.
   colleges: CollegeDetails | CollegeDetails[] | null;
+  /** The matched company or organisation, with its other names. */
+  organization?: { name: string; aliases: string[] | null } | null;
 }
 
 /** One entry of an alumnus's post-graduation study timeline. */
@@ -220,7 +227,27 @@ export function collegeDetailsOf(a: Alumnus): CollegeDetails | null {
   return Array.isArray(c) ? c[0] ?? null : c;
 }
 
-/** Initials for the avatar fallback. */
+/**
+ * A grouping key per college, so the same college never counts twice: its id
+ * when the profile is linked, otherwise the typed name's key - folded into a
+ * linked college with that exact name when there is one ("IIT Madras" typed
+ * and "IIT Madras" linked are one college).
+ */
+export function collegeKeyer(alumni: Alumnus[]): (a: Alumnus) => string | null {
+  const idByName = new Map<string, string>();
+  for (const a of alumni) {
+    const name = collegeNameOf(a);
+    if (a.college_id && name) idByName.set(instKey(name), a.college_id);
+  }
+  return (a) => {
+    if (a.college_id) return `id:${a.college_id}`;
+    const key = instKey(a.college_name_raw);
+    if (!key) return null;
+    const id = idByName.get(key);
+    return id ? `id:${id}` : `name:${key}`;
+  };
+}
+
 /**
  * "CA · Intermediate", or just "CA" when the stage is unknown.
  *

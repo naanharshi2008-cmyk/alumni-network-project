@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase, isSupabaseConfigured } from '../../lib/supabaseClient';
 import EntitySearchField from '../../lib/EntitySearchField';
+import { linkFor, toPick, type InstitutePick } from '../../lib/institutes';
 import SchoolPicker from '../../lib/SchoolPicker';
 import { cleanFreeText, cleanProperNoun } from '../../lib/text';
 import { fetchApprovedOptions, proposeOption } from '../../lib/publicData';
@@ -27,6 +28,10 @@ interface FormState {
   field_other: string;
   joined_college: 'yes' | 'no' | 'not_yet';
   college_name: string;
+  // The suggestion picked for each institute field, kept (and saved in the
+  // draft) so submit links that exact row instead of re-matching the text.
+  college_pick: InstitutePick;
+  org_pick: InstitutePick;
   degree: string;
   degree_other: string;
   professional_course: string;
@@ -63,7 +68,7 @@ const initialForm: FormState = {
   password_val: '',
   full_name: '', school_name: '',
   class_of: '', stream: '', stream_other: '',
-  field: '', field_other: '', joined_college: 'yes', college_name: '', degree: '', degree_other: '', branch: '',
+  field: '', field_other: '', joined_college: 'yes', college_name: '', college_pick: null, org_pick: null, degree: '', degree_other: '', branch: '',
   professional_course: '', professional_course_other: '', professional_stage: '', professional_org: '',
   admission_route: '', admission_route_other: '', admission_rank: '', board_marks: '', board_cutoff: '',
   current_status: '', current_status_other: '', expected_finish_year: '',
@@ -434,20 +439,13 @@ export default function RegisterPage() {
         photoUrl = supabase.storage.from('photos').getPublicUrl(fileName).data.publicUrl;
       }
 
-      // 4. Match college / organisation against the reference tables. An
-      //    unmatched name is kept as typed and lands in the admin's queue.
-      const typedCollege = cleanProperNoun(form.college_name);
-      let collegeId: string | null = null;
-      if (typedCollege) {
-        const { data } = await supabase.from('colleges').select('id').ilike('name', typedCollege).maybeSingle();
-        if (data) collegeId = data.id;
-      }
+      // 4. Link the college and organisation: the picked suggestion when there
+      //    is one, else an unambiguous exact name or alias. Anything else is
+      //    kept as typed and lands in the admin's unmatched queue.
+      const typedCollege = form.joined_college === 'yes' ? cleanProperNoun(form.college_name) : null;
+      const collegeId = await linkFor('college', typedCollege, form.college_pick);
       const typedOrg = cleanProperNoun(form.currently_at);
-      let organizationId: string | null = null;
-      if (typedOrg) {
-        const { data } = await supabase.from('organizations').select('id').ilike('name', typedOrg).maybeSingle();
-        if (data) organizationId = data.id;
-      }
+      const organizationId = await linkFor('organization', typedOrg, form.org_pick);
 
       const finalStream = resolveValue(form.stream, form.stream_other);
       const finalDegree = resolveValue(form.degree, form.degree_other);
@@ -809,11 +807,11 @@ function StepStudies({
         <>
           <div onBlur={() => markTouched('college_name')}>
             <EntitySearchField
-              table="colleges" label="College / University" required
-              hint="start typing — we'll search every college in India"
+              kind="college" label="College / University" required
+              hint="short names work too — “IIT Madras”, “CEG”, “NIT Trichy”"
               value={form.college_name}
               onChange={(v) => update('college_name', v)}
-              searchShortNames
+              onSelect={(hit) => update('college_pick', toPick(hit))}
               invalid={!!errorFor('college_name')}
             />
           </div>
@@ -949,10 +947,11 @@ function StepNow({
 
       <div className="two-col">
         <EntitySearchField
-          table="organizations" label="Currently at"
+          kind="organization" label="Currently at"
           hint="company or institute, optional"
           value={form.currently_at}
           onChange={(v) => update('currently_at', v)}
+          onSelect={(hit) => update('org_pick', toPick(hit))}
         />
         <Field
           label="Role / Designation" optional
