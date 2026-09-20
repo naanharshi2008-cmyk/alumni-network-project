@@ -9,6 +9,10 @@ import { buildSearchDoc, searchItems, type SearchDoc } from '../../lib/search';
 import { instituteInitials, shortInstituteName } from '../../lib/showcase';
 import { Alumnus, CollegeDetails, collegeDetailsOf, collegeKeyer, collegeNameOf } from '../../lib/types';
 
+/* One screen of colleges at a time: the AISHE list our alumni draw from is
+   long, and a grid that keeps growing is nobody's idea of browsing. */
+const PAGE = 18;
+
 type CollegeCard = {
   key: string;
   name: string;
@@ -49,6 +53,8 @@ export default function CollegesPage() {
     () => searchItems(colleges, (c) => c.doc!, query),
     [colleges, query],
   );
+  const [shown, setShown] = useState(PAGE);
+  useEffect(() => { setShown(PAGE); }, [query]);
 
   return (
     <main className="container container--wide">
@@ -104,9 +110,18 @@ export default function CollegesPage() {
               </p>
             </div>
           ) : (
-            <div className="college-grid stagger">
-              {results.map((c) => <CollegeTile key={c.key} college={c} />)}
-            </div>
+            <>
+              <div className="college-grid stagger">
+                {results.slice(0, shown).map((c) => <CollegeTile key={c.key} college={c} />)}
+              </div>
+              {results.length > shown && (
+                <button type="button" className="show-more" onClick={() => setShown((n) => n + PAGE)}>
+                  Show {Math.min(PAGE, results.length - shown)} more{' '}
+                  {Math.min(PAGE, results.length - shown) === 1 ? 'college' : 'colleges'}{' '}
+                  <span className="show-more__of">of {results.length}</span>
+                </button>
+              )}
+            </>
           )}
         </>
       )}

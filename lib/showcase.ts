@@ -10,8 +10,9 @@
  * placeholders dressed up as people.
  */
 
+import { instKey } from './instituteKey';
 import { EXAM_ROUTES, publicRouteLabel } from './options';
-import { Alumnus, collegeDetailsOf, collegeKeyer, collegeNameOf } from './types';
+import { Alumnus, HigherStudy, collegeDetailsOf, collegeKeyer, collegeNameOf } from './types';
 
 export const ROTATION_HOURS = 3;
 
@@ -86,20 +87,33 @@ export function heroFaces(lineup: Alumnus[], featuredCount: number, max = 4): Al
 
 export type Quote = { text: string; person: Alumnus };
 
-/** One real piece of advice for the quote card, rotating with the window. */
-export function heroQuote(alumni: Alumnus[], slot = rotationWindow()): Quote | null {
-  const candidates = alumni
-    .map((a) => ({ a, text: tidyQuote(a.message_1) }))
-    .filter((c): c is { a: Alumnus; text: string } => !!c.text);
-  if (candidates.length === 0) return null;
-  const pick = candidates[Math.floor(seeded(slot * 40503 + 7)() * candidates.length)];
-  return { text: pick.text, person: pick.a };
+/**
+ * Every piece of advice worth putting on the quote card, in this window's
+ * order. The hero cycles through them, so one person's words are not the face
+ * of the school for three hours at a time.
+ */
+export function quoteCandidates(alumni: Alumnus[], slot = rotationWindow()): Quote[] {
+  const rand = seeded(slot * 40503 + 7);
+  return shuffle(
+    alumni
+      .map((a) => ({ person: a, text: tidyQuote(a.message_1) }))
+      .filter((c): c is Quote => !!c.text),
+    rand,
+  );
 }
 
-/** Short enough for a card: whole sentences up to ~160 characters, else a clean cut. */
+/**
+ * Short enough for a card: whole sentences up to ~160 characters, else a clean
+ * cut. Also refuses what is plainly not advice - the hero is the front page of
+ * the school, and a half-finished row that says "nmmmmmmmm" must never land
+ * there.
+ */
 function tidyQuote(raw: string | null | undefined): string | null {
   const text = (raw ?? '').replace(/\s+/g, ' ').trim();
   if (text.length < 24) return null;
+  if (text.split(' ').length < 3) return null;         // a sentence, not a word
+  if (/(.)\1{4,}/.test(text)) return null;             // "nmmmmmmm", "aaaaaa"
+  if (!/[a-z\u0B80-\u0BFF]/i.test(text)) return null;  // some actual letters
   if (text.length <= 160) return text;
   const sentences = text.match(/[^.!?]+[.!?]+/g) ?? [];
   let out = '';
@@ -161,6 +175,27 @@ export function compactCollegeLabel(a: Alumnus): string | null {
     .filter((al) => al.length <= 20 && al.includes(' ') && fits(al))
     .sort((x, y) => y.length - x.length)[0];
   return better ?? label;
+}
+
+/**
+ * Everywhere this person has studied, their college first, then anything they
+ * added under higher studies. Someone who did a BSc here and an MSc there has
+ * two names to their story, and a card that only ever shows the first is
+ * quietly wrong. Deduped by key, so the same place typed twice is one entry.
+ */
+export function institutesFor(a: Alumnus, studies: HigherStudy[] = []): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const add = (name: string | null | undefined) => {
+    const label = (name ?? '').trim();
+    const key = instKey(label);
+    if (!label || key.length < 2 || seen.has(key)) return;
+    seen.add(key);
+    out.push(label);
+  };
+  add(compactCollegeLabel(a));
+  for (const s of studies) add(s.institution);
+  return out;
 }
 
 export function shortInstituteName(name: string, aliases: string[]): string {
