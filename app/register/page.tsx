@@ -1295,6 +1295,9 @@ function StepFinish({ form, update, markTouched, errorFor, isValid }: StepProps)
           will look before they decide whether to add one. */}
       <div className="photo-preview">
         <p className="photo-preview__label">How you&apos;ll appear on the home page</p>
+        <p className="hint" style={{ display: 'block', marginBottom: 10 }}>
+          Also on your own page, and on the small card people see when your page is shared.
+        </p>
         <div className="photo-preview__card">
           <div className="photo-preview__avatar">
             {previewUrl ? <img src={previewUrl} alt="" /> : <span>{initials}</span>}
@@ -1378,7 +1381,9 @@ function StepFinish({ form, update, markTouched, errorFor, isValid }: StepProps)
         </label>
         <label htmlFor="consent">
           I agree that my name and the details I chose to share can be shown publicly on
-          the Veveaham alumni site. My email and phone number will never be shown publicly.
+          the Veveaham alumni site, including on a page of my own that search engines can
+          find. My email and phone number will never be shown publicly. I can ask the
+          school to change or remove my profile at any time.
         </label>
       </div>
     </>

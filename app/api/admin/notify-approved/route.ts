@@ -34,7 +34,7 @@ export async function POST(request: Request) {
   for (const row of rows ?? []) {
     if (!row.personal_email) continue;
     if (!(await allowHit(admin, throttleKey('approved', row.id), 1, 24 * 3600))) continue;
-    const url = `${siteUrl()}/directory?p=${encodeURIComponent(row.public_slug ?? '')}`;
+    const url = `${siteUrl()}/alumni/${encodeURIComponent(row.public_slug ?? '')}`;
     const result = await sendMail({ to: row.personal_email, ...approvedEmail(row.full_name, url) });
     if (result.sent) sent += 1;
   }

@@ -4,7 +4,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { isSupabaseConfigured } from '../../lib/supabaseClient';
 import { fetchApprovedAlumni, fetchTimelines } from '../../lib/publicData';
-import { asksForRank, boardForSchool, officialSchoolName, publicRouteLabel, SCHOOLS } from '../../lib/options';
+import { boardForSchool, officialSchoolName, publicRouteLabel, SCHOOLS } from '../../lib/options';
+import { AdmissionBadges, Fact, Row } from '../../lib/profileParts';
 import { formatRankBand, formatMarksBand, formatRankSpan, formatMonthYear } from '../../lib/text';
 import { buildSearchDoc, searchItems, type SearchDoc } from '../../lib/search';
 import { collegeTintKey, instituteInitials, instituteTint } from '../../lib/showcase';
@@ -890,40 +891,6 @@ function CollegeExplorerCard({
   );
 }
 
-/**
- * "How they got in", as badges.
- *
- * This is the answer a visiting student came for, so it appears on the card,
- * in the modal, and on the Explorer mini-card rather than being buried.
- *
- * The route leads and is always shown when present - every one of the alumni
- * on an exam route has one, and "via JEE Main" states that the path exists
- * without ranking anybody. Rank and marks follow only when given, and always
- * as bands: see formatRankBand in lib/text.ts for why exact figures are the
- * wrong call here.
- */
-function AdmissionBadges({ a, showStatus = false }: { a: Alumnus; showStatus?: boolean }) {
-  // Show what the route makes true, not everything the row happens to hold.
-  // Someone who typed a rank and then changed their route keeps the rank in
-  // their profile; it just stops being shown beside a route it does not
-  // belong to - which for Management Quota, displayed as "Board Marks", would
-  // give away the very thing that label exists to hide.
-  const onExam = asksForRank(a.admission_route);
-  const rank = onExam ? formatRankBand(a.admission_rank) : null;
-  const marks = !onExam ? formatMarksBand(a.board_marks) : null;
-  if (!a.admission_route && !rank && !marks) return null;
-
-  return (
-    <div className="admission-row">
-      {a.admission_route && <span className="badge badge--xs">via {publicRouteLabel(a.admission_route)}</span>}
-      {rank && <span className="badge badge--xs">{rank}</span>}
-      {marks && <span className="badge badge--xs">{marks} marks</span>}
-      {showStatus && a.current_status && (
-        <span className="badge badge--xs" style={{ opacity: 0.75 }}>{a.current_status}</span>
-      )}
-    </div>
-  );
-}
 
 /* ─────────────────────────────────────────────────────────────────────────
    Alumnus Card (Directory tab)
@@ -1109,7 +1076,7 @@ function ProfileModal({
               type="button"
               className="btn btn--ghost a-modal__share"
               onClick={async () => {
-                const url = `${window.location.origin}/directory?p=${encodeURIComponent(shareParam(a)!)}`;
+                const url = `${window.location.origin}/alumni/${encodeURIComponent(shareParam(a)!)}`;
                 // Native share sheet on phones; clipboard everywhere else.
                 try {
                   if (navigator.share) await navigator.share({ title: `${a.full_name} — Veveaham Alumni`, url });
@@ -1293,26 +1260,7 @@ function ProfileModal({
   );
 }
 
-/* ─────────────────────────────────────────────────────────────────────────
-   Utility components
-───────────────────────────────────────────────────────────────────────── */
-function Row({ icon, label, children }: { icon: string; label: string; children: React.ReactNode }) {
-  return (
-    <div className="a-row">
-      <span className="a-row__icon" aria-hidden>{icon}</span>
-      <span><span className="a-row__label">{label}: </span>{children}</span>
-    </div>
-  );
-}
 
-function Fact({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <p className="college-facts__label">{label}</p>
-      <p className="college-facts__value">{value}</p>
-    </div>
-  );
-}
 
 function Empty({ hasData }: { hasData: boolean }) {
   return (

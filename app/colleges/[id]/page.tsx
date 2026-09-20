@@ -212,7 +212,7 @@ export default function CollegePage() {
                     <span className="shot__credit">
                       Shared by{' '}
                       {p.shared_by_slug
-                        ? <Link href={`/directory?p=${encodeURIComponent(p.shared_by_slug)}`}>{p.shared_by}</Link>
+                        ? <Link href={`/alumni/${encodeURIComponent(p.shared_by_slug)}`}>{p.shared_by}</Link>
                         : p.shared_by}
                       {p.shared_by_class ? ` ’${String(p.shared_by_class).slice(-2)}` : ''}
                     </span>

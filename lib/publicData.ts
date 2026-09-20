@@ -8,7 +8,8 @@
 
 import { supabase, isSupabaseConfigured } from './supabaseClient';
 import type { Alumnus, HigherStudy, WorkExperience } from './types';
-import { normaliseOptionValue } from './options';
+import { collegeNameOf } from './types';
+import { normaliseOptionValue, publicRouteLabel } from './options';
 
 /**
  * Columns pulled for the directory and home galleries. Listed explicitly rather than
@@ -53,6 +54,91 @@ export async function fetchApprovedAlumni(): Promise<PublicDataResult<Alumnus[]>
   };
 }
 
+
+/**
+ * Enough of a person to draw a card, and no more.
+ *
+ * The related-people rails on a profile page show eight names apiece; pulling
+ * the full 33-column projection for each of them would cost more than the
+ * page itself.
+ */
+export const PUBLIC_ALUMNI_CARD_SELECT = [
+  'id', 'full_name', 'public_slug', 'username', 'class_of', 'stream', 'degree',
+  'field', 'admission_route', 'show_photo', 'photo_url', 'college_id', 'college_name_raw', 'colleges',
+].join(', ');
+
+/** One person, by the slug in their URL. Falls back to the old username. */
+export async function fetchAlumnusBySlug(slug: string): Promise<{ person: Alumnus | null; canonical: string | null }> {
+  if (!isSupabaseConfigured || !slug) return { person: null, canonical: null };
+
+  const bySlug = await supabase
+    .from('public_alumni').select(PUBLIC_ALUMNI_SELECT).eq('public_slug', slug).maybeSingle();
+  if (bySlug.data) return { person: bySlug.data as unknown as Alumnus, canonical: null };
+
+  // Links shared before slugs existed carry a username. Answer them, then say
+  // where the page really lives so only one URL is ever indexed.
+  const byUsername = await supabase
+    .from('public_alumni').select(PUBLIC_ALUMNI_SELECT).eq('username', slug).maybeSingle();
+  if (byUsername.data) {
+    const person = byUsername.data as unknown as Alumnus;
+    return { person, canonical: person.public_slug ?? null };
+  }
+  return { person: null, canonical: null };
+}
+
+export type RelatedRail = { title: string; href: string; people: Alumnus[] };
+
+/**
+ * Others like this person: their batch, their college, their exam.
+ *
+ * Three narrow reads rather than fetching the whole directory and filtering
+ * in memory - a profile page should not cost what the directory costs.
+ */
+export async function fetchRelatedAlumni(a: Alumnus, limit = 8): Promise<RelatedRail[]> {
+  if (!isSupabaseConfigured || !a.id) return [];
+
+  const base = () => supabase.from('public_alumni').select(PUBLIC_ALUMNI_CARD_SELECT).neq('id', a.id).limit(limit);
+  const wanted: { title: string; href: string; run: any }[] = [];
+
+  if (a.class_of) {
+    wanted.push({
+      title: `Others from the Class of ${a.class_of}`,
+      href: `/directory?batch=${a.class_of}`,
+      run: base().eq('class_of', a.class_of),
+    });
+  }
+  if (a.college_id) {
+    wanted.push({
+      title: `Others at ${collegeNameOf(a) ?? 'the same college'}`,
+      href: `/colleges/${a.college_id}`,
+      run: base().eq('college_id', a.college_id),
+    });
+  }
+  if (a.admission_route) {
+    wanted.push({
+      title: `Others who got in through ${publicRouteLabel(a.admission_route)}`,
+      href: `/directory?route=${encodeURIComponent(publicRouteLabel(a.admission_route) ?? '')}`,
+      run: base().eq('admission_route', a.admission_route),
+    });
+  }
+
+  const results = await Promise.all(wanted.map((w) => w.run));
+  return wanted
+    .map((w, i) => ({ title: w.title, href: w.href, people: (results[i]?.data ?? []) as Alumnus[] }))
+    .filter((rail) => rail.people.length > 0);
+}
+
+/** Just enough of every approved profile to build the sitemap. */
+export async function fetchSitemapRows(): Promise<
+  { public_slug: string | null; last_updated: string | null; last_confirmed_at: string | null; college_id: string | null }[]
+> {
+  if (!isSupabaseConfigured) return [];
+  const { data } = await supabase
+    .from('public_alumni')
+    .select('public_slug, last_updated, last_confirmed_at, college_id')
+    .limit(ALUMNI_LIMIT);
+  return (data ?? []) as any[];
+}
 
 /**
  * Study + work timelines for a set of alumni, grouped by alumni id.

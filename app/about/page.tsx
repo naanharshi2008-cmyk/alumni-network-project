@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { SCHOOLS, SCHOOL_BOARD_BY_SCHOOL } from '../../lib/options';
 
 export const metadata: Metadata = {
-  title: 'About · Veveaham Alumni',
+  title: 'About',
   description: 'What the Veveaham alumni network is for, how profiles are reviewed, and how your details are kept private.',
 };
 
@@ -52,11 +52,20 @@ export default function AboutPage() {
         </div>
 
         <div className="card about__card">
+          <h2>A page of your own</h2>
+          <p>
+            Every approved alumnus gets their own page, at an address with their name in it,
+            so a junior can send it to a friend and so it can be found by searching. It shows
+            only what you chose to share. Ask the school and it comes down.
+          </p>
+        </div>
+
+        <div className="card about__card">
           <h2>Your contact details stay private</h2>
           <p>
-            Your email address and phone number are never shown on the site. They are only
-            used to sign you in and for the school to reach you. Your photo and LinkedIn appear
-            only if you add them.
+            Your email address and phone number are never shown on the site, including on your
+            own page. They are only used to sign you in and for the school to reach you. Your
+            photo and LinkedIn appear only if you add them.
           </p>
         </div>
       </section>

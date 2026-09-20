@@ -12,7 +12,7 @@
 
 import { instKey } from './instituteKey';
 import { EXAM_ROUTES, publicRouteLabel } from './options';
-import { Alumnus, HigherStudy, collegeDetailsOf, collegeKeyer, collegeNameOf } from './types';
+import { Alumnus, HigherStudy, SCHOOL_GROUP_NAME, collegeDetailsOf, collegeKeyer, collegeNameOf, professionalLabel } from './types';
 
 export const ROTATION_HOURS = 3;
 
@@ -147,7 +147,45 @@ export function shortName(full: string): string {
 /** Where a profile opens. */
 export function profileHref(a: Alumnus): string {
   const p = a.public_slug || a.username;
-  return p ? `/directory?p=${encodeURIComponent(p)}` : '/directory';
+  return p ? `/alumni/${encodeURIComponent(p)}` : '/directory';
+}
+
+/**
+ * One sentence about a person, for the places that get one sentence: the
+ * search-result snippet, the link preview in a WhatsApp group, the line under
+ * their name on their own page.
+ *
+ * Written once so those three never disagree, and so the way it degrades -
+ * no college, no route, no class - is decided in one place rather than three.
+ * Clipped to about 155 characters, which is what a search result shows.
+ */
+export function profileSummary(a: Alumnus): string {
+  const college = collegeLabel(a);
+  const route = publicRouteLabel(a.admission_route);
+  const course = a.degree || professionalLabel(a);
+
+  // What they did, if we know it.
+  let lead = '';
+  if (college) {
+    lead = course ? `${course} at ${college}` : `At ${college}`;
+    if (route) lead += `, through ${route}`;
+  } else if (course) {
+    lead = course;
+    if (a.current_status) lead += `, ${a.current_status}`;
+  } else if (a.current_status) {
+    lead = a.current_status;
+  }
+
+  // Clip the part that varies, not the sentence: a preview ending "…Cla" has
+  // lost the school's name, which is the one thing it must carry.
+  if (lead.length > 82) lead = `${lead.slice(0, 79).trimEnd()}…`;
+
+  const who = a.class_of
+    ? `Class of ${a.class_of} at ${SCHOOL_GROUP_NAME}.`
+    : `An alumnus of ${SCHOOL_GROUP_NAME}.`;
+  return lead
+    ? `${lead}. ${who} See their advice for juniors.`
+    : `${who} See their path, and what they would tell a junior.`;
 }
 
 /**

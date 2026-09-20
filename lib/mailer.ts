@@ -1,4 +1,5 @@
 import 'server-only';
+import { siteOrigin } from './site';
 
 /**
  * Every email the site sends, in one place.
@@ -19,7 +20,7 @@ export type MailResult =
   | { sent: false; reason: 'not-configured' | 'provider-error' | 'network-error' | 'bad-recipient'; status?: number };
 
 export function siteUrl(): string {
-  return (process.env.NEXT_PUBLIC_SITE_URL || 'https://v-alumninetwork.vercel.app').replace(/\/+$/, '');
+  return siteOrigin();
 }
 
 function fromHeader(): string {

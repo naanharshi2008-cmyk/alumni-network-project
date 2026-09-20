@@ -89,6 +89,13 @@ export function categorize(field: string | null | undefined): Category {
 }
 
 // The one school this alumni network belongs to.
+/**
+ * The group, as it should be written wherever the school names itself -
+ * the shared preview card, the footer, the About page. It was spelled three
+ * different ways across those three places.
+ */
+export const SCHOOL_GROUP_NAME = 'Veveaham Group of Schools';
+
 export const SCHOOL_NAME = 'Veveaham Hr. Sec. School';
 
 export interface CollegeDetails {

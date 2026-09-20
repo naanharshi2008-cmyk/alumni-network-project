@@ -3,6 +3,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Sora, Manrope } from 'next/font/google';
 import Crest from '../lib/Crest';
+import { siteOrigin } from '../lib/site';
 import NavAuth from './NavAuth';
 
 // next/font manages <head> injection itself (self-hosted at build time), so
@@ -13,7 +14,12 @@ const sora = Sora({ subsets: ['latin'], weight: ['500', '600', '700', '800'], va
 const manrope = Manrope({ subsets: ['latin'], weight: ['400', '500', '600', '700', '800'], variable: '--font-manrope', display: 'swap' });
 
 export const metadata: Metadata = {
-  title: 'Veveaham Alumni',
+  // Everything below this line may use relative URLs - canonicals, Open Graph
+  // images, the sitemap - and Next resolves them against this. It is the one
+  // place the site's address is decided, which is what makes moving to the
+  // school's own domain a single change.
+  metadataBase: new URL(siteOrigin()),
+  title: { default: 'Veveaham Alumni', template: '%s · Veveaham Alumni' },
   description: 'See where our seniors went and what they are doing now.',
   // Favicon and home-screen icon come from app/icon.png and app/apple-icon.png
   // (Next's file convention), both cut from the school crest.
