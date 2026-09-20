@@ -72,7 +72,7 @@ export default function CollegesPage() {
   }, [colleges]);
 
   return (
-    <main className="container container--wide">
+    <div className="container container--wide">
       <div className="fade-up">
         <h1>Colleges our seniors joined</h1>
         <p className="subtitle">
@@ -147,7 +147,7 @@ export default function CollegesPage() {
         Don&apos;t see your college? <Link href="/register" className="link-btn">Add your journey</Link> and it
         appears here once the school approves your profile.
       </p>
-    </main>
+    </div>
   );
 }
 
@@ -174,7 +174,7 @@ function CollegeTile({ college: c, logo }: { college: CollegeCard; logo?: string
         {logo && <span className="college-tile__logo"><img src={logo} alt="" loading="lazy" /></span>}
       </span>
       <span className="college-tile__body">
-        <span className="college-tile__name">{c.name}</span>
+        <h2 className="college-tile__name">{c.name}</h2>
         {c.label !== c.name && <span className="college-tile__alias">{c.label}</span>}
         {place && <span className="college-tile__place">{place}</span>}
         {c.routes.length > 0 && (

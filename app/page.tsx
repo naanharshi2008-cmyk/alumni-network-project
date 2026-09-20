@@ -84,7 +84,7 @@ export default function Home() {
   }
 
   return (
-    <main className="container container--wide">
+    <div className="container container--wide">
       <section className="hero2">
         <div className="hero2__text fade-up">
           <span className="hero__eyebrow">
@@ -152,6 +152,6 @@ export default function Home() {
       {showcase && <FeaturedAlumni people={showcase.featured} />}
       {rows && <HomeStats alumni={rows} />}
       <HomeGalleries alumni={rows} />
-    </main>
+    </div>
   );
 }

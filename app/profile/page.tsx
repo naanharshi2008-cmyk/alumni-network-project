@@ -513,7 +513,7 @@ export default function ProfilePage() {
   const pendingReview = profile.modification_status === 'pending';
 
   return (
-    <main className="container container--narrow">
+    <div className="container container--narrow">
       <div className="card fade-up">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, gap: 12, flexWrap: 'wrap' }}>
           <div>
@@ -623,7 +623,7 @@ export default function ProfilePage() {
           </div>
 
           <Divider />
-          <h3>Basics</h3>
+          <h2>Basics</h2>
 
           <div className="field">
             <label id="profile-school-label">School</label>
@@ -648,7 +648,7 @@ export default function ProfilePage() {
           />
 
           <Divider />
-          <h3>Higher education</h3>
+          <h2>Higher education</h2>
 
           <SelectWithOther
             label="Broad area of study" options={fieldOptions} value={fieldSel}
@@ -716,7 +716,7 @@ export default function ProfilePage() {
           )}
 
           <Divider />
-          <h3 id="profile-higher-studies">Higher studies <span className="hint">optional — add as many as you&apos;ve done</span></h3>
+          <h2 id="profile-higher-studies">Higher studies <span className="hint">optional — add as many as you&apos;ve done</span></h2>
           {higherStudies.map((entry, i) => (
             <div key={entry.id ?? `new-${i}`} className="entry-card">
               <FloatingField label="Degree" hint="e.g. MS, MBA, PhD" value={entry.degree_name} onChange={(v) => setHigherStudies((p) => p.map((x, j) => j === i ? { ...x, degree_name: v } : x))} />
@@ -735,7 +735,7 @@ export default function ProfilePage() {
           </button>
 
           <Divider />
-          <h3>Right now</h3>
+          <h2>Right now</h2>
 
           <SelectWithOther
             label="What are you up to?" options={statusOptions} value={statusSel}
@@ -767,7 +767,7 @@ export default function ProfilePage() {
 
           <FloatingField label="Role / Designation" hint="optional" value={profile.designation} onChange={(v) => updateField('designation', v)} />
 
-          <h4 id="profile-work" style={{ marginTop: 20 }}>Work experience <span className="hint">optional — like a LinkedIn timeline</span></h4>
+          <h3 id="profile-work" style={{ marginTop: 20 }}>Work experience <span className="hint">optional — like a LinkedIn timeline</span></h3>
           {workExperience.map((entry, i) => (
             <div key={entry.id ?? `new-${i}`} className="entry-card">
               <FloatingField label="Company / Organisation" value={entry.company} onChange={(v) => setWorkExperience((p) => p.map((x, j) => j === i ? { ...x, company: v } : x))} />
@@ -795,7 +795,7 @@ export default function ProfilePage() {
           </button>
 
           <Divider />
-          <h3 id="profile-contact">Contact <span className="hint">never shown publicly</span></h3>
+          <h2 id="profile-contact">Contact <span className="hint">never shown publicly</span></h2>
 
           <div id="profile-linkedin" />
           <FloatingField label="LinkedIn profile URL" hint="optional, shown publicly" type="url" value={profile.linkedin_url} onChange={(v) => updateField('linkedin_url', v)} />
@@ -838,7 +838,7 @@ export default function ProfilePage() {
           </button>
         </form>
       </div>
-    </main>
+    </div>
   );
 }
 

@@ -719,11 +719,11 @@ export default function RegisterPage() {
 
   if (submitted) {
     return (
-      <main className="container container--narrow">
+      <div className="container container--narrow">
         <div className="card" style={{ textAlign: 'center' }}>
           <span className="spinner spinner--neutral" /> <p className="subtitle">Opening your profile…</p>
         </div>
-      </main>
+      </div>
     );
   }
 
@@ -731,13 +731,13 @@ export default function RegisterPage() {
   const stepProps = { form, update, markTouched, errorFor, isValid };
 
   return (
-    <main className="container container--narrow">
+    <div className="container container--narrow">
       <div className="card fade-up">
         <StepBar step={step} />
 
         <div className="step-head">
           <p className="step-label">Step {step + 1} of {STEPS.length}</p>
-          <h2 className="step-title" ref={headingRef} tabIndex={-1}>{STEPS[step].title}</h2>
+          <h1 className="step-title" ref={headingRef} tabIndex={-1}>{STEPS[step].title}</h1>
           <p className="step-sub">{STEPS[step].blurb}</p>
         </div>
 
@@ -803,7 +803,7 @@ export default function RegisterPage() {
           )}
         </form>
       </div>
-    </main>
+    </div>
   );
 }
 

@@ -79,7 +79,7 @@ export default async function AlumnusPage({ params }: Props) {
   const board = boardForSchool(a.school_name);
 
   return (
-    <main className="container container--wide">
+    <div className="container container--wide">
       <p className="crumb"><Link href="/directory">← All alumni</Link></p>
 
       <header className="apage__head">
@@ -319,6 +319,6 @@ export default async function AlumnusPage({ params }: Props) {
           }),
         }}
       />
-    </main>
+    </div>
   );
 }

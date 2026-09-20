@@ -436,7 +436,7 @@ export default function DirectoryPage() {
   const showing = filtered.length;
 
   return (
-    <main className="container">
+    <div className="container container--wide">
       <div className="fade-up">
         <h1>Alumni Network</h1>
         <p className="subtitle">
@@ -449,7 +449,7 @@ export default function DirectoryPage() {
           filters, what is currently on, and how to switch it off. It stays
           reachable because a student who scrolls to Class of 2019 and then
           wants only medicine should not have to scroll back up. */}
-      <div className="filter-bar fade-up" style={{ animationDelay: '0.04s' }}>
+      <div className="filter-bar fade-up" role="search" aria-label="Search and filter alumni" style={{ animationDelay: '0.04s' }}>
         <div className="search">
           <SearchIcon />
           <input
@@ -608,7 +608,7 @@ export default function DirectoryPage() {
           onClose={() => setExpanded(null)}
         />
       )}
-    </main>
+    </div>
   );
 }
 
@@ -681,12 +681,14 @@ function GroupSection({ title, count, defaultOpen, signature, children }: {
 
   return (
     <section className={`dgroup${open ? ' dgroup--open' : ''}`}>
+      <h2 className="dgroup__h">
       <button type="button" className="dgroup__head" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
         <span className="dgroup__chev" aria-hidden>▾</span>
         <span className="dgroup__title">{title}</span>
         <span className="dgroup__rule" aria-hidden />
         <span className="dgroup__count">{count} {count === 1 ? 'alum' : 'alumni'}</span>
       </button>
+      </h2>
       {open && <div className="dgroup__body">{children}</div>}
     </section>
   );

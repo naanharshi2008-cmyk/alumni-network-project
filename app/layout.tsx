@@ -4,7 +4,10 @@ import Link from 'next/link';
 import { Sora, Manrope } from 'next/font/google';
 import Crest from '../lib/Crest';
 import { siteOrigin } from '../lib/site';
+import { SCHOOL_GROUP_NAME } from '../lib/types';
 import NavAuth from './NavAuth';
+import ViewerProvider from './Viewer';
+import FooterNetworkLinks from './FooterNetworkLinks';
 
 // next/font manages <head> injection itself (self-hosted at build time), so
 // it never fights with Next's dev-overlay scripts the way a hand-written
@@ -29,15 +32,29 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={`${sora.variable} ${manrope.variable}`}>
       <body>
-        <nav className="nav">
-          <Link href="/" className="nav__brand">
-            <Crest />
-            <span>Veveaham Alumni</span>
-          </Link>
-          <NavAuth />
-        </nav>
-        {children}
-        <Footer />
+        {/* First thing a keyboard reaches. Without it, every page load meant
+            tabbing past the nav and, on the directory, a search box and eight
+            more controls before the first card. */}
+        <a href="#main" className="skip-link">Skip to content</a>
+        <ViewerProvider>
+          {/* The sticky lives on the header, not the nav inside it: a sticky
+              element needs a containing block taller than itself, and once the
+              nav is wrapped its containing block is exactly its own height. */}
+          <header className="site-header">
+            <nav className="nav" aria-label="Main">
+              <Link href="/" className="nav__brand">
+                <Crest />
+                <span>Veveaham Alumni</span>
+              </Link>
+              <NavAuth />
+            </nav>
+          </header>
+          {/* One <main> for the whole site. Seven pages had their own and five
+              had none at all. tabIndex is what makes the skip link move focus
+              rather than only scrolling. */}
+          <main id="main" className="site-main" tabIndex={-1}>{children}</main>
+          <Footer />
+        </ViewerProvider>
       </body>
     </html>
   );
@@ -54,23 +71,21 @@ function Footer() {
             <span>Veveaham Alumni</span>
           </div>
           <p className="footer__tag">
-            A living record of every senior from Veveaham group of Schools, where
+            A living record of every senior from {SCHOOL_GROUP_NAME}, where
             they studied, and what they went on to build.
           </p>
         </div>
 
         <div className="footer__links">
           <div className="footer__col">
-            <h4>Explore</h4>
+            <h2 className="footer__col-title">Explore</h2>
             <Link href="/">Home</Link>
             <Link href="/directory">Directory</Link>
             <Link href="/colleges">Colleges</Link>
           </div>
           <div className="footer__col">
-            <h4>Network</h4>
-            <Link href="/about">About</Link>
-            <Link href="/register">Add your journey</Link>
-            <Link href="/login">Sign in</Link>
+            <h2 className="footer__col-title">Network</h2>
+            <FooterNetworkLinks />
           </div>
         </div>
       </div>

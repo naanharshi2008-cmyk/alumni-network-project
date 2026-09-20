@@ -99,34 +99,39 @@ export default function CollegePage() {
   );
 
   if (state === 'loading') {
-    return <main className="container container--wide"><div className="skeleton" style={{ height: 260 }} /></main>;
+    return (
+      <div className="container container--wide">
+        <h1 className="sr-only">Loading college</h1>
+        <div className="skeleton" style={{ height: 260 }} />
+      </div>
+    );
   }
   if (state === 'error') {
     return (
-      <main className="container container--wide">
+      <div className="container container--wide">
         <div className="empty">
           <span className="empty__emoji">😕</span>
           <h1>We couldn&apos;t load that college</h1>
           <p>Something went wrong at our end, not yours. Try again in a moment.</p>
           <p><Link href="/colleges" className="link-btn">Back to all colleges</Link></p>
         </div>
-      </main>
+      </div>
     );
   }
   if (state === 'missing' || !college) {
     return (
-      <main className="container container--wide">
+      <div className="container container--wide">
         <div className="empty">
           <span className="empty__emoji">🏛️</span>
           <h1>We don&apos;t have that college</h1>
           <p><Link href="/colleges" className="link-btn">Back to all colleges</Link></p>
         </div>
-      </main>
+      </div>
     );
   }
 
   return (
-    <main className="container container--wide">
+    <div className="container container--wide">
       <p className="crumb"><Link href="/colleges">← All colleges</Link></p>
 
       <header className="cpage__head fade-up">
@@ -242,7 +247,7 @@ export default function CollegePage() {
 
         {canContribute && <AddPhoto collegeId={collegeId} onAdded={() => void load()} />}
       </section>
-    </main>
+    </div>
   );
 }
 

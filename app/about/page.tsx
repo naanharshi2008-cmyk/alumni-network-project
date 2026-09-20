@@ -11,7 +11,7 @@ const CONTACT = 'alumni@dpmschools.com';
 
 export default function AboutPage() {
   return (
-    <main className="container about">
+    <div className="container about">
       <section className="about__hero fade-up">
         <span className="about__crest" aria-hidden>
           <img src="/brand/crest.png" alt="" width={256} height={256} />
@@ -102,6 +102,6 @@ export default function AboutPage() {
           <Link href="/directory" className="btn btn--ghost btn--lg"><span className="btn__inner">Explore alumni</span></Link>
         </div>
       </section>
-    </main>
+    </div>
   );
 }
