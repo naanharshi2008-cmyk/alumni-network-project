@@ -119,19 +119,27 @@ BEGIN
   SELECT id INTO ev FROM public.review_events
    WHERE alumni_id = victim AND action = 'publish' ORDER BY id LIMIT 1;
 
-  BEGIN
-    PERFORM public.admin_undo(ev);
-    r := r || 'FAIL  undo ran even though the profile had changed since' || E'\n';
-  EXCEPTION WHEN OTHERS THEN
-    r := r || CASE WHEN SQLERRM LIKE '%edited since%'
-                   THEN 'PASS  undo refuses once the profile has moved on'
-                   ELSE 'PASS? undo refused (' || SQLERRM || ')' END || E'\n';
-  END;
-
-  -- Put the staging area back exactly as the publish left it, then undo.
   DECLARE stamped jsonb;
   BEGIN
     SELECT after_state -> 'pending_changes' INTO stamped FROM public.review_events WHERE id = ev;
+
+    -- The alumnus saves again while the school is still looking at the queue.
+    -- This has to be done for real: the earlier version of this probe simply
+    -- called undo and expected a refusal, which is a test of nothing, because
+    -- publishing a note alone leaves the staging area exactly as it found it.
+    UPDATE public.alumni
+       SET pending_changes = coalesce(stamped, '{}'::jsonb) || '{"branch":"ZZ Newer Branch"}'::jsonb
+     WHERE id = victim;
+    BEGIN
+      PERFORM public.admin_undo(ev);
+      r := r || 'FAIL  undo ran even though the profile had changed since' || E'\n';
+    EXCEPTION WHEN OTHERS THEN
+      r := r || CASE WHEN SQLERRM LIKE '%edited since%'
+                     THEN 'PASS  undo refuses once the profile has moved on'
+                     ELSE 'PASS? undo refused (' || SQLERRM || ')' END || E'\n';
+    END;
+
+    -- Put the staging area back exactly as the publish left it, then undo.
     UPDATE public.alumni SET pending_changes = stamped WHERE id = victim;
     PERFORM public.admin_undo(ev);
     SELECT * INTO after FROM public.alumni WHERE id = victim;
