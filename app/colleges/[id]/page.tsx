@@ -160,14 +160,21 @@ export default function CollegePage() {
             {college.management_type && <span className="badge badge--sm">{college.management_type}</span>}
             {college.established_year && <span className="badge badge--sm">Est. {college.established_year}</span>}
           </div>
-          {college.website && (
-            <a
-              href={college.website.startsWith('http') ? college.website : `https://${college.website}`}
-              target="_blank" rel="noopener noreferrer" className="btn btn--ghost" style={{ marginTop: 14 }}
-            >
-              <span className="btn__inner">Their website ↗</span>
-            </a>
-          )}
+          <div className="cpage__actions">
+            {seniors.length > 0 && (
+              <Link href={`/directory?q=${encodeURIComponent(label)}`} className="btn btn--ghost">
+                <span className="btn__inner">See them in the directory →</span>
+              </Link>
+            )}
+            {college.website && (
+              <a
+                href={college.website.startsWith('http') ? college.website : `https://${college.website}`}
+                target="_blank" rel="noopener noreferrer" className="btn btn--ghost"
+              >
+                <span className="btn__inner">Their website ↗</span>
+              </a>
+            )}
+          </div>
         </div>
       </header>
 

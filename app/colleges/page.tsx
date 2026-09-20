@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { isSupabaseConfigured, supabase } from '../../lib/supabaseClient';
 import { fetchApprovedAlumni } from '../../lib/publicData';
+import { useDebounced } from '../../lib/useDebounced';
 import { publicRouteLabel } from '../../lib/options';
 import { buildSearchDoc, searchItems, type SearchDoc } from '../../lib/search';
 import { instituteInitials, instituteTint, shortInstituteName } from '../../lib/showcase';
@@ -36,6 +37,7 @@ export default function CollegesPage() {
   const [rows, setRows] = useState<Alumnus[] | null>(null);
   const [error, setError] = useState('');
   const [query, setQuery] = useState('');
+  const settled = useDebounced(query);
 
   useEffect(() => {
     let cancelled = false;
@@ -50,11 +52,36 @@ export default function CollegesPage() {
 
   const colleges = useMemo(() => (rows ? buildColleges(rows) : []), [rows]);
   const { results, closeMatches } = useMemo(
-    () => searchItems(colleges, (c) => c.doc!, query),
-    [colleges, query],
+    () => searchItems(colleges, (c) => c.doc!, settled),
+    [colleges, settled],
   );
+  const seniorsShown = useMemo(() => results.reduce((n, c) => n + c.seniors, 0), [results]);
   const [shown, setShown] = useState(PAGE);
-  useEffect(() => { setShown(PAGE); }, [query]);
+  useEffect(() => { setShown(PAGE); }, [settled]);
+
+  // The directory has kept its view in the URL for a while; this page did not,
+  // so searching for a college, opening it and pressing Back landed you on an
+  // unsearched grid at the top - and /colleges?q=vellore was not even a link
+  // anyone could send. Read once on mount, then mirrored with replaceState so
+  // Back leaves the page rather than rewinding a word letter by letter.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const q = params.get('q');
+    if (q) setQuery(q);
+    const show = Number(params.get('show'));
+    if (show > PAGE) setShown(Math.min(show, 200));
+  }, []);
+
+  const urlReady = useRef(false);
+  useEffect(() => {
+    if (!urlReady.current) { urlReady.current = true; return; }
+    const url = new URL(window.location.href);
+    if (settled.trim()) url.searchParams.set('q', settled.trim());
+    else url.searchParams.delete('q');
+    if (shown > PAGE) url.searchParams.set('show', String(shown));
+    else url.searchParams.delete('show');
+    window.history.replaceState(window.history.state, '', url);
+  }, [settled, shown]);
 
   // Logos live on the colleges table, not in the public_alumni projection, so
   // they are fetched once for the colleges actually on this page.
@@ -109,11 +136,12 @@ export default function CollegesPage() {
         </div>
       ) : (
         <>
-          <p className="result-count" style={{ margin: '4px 0 14px' }}>
+          <p className="result-count" role="status" style={{ margin: '4px 0 14px' }}>
             {results.length === colleges.length
               ? `${colleges.length} ${colleges.length === 1 ? 'college' : 'colleges'}`
               : `${results.length} of ${colleges.length} colleges`}
-            {closeMatches && ` · close matches for “${query.trim()}”`}
+            {seniorsShown > 0 && ` · ${seniorsShown} ${seniorsShown === 1 ? 'senior' : 'seniors'}`}
+            {closeMatches && ` · close matches for “${settled.trim()}”`}
           </p>
           {results.length === 0 ? (
             <div className="empty">

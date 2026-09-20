@@ -582,6 +582,16 @@ export default function DirectoryPage() {
         ))
       ) : lens === 'college' ? (
         <>
+          {/* Two surfaces, two questions. This one regroups the people you
+              have already narrowed to; /colleges browses all of them, with
+              banners and the photos seniors sent in. Only offered when nothing
+              is narrowed - suggesting it mid-filter sends someone to a page
+              that answers something else. */}
+          <p className="lens-note lens-note--hint">
+            {activeFilters.length > 0 || searching
+              ? `The colleges of the ${showing} ${showing === 1 ? 'senior' : 'seniors'} matching your filters.`
+              : <>Every college our seniors are at. <Link href="/colleges" className="link-btn">Browse them with photos →</Link></>}
+          </p>
           <PagedColleges colleges={explorerColleges} signature={filterSignature} />
           {/* Said plainly rather than silently dropping them: someone reading
               for CA has no college, and a count that quietly shrinks would
@@ -982,7 +992,9 @@ function Card({ item }: { item: EnrichedAlumnus }) {
       <div className="a-card__rows">
         {college && (
           <Row icon="🏛️" label="College">
-            <span>{college}</span>
+            {a.college_id
+              ? <Link className="a-link" href={`/colleges/${a.college_id}`} onClick={remember}>{college}</Link>
+              : <span>{college}</span>}
             {collegeDet?.state && (
               <span style={{ color: 'var(--text-faint)', fontSize: '0.82em' }}> · {collegeDet.state}</span>
             )}

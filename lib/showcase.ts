@@ -262,7 +262,15 @@ export function classTag(a: Alumnus): string {
   return a.class_of ? `’${String(a.class_of).slice(-2)}` : '';
 }
 
-export type PopularSearch = { label: string; count: number };
+/**
+ * A chip under the hero search.
+ *
+ * `href` rather than a label the caller turns into a search: a college we have
+ * a row for has a page of its own, with a banner, the seniors there and their
+ * photos, and sending someone to a search for its name instead was throwing
+ * that away. The key was already being computed here and discarded.
+ */
+export type PopularSearch = { label: string; count: number; href: string };
 
 /** Chips under the hero search: the colleges and exams our alumni actually have. */
 export function popularSearches(alumni: Alumnus[], max = 5): PopularSearch[] {
@@ -273,7 +281,13 @@ export function popularSearches(alumni: Alumnus[], max = 5): PopularSearch[] {
     const key = keyOf(a);
     const label = collegeLabel(a);
     if (key && label) {
-      const entry = colleges.get(key) ?? { label, count: 0 };
+      const entry = colleges.get(key) ?? {
+        label,
+        count: 0,
+        href: key.startsWith('id:')
+          ? `/colleges/${key.slice(3)}`
+          : `/directory?q=${encodeURIComponent(label)}`,
+      };
       entry.count += 1;
       colleges.set(key, entry);
     }
@@ -282,7 +296,8 @@ export function popularSearches(alumni: Alumnus[], max = 5): PopularSearch[] {
     }
   }
   const topColleges = [...colleges.values()].sort((x, y) => y.count - x.count).slice(0, 3);
-  const topExams = [...exams.entries()].map(([label, count]) => ({ label, count }))
+  const topExams = [...exams.entries()]
+    .map(([label, count]) => ({ label, count, href: `/directory?route=${encodeURIComponent(label)}` }))
     .sort((x, y) => y.count - x.count).slice(0, 2);
   return [...topColleges, ...topExams].sort((x, y) => y.count - x.count).slice(0, max);
 }

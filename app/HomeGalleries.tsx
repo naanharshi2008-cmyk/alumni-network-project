@@ -99,8 +99,9 @@ export default function HomeGalleries({ alumni }: { alumni: Alumnus[] | null }) 
         <Gallery
           title="Where they studied"
           sub="Colleges our seniors joined, by state."
+          more={{ href: '/colleges', label: 'Browse all colleges →' }}
           cards={states.map((r) => ({
-            href: `/directory?q=${encodeURIComponent(r.label)}`,
+            href: `/colleges?q=${encodeURIComponent(r.label)}`,
             emoji: '📍',
             label: r.label,
             count: r.count,
@@ -113,10 +114,11 @@ export default function HomeGalleries({ alumni }: { alumni: Alumnus[] | null }) 
 }
 
 function Gallery({
-  title, sub, cards,
+  title, sub, more, cards,
 }: {
   title: string;
   sub: string;
+  more?: { href: string; label: string };
   cards: { href: string; emoji: string; label: string; count: number; accent: string }[];
 }) {
   return (
@@ -124,6 +126,7 @@ function Gallery({
       <div className="gallery__head">
         <h2>{title}</h2>
         <p>{sub}</p>
+        {more && <Link href={more.href} className="link-btn gallery__more">{more.label}</Link>}
       </div>
       <div className="gallery__grid stagger">
         {cards.map((c) => (

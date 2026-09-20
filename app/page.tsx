@@ -131,7 +131,7 @@ export default function Home() {
             <div className="popular">
               <span className="popular__label">Popular searches:</span>
               {showcase.popular.map((p) => (
-                <Link key={p.label} href={`/directory?q=${encodeURIComponent(p.label)}`} className="popular__chip">
+                <Link key={p.label} href={p.href} className="popular__chip">
                   {p.label}
                 </Link>
               ))}

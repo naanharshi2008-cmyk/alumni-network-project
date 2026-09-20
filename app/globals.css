@@ -2369,3 +2369,13 @@ a.xcollege__thumb:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--rin
 /* A college tile's name is a heading now, so the grid can be navigated by
    heading. These three stop the global h2 rule from resizing it. */
 .college-tile__name { margin: 0; font-family: inherit; letter-spacing: normal; }
+
+/* "Browse all colleges" beside a gallery heading. */
+.gallery__more { margin-left: auto; align-self: baseline; white-space: nowrap; }
+.gallery__head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+
+/* The two ways out of a college page: our own directory, then their site. */
+.cpage__actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+
+/* A line above the College grouping saying what it is for. */
+.lens-note--hint { margin-bottom: 14px; }
