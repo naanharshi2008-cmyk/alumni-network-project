@@ -158,6 +158,12 @@ export function CollegeInfoCard({
           <span className="subtitle inst-card__where">
             {[college.district, college.state].filter(Boolean).join(', ') || '—'}
             {' · '}{college.students.length} {college.students.length === 1 ? 'student' : 'students'}
+            {/* A college whose students are all still waiting used to be
+                missing from this bench entirely, which is the one time the
+                imagery most wants doing: it should be ready the moment the
+                school approves them. */}
+            {college.students_pending > 0 && <> · {college.students_pending} waiting</>}
+            {college.photos_pending > 0 && <> · {college.photos_pending} photo{college.photos_pending === 1 ? '' : 's'} to review</>}
           </span>
           {/* Three dots, in the order a college page shows them. Cheaper to
               scan down a column of eighteen than any wording would be. */}
@@ -280,7 +286,7 @@ export function collegeGaps(college: CollegeInfoRow): string[] {
 export function StudentNoteRow({
   student, onSaved, onError, onNote,
 }: {
-  student: { id: string; full_name: string; class_of: number | null; school_note: string | null };
+  student: { id: string; full_name: string; class_of: number | null; school_note: string | null; pending?: boolean };
   onSaved: (id: string, note: string | null) => void;
   onError: (msg: string) => void;
   onNote: (msg: string) => void;
@@ -310,6 +316,7 @@ export function StudentNoteRow({
     <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--r-sm)', padding: '10px 12px', marginTop: 10 }}>
       <p style={{ margin: '0 0 6px', fontSize: '0.88rem', fontWeight: 650 }}>
         {student.full_name} <span style={{ color: 'var(--text-faint)', fontWeight: 400 }}>· Class of {student.class_of ?? '—'}</span>
+        {student.pending && <span className="badge badge--sm" style={{ marginLeft: 6 }}>not approved yet</span>}
       </p>
       <textarea
         value={note}

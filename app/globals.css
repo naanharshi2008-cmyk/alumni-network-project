@@ -2051,6 +2051,16 @@ span.a-card__banner { background: var(--tint, var(--grad)); opacity: 0.55; }
   font-family: var(--font-sora), sans-serif; font-weight: 800; font-size: 1.3rem; letter-spacing: 0.02em;
   color: rgba(11, 10, 12, 0.88); background: var(--tint, var(--grad));
 }
+/* The college's own mark, over the banner, exactly as the grid tile does it -
+   smaller, because this thumb is a third the size. */
+.xcollege__thumb { position: relative; }
+.xcollege__logo {
+  position: absolute; left: 5px; bottom: 5px;
+  width: 24px; height: 24px; border-radius: 7px; padding: 3px;
+  display: grid; place-items: center; background: #fbf6ec;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.16);
+}
+.xcollege__logo img { max-width: 100%; max-height: 100%; object-fit: contain; }
 .xcollege__head { flex: 1; min-width: 0; }
 .xcollege__name { margin: 0 0 3px; font-size: 1.05rem; line-height: 1.25; }
 .xcollege__place { margin: 0 0 8px; font-size: 0.83rem; color: var(--text-muted); }

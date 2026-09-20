@@ -635,6 +635,25 @@ export default function DirectoryPage() {
   );
 }
 
+/**
+ * The banner, or the initials tile, with the college's mark over it.
+ *
+ * The logo arrives in the view from migration 17, so the directory can show it
+ * without the second query the colleges grid used to make.
+ */
+function CollegeThumb({ det, name }: { det: CollegeDetails | null; name: string }) {
+  return (
+    <>
+      {det?.banner_url
+        ? <img src={det.banner_url} alt="" loading="lazy" decoding="async" />
+        : <span className="xcollege__initials">{instituteInitials(name)}</span>}
+      {det?.logo_url && (
+        <span className="xcollege__logo"><img src={det.logo_url} alt="" loading="lazy" /></span>
+      )}
+    </>
+  );
+}
+
 /* ─────────────────────────────────────────────────────────────────────────
    Filter dropdown
 
@@ -833,23 +852,21 @@ function CollegeExplorerCard({
   return (
     <article className="xcollege">
       <div className="xcollege__top">
+        {/* Written once: the linked and unlinked thumbs had drifted into two
+            copies of the same markup, and the logo would have made three. */}
         {pageHref ? (
           <Link
             href={pageHref} className="xcollege__thumb" aria-label={`About ${name}`}
             style={{ '--tint': instituteTint(college.key) } as React.CSSProperties}
           >
-            {det?.banner_url
-              ? <img src={det.banner_url} alt="" loading="lazy" decoding="async" />
-              : <span className="xcollege__initials">{instituteInitials(name)}</span>}
+            <CollegeThumb det={det} name={name} />
           </Link>
         ) : (
           <span
             className="xcollege__thumb" aria-hidden
             style={{ '--tint': instituteTint(college.key) } as React.CSSProperties}
           >
-            {det?.banner_url
-              ? <img src={det.banner_url} alt="" loading="lazy" decoding="async" />
-              : <span className="xcollege__initials">{instituteInitials(name)}</span>}
+            <CollegeThumb det={det} name={name} />
           </span>
         )}
 

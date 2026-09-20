@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { isSupabaseConfigured, supabase } from '../../lib/supabaseClient';
+import { isSupabaseConfigured } from '../../lib/supabaseClient';
 import { fetchApprovedAlumni } from '../../lib/publicData';
 import { useDebounced } from '../../lib/useDebounced';
 import { publicRouteLabel } from '../../lib/options';
@@ -83,20 +83,10 @@ export default function CollegesPage() {
     window.history.replaceState(window.history.state, '', url);
   }, [settled, shown]);
 
-  // Logos live on the colleges table, not in the public_alumni projection, so
-  // they are fetched once for the colleges actually on this page.
-  const [logos, setLogos] = useState<Record<string, string>>({});
-  useEffect(() => {
-    const ids = colleges.map((c) => collegeIdOf(c)).filter((id): id is string => !!id);
-    if (ids.length === 0) return undefined;
-    let cancelled = false;
-    (async () => {
-      const { data } = await supabase.from('colleges').select('id, logo_url').in('id', ids).not('logo_url', 'is', null);
-      if (cancelled) return;
-      setLogos(Object.fromEntries(((data ?? []) as { id: string; logo_url: string }[]).map((r) => [r.id, r.logo_url])));
-    })();
-    return () => { cancelled = true; };
-  }, [colleges]);
+  // Logos used to need a second query against the colleges table, because the
+  // public view did not carry them. Migration 17 put logo_url in the view, so
+  // they arrive with everything else - and a tile no longer pops its logo in a
+  // moment after the grid has drawn.
 
   return (
     <div className="container container--wide">
@@ -156,7 +146,7 @@ export default function CollegesPage() {
             <>
               <div className="college-grid stagger">
                 {results.slice(0, shown).map((c) => (
-                  <CollegeTile key={c.key} college={c} logo={logos[collegeIdOf(c) ?? '']} />
+                  <CollegeTile key={c.key} college={c} />
                 ))}
               </div>
               {results.length > shown && (
@@ -184,7 +174,8 @@ function collegeIdOf(c: CollegeCard): string | null {
   return c.key.startsWith('id:') ? c.key.slice(3) : null;
 }
 
-function CollegeTile({ college: c, logo }: { college: CollegeCard; logo?: string }) {
+function CollegeTile({ college: c }: { college: CollegeCard }) {
+  const logo = c.details?.logo_url ?? null;
   const place = [c.details?.district, c.details?.state].filter(Boolean).join(', ');
   const id = collegeIdOf(c);
   // A college we have a row for gets its own page, with photos and the seniors

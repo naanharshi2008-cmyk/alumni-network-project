@@ -88,8 +88,15 @@ export type CollegeInfoRow = {
   district: string | null;
   banner_url: string | null;
   logo_url: string | null;
+  banner_credit: string | null;
   description: string | null;
-  students: { id: string; full_name: string; class_of: number | null; school_note: string | null }[];
+  /** From migration 17's checklist: how many here are live, and how many wait. */
+  students_pending: number;
+  photos_pending: number;
+  students: {
+    id: string; full_name: string; class_of: number | null;
+    school_note: string | null; pending: boolean;
+  }[];
 };
 
 export type PendingPhoto = {
@@ -436,33 +443,50 @@ export type AliasRow = { id: string; alias: string; source: string };
  * The cleanup bench: every college our alumni are actually at, with the
  * students there and the names each institute answers to.
  *
- * Driven from `alumni`, never from the 47,000-row colleges table - the same
- * reason the public pages derive their college lists that way.
+ * The college list comes from migration 17's checklist, which does the job in
+ * the database: it is driven from `alumni` (never from the 47,000-row colleges
+ * table, which PostgREST would truncate at a thousand without saying so), it
+ * counts the photos waiting, and it puts the colleges missing a banner or a
+ * logo first.
+ *
+ * It also includes colleges whose students are all still pending, which the
+ * old query silently dropped - and those are exactly the ones worth preparing,
+ * because the imagery should be ready the moment the school approves them.
  */
 export async function loadDataArea(): Promise<DataAreaData> {
-  const { data: linkRows, error } = await supabase
-    .from('alumni')
-    .select('id, full_name, class_of, school_note, college_id, approval_status')
-    .not('college_id', 'is', null);
+  const { data: statusRows, error: statusErr } = await supabase.rpc('admin_college_image_status');
+  if (statusErr) return { colleges: [], aliases: {}, error: statusErr.message };
+  const list = (statusRows ?? []) as any[];
+  if (list.length === 0) return { colleges: [], aliases: {}, error: '' };
 
-  const byCollege = new Map<string, CollegeInfoRow['students']>();
-  for (const r of (linkRows ?? []) as any[]) {
-    if (r.approval_status !== 'approved') continue;
-    const list = byCollege.get(r.college_id) ?? [];
-    list.push({ id: r.id, full_name: r.full_name, class_of: r.class_of, school_note: r.school_note });
-    byCollege.set(r.college_id, list);
-  }
-  if (byCollege.size === 0) return { colleges: [], aliases: {}, error: error?.message ?? '' };
-
-  const ids = [...byCollege.keys()];
-  // One query for every card's aliases, not one per card.
-  const [collegeRes, aliasRes] = await Promise.all([
-    supabase.from('colleges')
-      .select('id, name, state, district, banner_url, logo_url, description')
-      .in('id', ids).order('name'),
+  const ids = list.map((c) => c.id as string);
+  // One query for every card's students and one for every card's aliases,
+  // rather than two per card.
+  const [studentRes, descRes, aliasRes] = await Promise.all([
+    supabase.from('alumni')
+      .select('id, full_name, class_of, school_note, college_id, approval_status')
+      .in('college_id', ids),
+    // The checklist does not return the description - it is a paragraph, and
+    // the checklist is a status board - so it comes alongside.
+    supabase.from('colleges').select('id, description').in('id', ids),
     supabase.from('institute_aliases')
       .select('id, alias, source, college_id').in('college_id', ids).order('alias'),
   ]);
+
+  const byCollege = new Map<string, CollegeInfoRow['students']>();
+  for (const r of ((studentRes.data ?? []) as any[])) {
+    if (r.approval_status === 'rejected') continue;
+    const entry = {
+      id: r.id, full_name: r.full_name, class_of: r.class_of,
+      school_note: r.school_note, pending: r.approval_status !== 'approved',
+    };
+    const list = byCollege.get(r.college_id);
+    if (list) list.push(entry); else byCollege.set(r.college_id, [entry]);
+  }
+
+  const descriptions = new Map<string, string | null>(
+    ((descRes.data ?? []) as any[]).map((c) => [c.id as string, c.description as string | null]),
+  );
 
   const aliases: Record<string, AliasRow[]> = {};
   for (const a of ((aliasRes.data ?? []) as any[])) {
@@ -470,11 +494,20 @@ export async function loadDataArea(): Promise<DataAreaData> {
   }
 
   return {
-    colleges: ((collegeRes.data ?? []) as any[]).map((c) => ({
-      ...c,
+    colleges: list.map((c) => ({
+      id: c.id,
+      name: c.name,
+      state: c.state,
+      district: c.district,
+      banner_url: c.banner_url,
+      logo_url: c.logo_url,
+      banner_credit: c.banner_credit,
+      description: descriptions.get(c.id) ?? null,
+      students_pending: c.students_pending ?? 0,
+      photos_pending: c.photos_pending ?? 0,
       students: (byCollege.get(c.id) ?? []).sort((a, b) => (b.class_of ?? 0) - (a.class_of ?? 0)),
     })),
     aliases,
-    error: error?.message ?? collegeRes.error?.message ?? '',
+    error: studentRes.error?.message ?? descRes.error?.message ?? '',
   };
 }
