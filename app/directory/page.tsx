@@ -7,7 +7,7 @@ import { fetchApprovedAlumni, fetchTimelines } from '../../lib/publicData';
 import { boardForSchool, officialSchoolName, publicRouteLabel, SCHOOLS } from '../../lib/options';
 import { formatRankBand, formatMarksBand, formatRankSpan, formatMonthYear } from '../../lib/text';
 import { buildSearchDoc, searchItems, type SearchDoc } from '../../lib/search';
-import { instituteInitials } from '../../lib/showcase';
+import { collegeTintKey, instituteInitials, instituteTint } from '../../lib/showcase';
 import {
   Alumnus,
   CATEGORIES,
@@ -786,13 +786,19 @@ function CollegeExplorerCard({
     <article className="xcollege">
       <div className="xcollege__top">
         {pageHref ? (
-          <Link href={pageHref} className="xcollege__thumb" aria-label={`About ${name}`}>
+          <Link
+            href={pageHref} className="xcollege__thumb" aria-label={`About ${name}`}
+            style={{ '--tint': instituteTint(college.key) } as React.CSSProperties}
+          >
             {det?.banner_url
               ? <img src={det.banner_url} alt="" loading="lazy" decoding="async" />
               : <span className="xcollege__initials">{instituteInitials(name)}</span>}
           </Link>
         ) : (
-          <span className="xcollege__thumb" aria-hidden>
+          <span
+            className="xcollege__thumb" aria-hidden
+            style={{ '--tint': instituteTint(college.key) } as React.CSSProperties}
+          >
             {det?.banner_url
               ? <img src={det.banner_url} alt="" loading="lazy" decoding="async" />
               : <span className="xcollege__initials">{instituteInitials(name)}</span>}
@@ -914,6 +920,7 @@ function Card({ item, onExpand }: { item: EnrichedAlumnus; onExpand: () => void 
   const { a, cat } = item;
   const college = collegeNameOf(a) ?? a.college_name_raw;
   const collegeDet = collegeDetailsOf(a);
+  const tintKey = collegeTintKey(a);
   const dept = [a.degree, a.branch].filter(Boolean).join(' · ');
   const now = [a.currently_at, a.designation].filter(Boolean).join(' · ');
   const prof = professionalLabel(a);
@@ -948,9 +955,14 @@ function Card({ item, onExpand }: { item: EnrichedAlumnus; onExpand: () => void 
           previously two clicks deep, in the modal. */}
       <AdmissionBadges a={a} />
 
-      {collegeDet?.banner_url && (
+      {collegeDet?.banner_url ? (
         <img className="a-card__banner" src={collegeDet.banner_url} alt="" loading="lazy" />
-      )}
+      ) : tintKey ? (
+        <span
+          className="a-card__banner" aria-hidden
+          style={{ '--tint': instituteTint(tintKey) } as React.CSSProperties}
+        />
+      ) : null}
 
       {/* No "School" row here on purpose: these cards are already grouped under
           a school heading, and repeating the full official name cost two
@@ -1003,6 +1015,7 @@ function ProfileModal({
   const { a, cat } = item;
   const college = collegeNameOf(a) ?? a.college_name_raw;
   const collegeDet = collegeDetailsOf(a);
+  const tintKey = collegeTintKey(a);
   const dept = [a.degree, a.branch].filter(Boolean).join(' · ');
   const now = [a.currently_at, a.designation].filter(Boolean).join(' · ');
   const showImg = a.show_photo && a.photo_url;
@@ -1057,9 +1070,13 @@ function ProfileModal({
         aria-modal="true"
         aria-label={`Profile of ${a.full_name}`}
       >
-        {collegeDet?.banner_url && (
-          <div className="a-modal__banner" aria-hidden>
-            <img src={collegeDet.banner_url} alt="" />
+        {(collegeDet?.banner_url || tintKey) && (
+          <div
+            className={`a-modal__banner${collegeDet?.banner_url ? '' : ' a-modal__banner--tint'}`}
+            aria-hidden
+            style={tintKey ? ({ '--tint': instituteTint(tintKey) } as React.CSSProperties) : undefined}
+          >
+            {collegeDet?.banner_url && <img src={collegeDet.banner_url} alt="" />}
           </div>
         )}
 

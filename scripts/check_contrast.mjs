@@ -98,6 +98,44 @@ const rules = [
   ['option lists are painted dark', /(^|\n)option\s*\{[^}]*background:\s*var\(--surface\)/s.test(css)],
 ];
 
+/* ── The per-college tint ──────────────────────────────────────────────────
+ * instituteTint() derives a hue from the college's key, so the colour under
+ * those dark initials is not a token anybody can read here - it is 360
+ * different colours. Sweep them all: the tile is only as readable as its
+ * worst hue, which is around cyan.
+ */
+function hslToRgbHex(h, sPct, lPct) {
+  const s = sPct / 100, l = lPct / 100;
+  const k = (n) => (n + h / 30) % 12;
+  const a = s * Math.min(l, 1 - l);
+  const f = (n) => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+  return `#${[f(0), f(8), f(4)].map((v) => Math.round(v * 255).toString(16).padStart(2, '0')).join('')}`;
+}
+
+const tintSource = readFileSync(
+  join(dirname(fileURLToPath(import.meta.url)), '..', 'lib', 'showcase.ts'), 'utf8');
+const tintStops = [...tintSource.matchAll(/hsl\(\$\{[^}]+\} (\d+)% (\d+)%\)/g)]
+  .map(([, s, l]) => [Number(s), Number(l)]);
+
+const tintChecks = [];
+if (tintStops.length === 0) {
+  tintChecks.push(['instituteTint stops found in lib/showcase.ts', false]);
+} else {
+  // The ink every initials rule paints on the tile.
+  const ink = 'rgba(11, 10, 12, 0.88)';
+  let worst = Infinity, worstHue = 0;
+  for (let hue = 0; hue < 360; hue++) {
+    for (const [sat, light] of tintStops) {
+      const r = ratio(ink, hslToRgbHex(hue, sat, light));
+      if (r < worst) { worst = r; worstHue = hue; }
+    }
+  }
+  tintChecks.push([
+    `college tint stays readable at every hue (worst ${worst.toFixed(2)}:1 at hue ${worstHue})`,
+    worst >= 4.5,
+  ]);
+}
+
 let failed = 0;
 for (const [what, fg, bg, floor] of checks) {
   const r = ratio(fg, bg);
@@ -105,7 +143,7 @@ for (const [what, fg, bg, floor] of checks) {
   if (!ok) failed++;
   console.log(`  ${ok ? '\x1b[32mPASS\x1b[0m' : '\x1b[31mFAIL\x1b[0m'}  ${r.toFixed(2)}:1 (needs ${floor}:1)  ${what}`);
 }
-for (const [what, ok] of rules) {
+for (const [what, ok] of [...rules, ...tintChecks]) {
   if (!ok) failed++;
   console.log(`  ${ok ? '\x1b[32mPASS\x1b[0m' : '\x1b[31mFAIL\x1b[0m'}  ${what}`);
 }

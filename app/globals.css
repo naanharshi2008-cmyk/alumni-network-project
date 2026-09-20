@@ -1187,18 +1187,6 @@ textarea { min-height: 84px; resize: vertical; }
 
 /* ---------- Round 3: banners, freshness meta, galleries -------------------- */
 
-/* College banner on the Explorer card: a rounded strip INSIDE the card
-   padding, deliberately not full-bleed - full-bleed would need negative
-   margins mirroring .card's clamp() padding, a coupling that breaks silently
-   the moment the padding changes. */
-.college-banner {
-  display: block; width: 100%;
-  height: clamp(96px, 18vw, 150px);
-  object-fit: cover;
-  border-radius: var(--r-sm);
-  margin-bottom: 14px;
-}
-
 /* Admin-written paragraph about a college. */
 .college-desc {
   margin: 10px 0 0; font-size: 0.88rem; color: var(--text-muted); line-height: 1.55;
@@ -1216,6 +1204,7 @@ textarea { min-height: 84px; resize: vertical; }
   overflow: hidden;
 }
 .a-modal__banner img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.a-modal__banner--tint { background: var(--tint, var(--grad)); }
 .a-modal__banner::after {
   content: '';
   position: absolute; inset: 0;
@@ -1224,13 +1213,17 @@ textarea { min-height: 84px; resize: vertical; }
 .a-modal__close { z-index: 2; }
 .a-modal__share { margin-left: auto; padding: 0; font-size: 0.82rem; }
 
-/* Slim college strip on directory cards - present only when a banner exists,
-   sized and dimmed so the person stays the subject of the card. */
+/* Slim college strip on directory cards, sized and dimmed so the person stays
+   the subject of the card. With no banner it is the college's own colour: the
+   element used to disappear entirely, which made two cards from two different
+   colleges look the same. No initials here - at 48px across a card, letters
+   read as a label and compete with the person's name. */
 .a-card__banner {
   display: block; width: 100%; height: 48px;
   object-fit: cover; border-radius: var(--r-sm);
   margin: 2px 0 12px; opacity: 0.9;
 }
+span.a-card__banner { background: var(--tint, var(--grad)); opacity: 0.55; }
 
 /* Subtle freshness line at the foot of the modal - metadata, not content. */
 .a-modal__meta {
@@ -1756,7 +1749,7 @@ textarea { min-height: 84px; resize: vertical; }
 .f-card__tile {
   width: 100%; height: 100%; display: grid; place-items: center; padding: 6px; text-align: center;
   font-family: var(--font-sora), sans-serif; font-weight: 800; font-size: 1.2rem; letter-spacing: 0.02em;
-  color: #0b0a0c; background: var(--grad);
+  color: #0b0a0c; background: var(--tint, var(--grad));
 }
 .f-card__body { display: flex; flex-direction: column; flex: 1; min-width: 0; padding: 6px 4px 4px 0; }
 .f-card__title {
@@ -1845,7 +1838,7 @@ textarea { min-height: 84px; resize: vertical; }
 .college-tile__initials {
   display: grid; place-items: center; width: 100%; height: 100%;
   font-family: var(--font-sora), sans-serif; font-weight: 800; font-size: 1.9rem; letter-spacing: 0.03em;
-  color: rgba(11, 10, 12, 0.88); background: var(--grad);
+  color: rgba(11, 10, 12, 0.88); background: var(--tint, var(--grad));
 }
 .college-tile__body { display: flex; flex-direction: column; gap: 4px; flex: 1; padding: 14px 16px 14px; }
 .college-tile__name { font-weight: 700; font-size: 1rem; line-height: 1.3; }
@@ -1957,7 +1950,7 @@ textarea { min-height: 84px; resize: vertical; }
 .xcollege__initials {
   display: grid; place-items: center; width: 100%; height: 100%; padding: 4px; text-align: center;
   font-family: var(--font-sora), sans-serif; font-weight: 800; font-size: 1.3rem; letter-spacing: 0.02em;
-  color: rgba(11, 10, 12, 0.88); background: var(--grad);
+  color: rgba(11, 10, 12, 0.88); background: var(--tint, var(--grad));
 }
 .xcollege__head { flex: 1; min-width: 0; }
 .xcollege__name { margin: 0 0 3px; font-size: 1.05rem; line-height: 1.25; }
@@ -2012,7 +2005,7 @@ textarea { min-height: 84px; resize: vertical; }
 .cpage__banner-fallback {
   display: grid; place-items: center; width: 100%; height: 100%; padding: 8px; text-align: center;
   font-family: var(--font-sora), sans-serif; font-weight: 800; font-size: 2.4rem; letter-spacing: 0.02em;
-  color: rgba(11, 10, 12, 0.88); background: var(--grad);
+  color: rgba(11, 10, 12, 0.88); background: var(--tint, var(--grad));
 }
 /* The logo sits on the banner the way a crest sits on a gate. */
 .cpage__logo {

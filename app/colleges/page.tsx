@@ -6,7 +6,7 @@ import { isSupabaseConfigured, supabase } from '../../lib/supabaseClient';
 import { fetchApprovedAlumni } from '../../lib/publicData';
 import { publicRouteLabel } from '../../lib/options';
 import { buildSearchDoc, searchItems, type SearchDoc } from '../../lib/search';
-import { instituteInitials, shortInstituteName } from '../../lib/showcase';
+import { instituteInitials, instituteTint, shortInstituteName } from '../../lib/showcase';
 import { Alumnus, CollegeDetails, collegeDetailsOf, collegeKeyer, collegeNameOf } from '../../lib/types';
 
 /* One screen of colleges at a time: the AISHE list our alumni draw from is
@@ -164,7 +164,10 @@ function CollegeTile({ college: c, logo }: { college: CollegeCard; logo?: string
   const href = id ? `/colleges/${id}` : `/directory?lens=college&q=${encodeURIComponent(c.label)}`;
   return (
     <Link href={href} className="college-tile">
-      <span className="college-tile__banner" aria-hidden>
+      <span
+        className="college-tile__banner" aria-hidden
+        style={{ '--tint': instituteTint(c.key) } as React.CSSProperties}
+      >
         {c.details?.banner_url
           ? <img src={c.details.banner_url} alt="" loading="lazy" decoding="async" />
           : <span className="college-tile__initials">{instituteInitials(c.label)}</span>}

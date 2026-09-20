@@ -265,3 +265,47 @@ export function homeStats(alumni: Alumnus[]): HomeStatsData {
   }
   return { alumni: alumni.length, colleges: colleges.size, exams: exams.size, batches: batches.size };
 }
+
+/**
+ * A colour of its own for a college with no picture yet.
+ *
+ * Every initials tile on the site was painted with the one site-wide gradient,
+ * so IISER Thiruvananthapuram and St Joseph's looked identical and the tile
+ * read as "unfinished" rather than as an identity. The hue comes from the
+ * college's own key, so it is stable, and two colleges are only the same
+ * colour by coincidence.
+ *
+ * Lightness and saturation are pinned, and deliberately not derived: every
+ * initials rule paints near-black ink on top, so a dark tint would erase the
+ * letters. These two stops clear 4.5:1 against that ink at every hue, with
+ * the worst case around cyan, where the eye reads a tint as much lighter than
+ * the contrast maths does - `npm run check:contrast` sweeps all 360 hues and
+ * both stops, and fails if a change here stops being readable.
+ *
+ * Key it on the group key from collegeKeyer (`id:<uuid>` or `name:<key>`),
+ * never on the display name: a rename should not repaint the tile, and a
+ * typed spelling should match the college it was folded into.
+ */
+export function instituteTint(key: string): string {
+  let h = 2166136261;
+  for (let i = 0; i < key.length; i++) {
+    h ^= key.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  const hue = (h >>> 0) % 360;
+  return `linear-gradient(135deg, hsl(${hue} 66% 74%), hsl(${(hue + 46) % 360} 64% 72%))`;
+}
+
+/**
+ * The key one alumnus's college is tinted by.
+ *
+ * Same shape as collegeKeyer's, but derivable from a single profile: a card
+ * does not have the whole directory to fold typed spellings with. Linked
+ * profiles - which is what a college with a banner or a page always is - land
+ * on the same `id:` key either way.
+ */
+export function collegeTintKey(a: Alumnus): string | null {
+  if (a.college_id) return `id:${a.college_id}`;
+  const typed = collegeNameOf(a);
+  return typed ? `name:${instKey(typed)}` : null;
+}

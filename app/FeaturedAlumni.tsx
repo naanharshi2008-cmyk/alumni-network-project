@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { Alumnus, collegeDetailsOf, initialsOf, professionalLabel } from '../lib/types';
-import { classTag, collegeLabel, instituteInitials, pathLine, profileHref, shortName } from '../lib/showcase';
+import { classTag, collegeLabel, collegeTintKey, instituteInitials, instituteTint, pathLine, profileHref, shortName } from '../lib/showcase';
 
 /**
  * Featured alumni: the school's starred picks first, the most complete
@@ -36,12 +36,19 @@ export default function FeaturedAlumni({ people }: { people: Alumnus[] }) {
           const banner = collegeDetailsOf(a)?.banner_url;
           const title = college ?? a.currently_at ?? professionalLabel(a) ?? 'Veveaham alumni';
           const path = pathLine(a);
+          const tintKey = collegeTintKey(a);
           return (
             <Link key={a.id ?? i} href={profileHref(a)} className="f-card">
-              <span className="f-card__thumb" aria-hidden>
+              <span
+                className="f-card__thumb" aria-hidden
+                style={tintKey ? ({ '--tint': instituteTint(tintKey) } as React.CSSProperties) : undefined}
+              >
                 {banner
                   ? <img src={banner} alt="" loading="lazy" decoding="async" />
-                  : <span className="f-card__tile">{instituteInitials(title)}</span>}
+                  /* Initials only when there IS a college. The title falls
+                     through to a company, or to the words "Veveaham alumni",
+                     and a tile reading "VA" looked like an institution. */
+                  : <span className="f-card__tile">{college ? instituteInitials(college) : ''}</span>}
               </span>
               <span className="f-card__body">
                 <span className="f-card__title">{title}</span>

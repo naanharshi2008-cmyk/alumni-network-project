@@ -6,7 +6,7 @@ import { useParams } from 'next/navigation';
 import { supabase } from '../../../lib/supabaseClient';
 import { fetchApprovedAlumni } from '../../../lib/publicData';
 import { publicRouteLabel } from '../../../lib/options';
-import { instituteInitials, profileHref, shortInstituteName } from '../../../lib/showcase';
+import { instituteInitials, instituteTint, profileHref, shortInstituteName } from '../../../lib/showcase';
 import { Alumnus, initialsOf } from '../../../lib/types';
 
 type College = {
@@ -105,7 +105,10 @@ export default function CollegePage() {
       <p className="crumb"><Link href="/colleges">← All colleges</Link></p>
 
       <header className="cpage__head fade-up">
-        <div className="cpage__banner">
+        <div
+          className="cpage__banner"
+          style={{ '--tint': instituteTint(`id:${collegeId}`) } as React.CSSProperties}
+        >
           {college.banner_url
             ? <img src={college.banner_url} alt="" />
             : <span className="cpage__banner-fallback" aria-hidden>{instituteInitials(label)}</span>}
