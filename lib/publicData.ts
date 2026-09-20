@@ -22,16 +22,35 @@ export const PUBLIC_ALUMNI_SELECT = [
   'board_cutoff', 'college_id', 'college_name_raw', 'colleges', 'organization_id', 'organization', 'featured',
 ].join(', ');
 
-export type PublicDataResult<T> = { data: T; error: string };
+export type PublicDataResult<T> = { data: T; error: string; total?: number; truncated?: boolean };
+
+/**
+ * How many alumni one page will ask for.
+ *
+ * PostgREST caps a result server-side (db-max-rows) and says nothing about
+ * it, so a bigger number here does not make the cap go away - which is why
+ * the count below matters more than the limit does.
+ */
+export const ALUMNI_LIMIT = 2000;
 
 /** All approved alumni, newest batch first. */
 export async function fetchApprovedAlumni(): Promise<PublicDataResult<Alumnus[]>> {
-  if (!isSupabaseConfigured) return { data: [], error: '' };
-  const { data, error } = await supabase
+  if (!isSupabaseConfigured) return { data: [], error: '', total: 0, truncated: false };
+  const { data, error, count } = await supabase
     .from('public_alumni')
-    .select(PUBLIC_ALUMNI_SELECT)
-    .order('class_of', { ascending: false });
-  return { data: (data as unknown as Alumnus[]) ?? [], error: error?.message ?? '' };
+    .select(PUBLIC_ALUMNI_SELECT, { count: 'exact' })
+    .order('class_of', { ascending: false })
+    .limit(ALUMNI_LIMIT);
+  const rows = (data as unknown as Alumnus[]) ?? [];
+  // Asking for the count is what turns "we got 1,000 rows" into "we got 1,000
+  // of 1,240" - the directory has carried a comment about this trap for the
+  // colleges table since round 5, while its own alumni query had it too.
+  return {
+    data: rows,
+    error: error?.message ?? '',
+    total: count ?? rows.length,
+    truncated: (count ?? 0) > rows.length,
+  };
 }
 
 

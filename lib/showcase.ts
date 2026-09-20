@@ -306,6 +306,9 @@ export function instituteTint(key: string): string {
  */
 export function collegeTintKey(a: Alumnus): string | null {
   if (a.college_id) return `id:${a.college_id}`;
-  const typed = collegeNameOf(a);
+  // collegeNameOf only answers for a LINKED college, so a profile carrying a
+  // typed name and no link used to get no tint at all on its card while
+  // getting one in the College grouping, which keys off the group instead.
+  const typed = collegeNameOf(a) ?? a.college_name_raw?.trim();
   return typed ? `name:${instKey(typed)}` : null;
 }

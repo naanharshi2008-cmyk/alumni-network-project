@@ -150,6 +150,35 @@ export const ADMISSION_ROUTES = [
   OTHER_OPTION,
 ];
 
+/**
+ * Does this route have a rank behind it?
+ *
+ * Derived from the lists above rather than written out, because it used to be
+ * written out twice - once in the registration form, once in the profile
+ * editor - and the two drifted. A Sports Quota alumnus was never asked at
+ * registration and was always asked on their profile.
+ *
+ * That drift had a consequence beyond inconsistency. Management Quota is
+ * displayed publicly as "Board Marks" (see publicRouteLabel), precisely so
+ * that nobody is labelled with a seat category - and a rank shown beside that
+ * label is exactly the tell the label exists to prevent.
+ *
+ * Stated as "not one of the routes we know has no rank", so a new exam an
+ * admin approves next year defaults to asking. That is what registration
+ * always did for a route it did not recognise.
+ */
+const RANKLESS_ROUTES = new Set<string>(
+  ADMISSION_ROUTES.filter((r) => !(EXAM_ROUTES as readonly string[]).includes(r))
+    // TNEA lateral entry does produce a rank, and both forms have always
+    // asked for it, so it is the one member of that set we keep asking about.
+    .filter((r) => r !== 'Lateral Entry'),
+);
+
+export function asksForRank(route: string | null | undefined): boolean {
+  const r = (route ?? '').trim();
+  return !!r && !RANKLESS_ROUTES.has(r);
+}
+
 /** What they are doing right now. */
 export const STATUSES = [
   'Studying UG',

@@ -8,7 +8,7 @@ import SchoolPicker from '../../lib/SchoolPicker';
 import { cleanFreeText, cleanProperNoun } from '../../lib/text';
 import { canonicalOption, fetchApprovedOptions, fetchOptionAliases, proposeOption } from '../../lib/publicData';
 import {
-  STREAMS, DEGREES, ADMISSION_ROUTES, NOW_CHOICES, boardForSchool, publicRouteLabel,
+  STREAMS, DEGREES, ADMISSION_ROUTES, NOW_CHOICES, asksForRank, boardForSchool, publicRouteLabel,
   COUNTRY_CODES, OTHER_OPTION, isInProgressStatus, mergeOptions, resolveValue,
   statusForCourse, statusForNowChoice, PROFESSIONAL_COURSES, PROFESSIONAL_STAGES,
 } from '../../lib/options';
@@ -582,7 +582,7 @@ export default function RegisterPage() {
       const finalField = canon('field', resolveValue(form.field, form.field_other));
       const finalRoute = canon('admission_route', resolveValue(form.admission_route, form.admission_route_other));
       const finalStatus = canon('current_status', statusFromForm(form));
-      const usesBoardMarks = finalRoute === 'Board Marks';
+
 
       // 5. The profile row.
       const { data: inserted, error: insErr } = await supabase.from('alumni').insert({
@@ -608,9 +608,13 @@ export default function RegisterPage() {
         branch: cleanProperNoun(form.branch),
         field: finalField || null,
         admission_route: finalRoute || null,
-        admission_rank: usesBoardMarks ? null : cleanFreeText(form.admission_rank),
-        board_marks: usesBoardMarks ? cleanFreeText(form.board_marks) : null,
-        board_cutoff: usesBoardMarks ? cleanFreeText(form.board_cutoff) : null,
+        // All three are kept, whatever the route says today. Nulling the
+        // unused half meant that changing your route from an exam to Board
+        // Marks silently deleted the rank you had already typed. What is
+        // *shown* is decided by asksForRank at the card, not here.
+        admission_rank: cleanFreeText(form.admission_rank),
+        board_marks: cleanFreeText(form.board_marks),
+        board_cutoff: cleanFreeText(form.board_cutoff),
         current_status: finalStatus,
         expected_finish_year: isInProgressStatus(finalStatus) && form.expected_finish_year
           ? parseInt(form.expected_finish_year, 10) : null,
@@ -943,7 +947,7 @@ function StepStudies({
 }: StepProps & { fieldOptions: string[]; degreeOptions: string[]; routeOptions: string[]; professionalOptions: string[] }) {
   const route = resolveValue(form.admission_route, form.admission_route_other);
   const usesBoardMarks = form.admission_route === 'Board Marks';
-  const skipsRank = ['Merit / Direct', 'Management Quota', 'Sports Quota', OTHER_OPTION, ''].includes(form.admission_route);
+  const wantsRank = asksForRank(form.admission_route);
   const collegeRef = useAppear(form.joined_college === 'yes');
 
   return (
@@ -1021,7 +1025,7 @@ function StepStudies({
             onBlur={() => markTouched('board_cutoff')} error="" valid={false}
           />
         </div>
-      ) : !skipsRank && route ? (
+      ) : wantsRank && route ? (
         <Field
           label={`${route} rank`} optional type="number" min={1} inputMode="numeric"
           hint="shown only as a range, never the exact number"
@@ -1032,7 +1036,7 @@ function StepStudies({
         />
       ) : null}
 
-      {(route === 'Board Marks' || (!skipsRank && route)) && (
+      {(route === 'Board Marks' || (wantsRank && route)) && (
         <p className="form-note form-note--warm">
           Honestly? An average rank helps a junior more than a top one does.
           Most of them aren&apos;t aiming for rank 100 — they want to know if

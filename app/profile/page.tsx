@@ -12,7 +12,7 @@ import {
   canonicalOption, fetchApprovedOptions, fetchOptionAliases, fetchOrganizationNames, proposeOption,
 } from '../../lib/publicData';
 import {
-  STREAMS, DEGREES, ADMISSION_ROUTES, STATUSES, boardForSchool,
+  STREAMS, DEGREES, ADMISSION_ROUTES, STATUSES, asksForRank, boardForSchool,
   COUNTRY_CODES, OTHER_OPTION, LEGACY_STREAM_MAP, officialSchoolName,
   PROFESSIONAL_COURSES, PROFESSIONAL_STAGES,
   isInProgressStatus, mergeOptions, splitStoredValue, resolveValue,
@@ -587,7 +587,7 @@ export default function ProfilePage() {
         {/* Freshness, shown plainly to the owner (public surfaces keep it
             subtle). The one-tap confirm exists so an unchanged-but-accurate
             profile never has to look stale. */}
-        <div className="fresh-block">
+        <div className="fresh-block" id="profile-confirm">
           <div className="fresh-block__dates">
             <span>Profile updated <strong>{formatFullDate(profile.last_updated) ?? '—'}</strong></span>
             <span>Last confirmed <strong>{formatFullDate(profile.last_confirmed_at) ?? 'not yet'}</strong></span>
@@ -710,7 +710,7 @@ export default function ProfilePage() {
               <FloatingField label="Cutoff" hint="if applicable" value={profile.board_cutoff} onChange={(v) => updateField('board_cutoff', v)} />
             </div>
           ) : (
-            !['Merit / Direct', OTHER_OPTION, ''].includes(routeSel) && (
+            asksForRank(routeSel) && (
               <FloatingField label="Admission rank" hint="optional" type="number" min={1} value={profile.admission_rank} onChange={(v) => updateField('admission_rank', v.replace(/[^\d]/g, ''))} />
             )
           )}
@@ -1036,7 +1036,7 @@ function ProfileChecklist({
     { done: !!profile.college_thoughts.trim(), label: 'What your college is really like', why: 'helps someone choosing it', href: '#profile-college-thoughts' },
     { done: hasHigherStudies || hasWork, label: 'Higher studies or work experience', why: 'shows where the path led', href: hasWork ? '#profile-work' : '#profile-higher-studies' },
     { done: !!profile.linkedin_url.trim(), label: 'Your LinkedIn', why: 'so juniors can reach out', href: '#profile-linkedin' },
-    { done: confirmedRecently, label: 'Confirm your details this year', why: 'keeps your profile trusted', href: '#' },
+    { done: confirmedRecently, label: 'Confirm your details this year', why: 'keeps your profile trusted', href: '#profile-confirm' },
   ];
   const done = items.filter((i) => i.done).length;
   if (done === items.length) return null;

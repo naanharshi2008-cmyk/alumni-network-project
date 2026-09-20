@@ -7,7 +7,7 @@ import { supabase } from '../../../lib/supabaseClient';
 import { fetchApprovedAlumni } from '../../../lib/publicData';
 import { publicRouteLabel } from '../../../lib/options';
 import { instituteInitials, instituteTint, profileHref, shortInstituteName } from '../../../lib/showcase';
-import { Alumnus, initialsOf } from '../../../lib/types';
+import { Alumnus, collegeKeyer, initialsOf } from '../../../lib/types';
 
 type College = {
   id: string; name: string; state: string | null; district: string | null;
@@ -39,25 +39,38 @@ export default function CollegePage() {
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [mine, setMine] = useState<MyPhoto[]>([]);
   const [canContribute, setCanContribute] = useState(false);
-  const [state, setState] = useState<'loading' | 'ready' | 'missing'>('loading');
+  // 'missing' and 'error' are different answers: one says this college does
+  // not exist, the other says we could not find out. They used to be the same
+  // message, so a dropped connection told the visitor a real college was not
+  // real.
+  const [state, setState] = useState<'loading' | 'ready' | 'missing' | 'error'>('loading');
+  const [seniorsError, setSeniorsError] = useState('');
 
   const load = useCallback(async () => {
     if (!collegeId) { setState('missing'); return; }
 
-    const [{ data: row }, { data: alumni }, { data: pics }] = await Promise.all([
+    const [{ data: row, error: rowErr }, alumniRes, { data: pics }] = await Promise.all([
       supabase.from('colleges')
         .select('id, name, state, district, website, university_name, management_type, established_year, banner_url, logo_url, description')
         .eq('id', collegeId).maybeSingle(),
-      fetchApprovedAlumni().then((r) => ({ data: r.data })),
+      fetchApprovedAlumni(),
       supabase.from('college_photos_public')
         .select('id, url, caption, shared_by, shared_by_slug, shared_by_class')
         .eq('college_id', collegeId)
         .order('created_at', { ascending: false }),
     ]);
 
+    if (rowErr) { setState('error'); return; }
     if (!row) { setState('missing'); return; }
     setCollege(row as College);
-    setSeniors(((alumni ?? []) as Alumnus[]).filter((a) => a.college_id === collegeId));
+
+    // Count the seniors the way /colleges counts them on the tile that linked
+    // here: collegeKeyer folds a typed spelling into the linked college, and
+    // strict equality did not, so a tile could say 3 and this page say 2.
+    const all = (alumniRes.data ?? []) as Alumnus[];
+    const keyOf = collegeKeyer(all);
+    setSeniorsError(alumniRes.error);
+    setSeniors(all.filter((a) => keyOf(a) === `id:${collegeId}`));
     setPhotos((pics ?? []) as Photo[]);
     setState('ready');
 
@@ -88,12 +101,24 @@ export default function CollegePage() {
   if (state === 'loading') {
     return <main className="container container--wide"><div className="skeleton" style={{ height: 260 }} /></main>;
   }
+  if (state === 'error') {
+    return (
+      <main className="container container--wide">
+        <div className="empty">
+          <span className="empty__emoji">😕</span>
+          <h1>We couldn&apos;t load that college</h1>
+          <p>Something went wrong at our end, not yours. Try again in a moment.</p>
+          <p><Link href="/colleges" className="link-btn">Back to all colleges</Link></p>
+        </div>
+      </main>
+    );
+  }
   if (state === 'missing' || !college) {
     return (
       <main className="container container--wide">
         <div className="empty">
           <span className="empty__emoji">🏛️</span>
-          <h2>We don&apos;t have that college</h2>
+          <h1>We don&apos;t have that college</h1>
           <p><Link href="/colleges" className="link-btn">Back to all colleges</Link></p>
         </div>
       </main>
@@ -145,7 +170,9 @@ export default function CollegePage() {
 
       <section className="cpage__section">
         <h2>Seniors here</h2>
-        {seniors.length === 0 ? (
+        {seniorsError ? (
+          <p className="lens-note">We couldn&apos;t load the seniors just now — the rest of this page is fine.</p>
+        ) : seniors.length === 0 ? (
           <p className="lens-note">No approved profiles at this college yet.</p>
         ) : (
           <div className="xcollege__seniors">

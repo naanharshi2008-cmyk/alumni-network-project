@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { isSupabaseConfigured } from '../../lib/supabaseClient';
 import { fetchApprovedAlumni, fetchTimelines } from '../../lib/publicData';
-import { boardForSchool, officialSchoolName, publicRouteLabel, SCHOOLS } from '../../lib/options';
+import { asksForRank, boardForSchool, officialSchoolName, publicRouteLabel, SCHOOLS } from '../../lib/options';
 import { formatRankBand, formatMarksBand, formatRankSpan, formatMonthYear } from '../../lib/text';
 import { buildSearchDoc, searchItems, type SearchDoc } from '../../lib/search';
 import { collegeTintKey, instituteInitials, instituteTint } from '../../lib/showcase';
@@ -238,6 +238,8 @@ function groupByLens(items: EnrichedAlumnus[], lens: Lens): Group[] {
 export default function DirectoryPage() {
   const [rows, setRows] = useState<Alumnus[] | null>(null);
   const [error, setError] = useState('');
+  // Set only when the database returned fewer rows than it holds.
+  const [capped, setCapped] = useState(0);
   const [query, setQuery] = useState('');
   const [filters, setFilters] = useState<Filters>(NO_FILTERS);
   const [lens, setLens] = useState<Lens>('batch');
@@ -275,10 +277,13 @@ export default function DirectoryPage() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const { data, error: err } = await fetchApprovedAlumni();
+      const { data, error: err, total: everyone, truncated } = await fetchApprovedAlumni();
       if (cancelled) return;
       if (err) setError(err);
       setRows(data);
+      // Say so rather than quietly showing a subset. PostgREST caps a result
+      // server-side and reports nothing; only the count reveals it.
+      if (truncated) setCapped(everyone ?? 0);
 
       const ids = data.map((a) => a.id).filter(Boolean) as string[];
       const t = await fetchTimelines(ids);
@@ -488,6 +493,7 @@ export default function DirectoryPage() {
               ? `${total} ${total === 1 ? 'alum' : 'alumni'}`
               : `${showing} of ${total} alumni`}
             {closeMatches && showing > 0 && ` · close matches for “${query.trim()}”`}
+            {capped > 0 && ` · showing the first ${total.toLocaleString()} of ${capped.toLocaleString()}`}
           </span>
           {activeFilters.map(({ key, value }) => (
             <button
@@ -897,8 +903,14 @@ function CollegeExplorerCard({
  * wrong call here.
  */
 function AdmissionBadges({ a, showStatus = false }: { a: Alumnus; showStatus?: boolean }) {
-  const rank = formatRankBand(a.admission_rank);
-  const marks = formatMarksBand(a.board_marks);
+  // Show what the route makes true, not everything the row happens to hold.
+  // Someone who typed a rank and then changed their route keeps the rank in
+  // their profile; it just stops being shown beside a route it does not
+  // belong to - which for Management Quota, displayed as "Board Marks", would
+  // give away the very thing that label exists to hide.
+  const onExam = asksForRank(a.admission_route);
+  const rank = onExam ? formatRankBand(a.admission_rank) : null;
+  const marks = !onExam ? formatMarksBand(a.board_marks) : null;
   if (!a.admission_route && !rank && !marks) return null;
 
   return (

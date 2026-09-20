@@ -28,14 +28,20 @@ const HERO_POOL = 12;
 export default function Home() {
   const router = useRouter();
   const [rows, setRows] = useState<Alumnus[] | null>(null);
+  const [error, setError] = useState('');
   const [studies, setStudies] = useState<Record<string, HigherStudy[]>>({});
   const [search, setSearch] = useState('');
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const { data } = await fetchApprovedAlumni();
-      if (!cancelled) setRows(data);
+      const { data, error: err } = await fetchApprovedAlumni();
+      if (cancelled) return;
+      // Every other public page reports this. The home page used to discard
+      // it, so a failed fetch rendered the hero and nothing else, for ever,
+      // with nothing to say why.
+      setError(err);
+      setRows(data);
     })();
     return () => { cancelled = true; };
   }, []);
@@ -136,6 +142,12 @@ export default function Home() {
         <HeroCollage faces={showcase?.faces ?? null} quotes={showcase?.quotes ?? []} studies={studies} />
         <div className="hero__glow" aria-hidden />
       </section>
+
+      {error && (
+        <div className="alert alert--error" role="alert">
+          Couldn&apos;t load alumni: {error}
+        </div>
+      )}
 
       {showcase && <FeaturedAlumni people={showcase.featured} />}
       {rows && <HomeStats alumni={rows} />}
