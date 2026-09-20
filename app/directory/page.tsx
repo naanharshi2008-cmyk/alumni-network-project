@@ -1,14 +1,16 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { isSupabaseConfigured } from '../../lib/supabaseClient';
 import { fetchApprovedAlumni, fetchTimelines } from '../../lib/publicData';
+import { useDebounced } from '../../lib/useDebounced';
+import { clearDirectoryView, readDirectoryView, rememberDirectoryView, type DirectorySnapshot } from './viewState';
 import { boardForSchool, officialSchoolName, publicRouteLabel, SCHOOLS } from '../../lib/options';
 import { AdmissionBadges, Fact, Row } from '../../lib/profileParts';
 import { formatRankBand, formatMarksBand, formatRankSpan, formatMonthYear } from '../../lib/text';
 import { buildSearchDoc, searchItems, type SearchDoc } from '../../lib/search';
-import { collegeTintKey, instituteInitials, instituteTint } from '../../lib/showcase';
+import { collegeTintKey, instituteInitials, instituteTint, profileHref } from '../../lib/showcase';
 import {
   Alumnus,
   CATEGORIES,
@@ -108,15 +110,6 @@ function buildExplorerColleges(items: EnrichedAlumnus[]): ExplorerCollege[] {
   );
 }
 
-/* ── Share links ──────────────────────────────────────────────────────────── */
-function shareParam(a: Alumnus): string | null {
-  return a.public_slug || a.username || null;
-}
-function findByShareParam(items: EnrichedAlumnus[], param: string): EnrichedAlumnus | undefined {
-  const p = param.toLowerCase();
-  return items.find(({ a }) => (a.public_slug ?? '').toLowerCase() === p)
-    ?? items.find(({ a }) => (a.username ?? '').toLowerCase() === p);
-}
 
 /* ── Filters and lenses ──────────────────────────────────────────────────
    One set of alumni, sliced four ways.
@@ -242,12 +235,23 @@ export default function DirectoryPage() {
   // Set only when the database returned fewer rows than it holds.
   const [capped, setCapped] = useState(0);
   const [query, setQuery] = useState('');
+  // The box itself is never laggy; everything it drives waits for a pause.
+  const settledQuery = useDebounced(query);
+
+  // Where this page was when someone left it for a profile. Read once, then
+  // forgotten, so it cannot reassert itself over a later, deliberate visit.
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
+  // A search opens every group, so one collapsed earlier cannot hide the two
+  // people it just found. Collapsing during a search is kept apart from the
+  // arrangement the visitor made, so clearing the search gives theirs back.
+  const [searchOpen, setSearchOpen] = useState<Record<string, boolean>>({});
+  const [shownBy, setShownBy] = useState<Record<string, number>>({});
+  const snapshot = useRef<DirectorySnapshot | null>(null);
+  const [restoredScroll, setRestoredScroll] = useState<number | null>(null);
   const [filters, setFilters] = useState<Filters>(NO_FILTERS);
   const [lens, setLens] = useState<Lens>('batch');
-  const [expanded, setExpanded] = useState<EnrichedAlumnus | null>(null);
   const [timelines, setTimelines] = useState<Timelines>({ studies: {}, work: {} });
   // Username from a shared ?p= link, held until the fetch resolves it.
-  const [pendingProfileParam, setPendingProfileParam] = useState<string | null>(null);
 
   // Honour /directory?cat=medicine from the home-page chips. Read once on
   // mount from window.location rather than useSearchParams, which would drag
@@ -268,10 +272,6 @@ export default function DirectoryPage() {
     // ?q= pre-fills the search box - the home galleries and hero search land here.
     const q = params.get('q');
     if (q) setQuery(q);
-    // ?p=<slug> is a shareable profile link, resolved once rows arrive. Links
-    // shared before usernames were removed carry ?p=<username> and still work.
-    const p = params.get('p');
-    if (p) setPendingProfileParam(p.toLowerCase());
   }, []);
 
   // Fetch approved alumni from the privacy-safe view, then their timelines.
@@ -309,8 +309,8 @@ export default function DirectoryPage() {
   // Searched but not yet filtered - the base every facet count is measured
   // against, so typing in the search box updates the numbers too.
   const { results: searched, closeMatches } = useMemo(
-    () => searchItems(enriched, ({ a }) => searchDocs.get(a)!, query),
-    [enriched, searchDocs, query],
+    () => searchItems(enriched, ({ a }) => searchDocs.get(a)!, settledQuery),
+    [enriched, searchDocs, settledQuery],
   );
 
   const filtered = useMemo(
@@ -374,68 +374,97 @@ export default function DirectoryPage() {
       if (filters[key]) url.searchParams.set(param, filters[key]);
       else url.searchParams.delete(param);
     }
-    if (query.trim()) url.searchParams.set('q', query.trim());
+    if (settledQuery.trim()) url.searchParams.set('q', settledQuery.trim());
     else url.searchParams.delete('q');
     if (lens !== 'batch') url.searchParams.set('lens', lens);
     else url.searchParams.delete('lens');
     window.history.replaceState(window.history.state, '', url);
-  }, [filters, query, lens]);
+  }, [filters, settledQuery, lens]);
 
-  // Re-keys the card grids so the stagger animation replays when the visible
-  // set changes, rather than only on first mount.
-  const filterSignature = `${query}|${FILTER_KEYS.map((k) => filters[k]).join('|')}`;
+  /**
+   * A deliberate reframing of the list: a filter, or a different grouping.
+   *
+   * The query is NOT part of it, and that is the point. It used to be, so
+   * every character typed collapsed every group back to two open, truncated
+   * every grid back to twelve cards, and replayed the fade-in on all of them.
+   * Typing narrows what you are looking at; it is not a decision to start
+   * again. It also re-keys the grids, so the stagger replays when the set is
+   * genuinely reframed and not while someone is mid-word.
+   */
+  const filterSignature = `${FILTER_KEYS.map((k) => filters[k]).join('|')}|${lens}`;
+  const searching = settledQuery.trim().length > 0;
 
   function setFilter(key: FilterKey, value: string) {
+    // A new slice of the directory is not the view the snapshot describes.
+    clearDirectoryView();
+    snapshot.current = null;
     setFilters((prev) => ({ ...prev, [key]: value }));
   }
 
-  // Open a shared profile once data exists. Misses are ignored silently - a
-  // stale link should never error, just land on the directory.
+  // Read the snapshot once, on the client only: the server render cannot see
+  // sessionStorage, so anything seeded from it would be discarded as a
+  // hydration mismatch. Applying it as state after mount is what makes it
+  // survive the component remounts that happen when the rows arrive.
   useEffect(() => {
-    if (!pendingProfileParam || !rows) return;
-    const hit = findByShareParam(enriched, pendingProfileParam);
-    if (hit) setExpanded(hit);
-    setPendingProfileParam(null);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingProfileParam, rows]);
+    const snap = readDirectoryView();
+    if (!snap) return;
+    snapshot.current = snap;
+    setOpenGroups(snap.groups ?? {});
+    setShownBy(snap.shown ?? {});
+  }, []);
 
-  // Keep the URL in step with the open profile so links are shareable and the
-  // browser Back button closes the modal like students expect on a phone.
+  // Scroll last. The grid has no height until the rows land, so restoring
+  // before that just scrolls to the bottom of an empty page.
+  useLayoutEffect(() => {
+    const target = snapshot.current?.scrollY;
+    if (!rows || target == null || restoredScroll !== null) return;
+    setRestoredScroll(target);
+    window.scrollTo({ top: target, behavior: 'instant' as ScrollBehavior });
+  }, [rows, restoredScroll]);
+
+  // A filter or a lens change is a reframing: groups and depth go back to
+  // their defaults. Typing does neither.
+  //
+  // Compares the value rather than tracking "have I run before": React runs an
+  // effect twice on mount in development, and a first-run flag is already
+  // false by the second pass - which reset the arrangement that had just been
+  // restored from the snapshot.
+  const lastSignature = useRef<string | null>(null);
   useEffect(() => {
-    const url = new URL(window.location.href);
-    const current = url.searchParams.get('p');
-    const wanted = expanded ? shareParam(expanded.a) : null;
-    if (wanted && current !== wanted) {
-      url.searchParams.set('p', wanted);
-      window.history.pushState({ p: wanted }, '', url);
-    } else if (!wanted && current) {
-      url.searchParams.delete('p');
-      window.history.pushState({}, '', url);
+    if (lastSignature.current === null || lastSignature.current === filterSignature) {
+      lastSignature.current = filterSignature;
+      return;
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [expanded]);
+    lastSignature.current = filterSignature;
+    setOpenGroups({});
+    setShownBy({});
+  }, [filterSignature]);
 
-  useEffect(() => {
-    const onPop = () => {
-      const p = new URLSearchParams(window.location.search).get('p');
-      if (!p) setExpanded(null);
-      else {
-        const hit = findByShareParam(enriched, p);
-        if (hit) setExpanded(hit);
-      }
-    };
-    window.addEventListener('popstate', onPop);
-    return () => window.removeEventListener('popstate', onPop);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enriched]);
+  useEffect(() => { if (!searching) setSearchOpen({}); }, [searching]);
 
-
+  const view = useMemo<ViewState>(() => ({
+    isOpen: (key, fallback) => (searching ? (searchOpen[key] ?? true) : (openGroups[key] ?? fallback)),
+    toggle: (key, current) => (searching
+      ? setSearchOpen((prev) => ({ ...prev, [key]: !current }))
+      : setOpenGroups((prev) => ({ ...prev, [key]: !current }))),
+    shownFor: (signature, step) => shownBy[signature] ?? step,
+    showMore: (signature, step) => setShownBy((prev) => ({
+      ...prev,
+      [signature]: (prev[signature] ?? step) + step,
+    })),
+    remember: () => rememberDirectoryView({
+      scrollY: window.scrollY,
+      groups: openGroups,
+      shown: shownBy,
+    }),
+  }), [openGroups, searchOpen, searching, shownBy]);
 
   /* ──────────────────────────────────────────────────────────────────── */
   const total = enriched.length;
   const showing = filtered.length;
 
   return (
+    <ViewContext.Provider value={view}>
     <div className="container container--wide">
       <div className="fade-up">
         <h1>Alumni Network</h1>
@@ -489,7 +518,7 @@ export default function DirectoryPage() {
         </div>
 
         <div className="filter-status">
-          <span className="result-count">
+          <span className="result-count" role="status">
             {showing === total
               ? `${total} ${total === 1 ? 'alum' : 'alumni'}`
               : `${showing} of ${total} alumni`}
@@ -536,7 +565,6 @@ export default function DirectoryPage() {
             title={`Class of ${year ?? 'Unknown'}`}
             count={items.length}
             defaultOpen={gi < OPEN_GROUPS}
-            signature={filterSignature}
           >
             {groupBySchool(items).map(([school, schoolItems]) => (
               <div key={school} style={{ marginBottom: 24 }}>
@@ -547,7 +575,6 @@ export default function DirectoryPage() {
                 <PagedGrid
                   items={schoolItems}
                   signature={`${year}|${school}|${filterSignature}`}
-                  onExpand={setExpanded}
                 />
               </div>
             ))}
@@ -555,14 +582,7 @@ export default function DirectoryPage() {
         ))
       ) : lens === 'college' ? (
         <>
-          <PagedColleges
-            colleges={explorerColleges}
-            signature={filterSignature}
-            onOpen={(a) => {
-              const hit = filtered.find((x) => x.a.id === a.id);
-              if (hit) setExpanded(hit);
-            }}
-          />
+          <PagedColleges colleges={explorerColleges} signature={filterSignature} />
           {/* Said plainly rather than silently dropping them: someone reading
               for CA has no college, and a count that quietly shrinks would
               make the directory look like it lost people. */}
@@ -594,21 +614,14 @@ export default function DirectoryPage() {
             title={g.title}
             count={g.count}
             defaultOpen={gi < OPEN_GROUPS}
-            signature={filterSignature}
           >
-            <PagedGrid items={g.items} signature={`${g.key}|${filterSignature}`} onExpand={setExpanded} />
+            <PagedGrid items={g.items} signature={`${g.key}|${filterSignature}`} />
           </GroupSection>
         ))
       )}
 
-      {expanded && (
-        <ProfileModal
-          item={expanded}
-          timelines={timelines}
-          onClose={() => setExpanded(null)}
-        />
-      )}
     </div>
+    </ViewContext.Provider>
   );
 }
 
@@ -649,10 +662,35 @@ function FilterSelect({
 ───────────────────────────────────────────────────────────────────────── */
 
 /** Show `step` at a time, and start over whenever the filters change. */
+/**
+ * What the page remembers: which groups are open, how far each grid has been
+ * expanded, and where you were when you left for a profile.
+ *
+ * All of it lives in the page rather than in the components that use it. Those
+ * components remount whenever the rows arrive or the grouping changes branch,
+ * and state held inside them was being thrown away each time - including the
+ * state just restored from a snapshot.
+ */
+type ViewState = {
+  isOpen: (key: string, fallback: boolean) => boolean;
+  toggle: (key: string, current: boolean) => void;
+  shownFor: (signature: string, step: number) => number;
+  showMore: (signature: string, step: number) => void;
+  remember: () => void;
+};
+
+const ViewContext = React.createContext<ViewState | null>(null);
+
+/** Called on the way out to a profile, so Back lands where you left it. */
+function useRemember() {
+  const view = React.useContext(ViewContext);
+  return () => view?.remember();
+}
+
 function useShowMore(signature: string, step: number) {
-  const [shown, setShown] = useState(step);
-  useEffect(() => { setShown(step); }, [signature, step]);
-  return { shown, more: () => setShown((n) => n + step) };
+  const view = React.useContext(ViewContext);
+  const shown = view?.shownFor(signature, step) ?? step;
+  return { shown, more: () => view?.showMore(signature, step) };
 }
 
 function ShowMore({ remaining, total, step, one, many, onClick }: {
@@ -660,42 +698,38 @@ function ShowMore({ remaining, total, step, one, many, onClick }: {
 }) {
   const next = Math.min(step, remaining);
   return (
-    <button type="button" className="show-more" onClick={onClick}>
-      Show {next} more {next === 1 ? one : many} <span className="show-more__of">of {total}</span>
+    <button type="button" className="btn btn--ghost show-more" onClick={onClick}>
+      <span className="btn__inner">
+        Show {next} more {next === 1 ? one : many}
+        <span className="show-more__of"> · {total - remaining} of {total}</span>
+      </span>
     </button>
   );
 }
 
-/**
- * A batch, a route or an area, with a header you can fold.
- *
- * `signature` is the current search and filters: when those change the group
- * returns to its default state, so narrowing to one batch does not leave you
- * looking at a collapsed header.
- */
-function GroupSection({ title, count, defaultOpen, signature, children }: {
-  title: string; count: number; defaultOpen: boolean; signature: string; children: React.ReactNode;
+function GroupSection({ title, count, defaultOpen, children }: {
+  title: string; count: number; defaultOpen: boolean; children: React.ReactNode;
 }) {
-  const [open, setOpen] = useState(defaultOpen);
-  useEffect(() => { setOpen(defaultOpen); }, [defaultOpen, signature]);
+  const view = React.useContext(ViewContext);
+  const isOpen = view?.isOpen(title, defaultOpen) ?? defaultOpen;
 
   return (
-    <section className={`dgroup${open ? ' dgroup--open' : ''}`}>
+    <section className={`dgroup${isOpen ? ' dgroup--open' : ''}`}>
       <h2 className="dgroup__h">
-      <button type="button" className="dgroup__head" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+      <button type="button" className="dgroup__head" aria-expanded={isOpen} onClick={() => view?.toggle(title, isOpen)}>
         <span className="dgroup__chev" aria-hidden>▾</span>
         <span className="dgroup__title">{title}</span>
         <span className="dgroup__rule" aria-hidden />
         <span className="dgroup__count">{count} {count === 1 ? 'alum' : 'alumni'}</span>
       </button>
       </h2>
-      {open && <div className="dgroup__body">{children}</div>}
+      {isOpen && <div className="dgroup__body">{children}</div>}
     </section>
   );
 }
 
-function PagedGrid({ items, signature, onExpand }: {
-  items: EnrichedAlumnus[]; signature: string; onExpand: (item: EnrichedAlumnus) => void;
+function PagedGrid({ items, signature }: {
+  items: EnrichedAlumnus[]; signature: string;
 }) {
   const { shown, more } = useShowMore(signature, PAGE);
   return (
@@ -704,11 +738,7 @@ function PagedGrid({ items, signature, onExpand }: {
           remounting - and so re-animating - the ones already on screen. */}
       <div className="grid stagger" key={signature}>
         {items.slice(0, shown).map((item, i) => (
-          <Card
-            key={item.a.id ?? `${item.a.full_name}-${i}`}
-            item={item}
-            onExpand={() => onExpand(item)}
-          />
+          <Card key={item.a.id ?? `${item.a.full_name}-${i}`} item={item} />
         ))}
       </div>
       {items.length > shown && (
@@ -721,15 +751,15 @@ function PagedGrid({ items, signature, onExpand }: {
   );
 }
 
-function PagedColleges({ colleges, signature, onOpen }: {
-  colleges: ExplorerCollege[]; signature: string; onOpen: (a: Alumnus) => void;
+function PagedColleges({ colleges, signature }: {
+  colleges: ExplorerCollege[]; signature: string;
 }) {
   const { shown, more } = useShowMore(signature, COLLEGE_PAGE);
   return (
     <>
       <div className="stagger" key={signature}>
         {colleges.slice(0, shown).map((college) => (
-          <CollegeExplorerCard key={college.key} college={college} onOpen={onOpen} />
+          <CollegeExplorerCard key={college.key} college={college} />
         ))}
       </div>
       {colleges.length > shown && (
@@ -756,11 +786,10 @@ function PagedColleges({ colleges, signature, onOpen }: {
  */
 function CollegeExplorerCard({
   college,
-  onOpen,
 }: {
   college: ExplorerCollege;
-  onOpen: (a: Alumnus) => void;
 }) {
+  const remember = useRemember();
   const [showAll, setShowAll] = useState(false);
   const det = college.details;
   const website = det?.website;
@@ -857,11 +886,11 @@ function CollegeExplorerCard({
 
       <div className="xcollege__seniors">
         {seniors.map((a, i) => (
-          <button
-            type="button"
+          <Link
             key={a.id ?? `${a.full_name}-${i}`}
+            href={profileHref(a)}
             className="senior-chip"
-            onClick={() => onOpen(a)}
+            onClick={remember}
           >
             <span className="avatar avatar--xs" aria-hidden>
               {a.show_photo && a.photo_url
@@ -875,7 +904,7 @@ function CollegeExplorerCard({
                   .filter(Boolean).join(' · ')}
               </span>
             </span>
-          </button>
+          </Link>
         ))}
 
         {college.seniors.length > SENIOR_PREVIEW && (
@@ -897,7 +926,8 @@ function CollegeExplorerCard({
 /* ─────────────────────────────────────────────────────────────────────────
    Alumnus Card (Directory tab)
 ───────────────────────────────────────────────────────────────────────── */
-function Card({ item, onExpand }: { item: EnrichedAlumnus; onExpand: () => void }) {
+function Card({ item }: { item: EnrichedAlumnus }) {
+  const remember = useRemember();
   const { a, cat } = item;
   const college = collegeNameOf(a) ?? a.college_name_raw;
   const collegeDet = collegeDetailsOf(a);
@@ -971,296 +1001,18 @@ function Card({ item, onExpand }: { item: EnrichedAlumnus; onExpand: () => void 
         )}
       </div>
 
-      <button
-        type="button"
+      <Link
+        href={profileHref(a)}
         className="btn btn--plain btn--plain-neutral"
         style={{ width: '100%', marginTop: 14 }}
-        onClick={onExpand}
+        onClick={remember}
       >
         View full profile
-      </button>
+      </Link>
     </article>
   );
 }
 
-/* ─────────────────────────────────────────────────────────────────────────
-   Profile Modal
-───────────────────────────────────────────────────────────────────────── */
-function ProfileModal({
-  item, timelines, onClose,
-}: {
-  item: EnrichedAlumnus;
-  timelines: Timelines;
-  onClose: () => void;
-}) {
-  const { a, cat } = item;
-  const college = collegeNameOf(a) ?? a.college_name_raw;
-  const collegeDet = collegeDetailsOf(a);
-  const tintKey = collegeTintKey(a);
-  const dept = [a.degree, a.branch].filter(Boolean).join(' · ');
-  const now = [a.currently_at, a.designation].filter(Boolean).join(' · ');
-  const showImg = a.show_photo && a.photo_url;
-  const studies = a.id ? sortHigherStudies(timelines.studies[a.id] ?? []) : [];
-  const work = a.id ? sortWorkExperience(timelines.work[a.id] ?? []) : [];
-
-  const dialogRef = useRef<HTMLDivElement>(null);
-  const closeRef = useRef<HTMLButtonElement>(null);
-
-  // Lock page scroll, move focus into the dialog, keep Tab inside it, and
-  // restore focus to whatever opened it. Without this the page behind kept
-  // scrolling and keyboard users tabbed straight out of an open modal.
-  useEffect(() => {
-    const opener = document.activeElement as HTMLElement | null;
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    closeRef.current?.focus();
-
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Escape') { onClose(); return; }
-      if (e.key !== 'Tab') return;
-      const focusables = dialogRef.current?.querySelectorAll<HTMLElement>(
-        'a[href], button:not([disabled]), input, select, textarea, [tabindex]:not([tabindex="-1"])',
-      );
-      if (!focusables || focusables.length === 0) return;
-      const first = focusables[0];
-      const last = focusables[focusables.length - 1];
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus();
-      }
-    }
-
-    window.addEventListener('keydown', onKeyDown);
-    return () => {
-      document.body.style.overflow = prevOverflow;
-      window.removeEventListener('keydown', onKeyDown);
-      opener?.focus?.();
-    };
-  }, [onClose]);
-
-  return (
-    <div className="a-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div
-        ref={dialogRef}
-        className="a-modal"
-        style={{ '--cat': cat.accent } as React.CSSProperties}
-        role="dialog"
-        aria-modal="true"
-        aria-label={`Profile of ${a.full_name}`}
-      >
-        {(collegeDet?.banner_url || tintKey) && (
-          <div
-            className={`a-modal__banner${collegeDet?.banner_url ? '' : ' a-modal__banner--tint'}`}
-            aria-hidden
-            style={tintKey ? ({ '--tint': instituteTint(tintKey) } as React.CSSProperties) : undefined}
-          >
-            {collegeDet?.banner_url && <img src={collegeDet.banner_url} alt="" />}
-          </div>
-        )}
-
-        <button ref={closeRef} type="button" className="a-modal__close" onClick={onClose} aria-label="Close">✕</button>
-
-        <div className="a-modal__head">
-          <div className="avatar a-modal__avatar">
-            {showImg ? <img src={a.photo_url!} alt="" /> : initialsOf(a.full_name)}
-          </div>
-          <div>
-            <h3 className="a-modal__name">{a.full_name}</h3>
-            <div className="a-modal__year">
-              Class of {a.class_of ?? '–'}{a.stream ? ` · ${a.stream}` : ''}
-            </div>
-          </div>
-          {shareParam(a) && (
-            <button
-              type="button"
-              className="btn btn--ghost a-modal__share"
-              onClick={async () => {
-                const url = `${window.location.origin}/alumni/${encodeURIComponent(shareParam(a)!)}`;
-                // Native share sheet on phones; clipboard everywhere else.
-                try {
-                  if (navigator.share) await navigator.share({ title: `${a.full_name} — Veveaham Alumni`, url });
-                  else { await navigator.clipboard.writeText(url); alert('Link copied.'); }
-                } catch { /* user dismissed the sheet - not an error */ }
-              }}
-            >
-              <span className="btn__inner">Share ↗</span>
-            </button>
-          )}
-        </div>
-
-        <span className="badge" style={{ marginTop: 10, display: 'inline-flex' }}>
-          <span>{cat.emoji}</span> {cat.label}
-        </span>
-
-        {/* A visitor opens a profile to answer two questions: how did they get
-            in, and what do they tell me to do. Both used to sit at the bottom,
-            below the college's founding year. They lead now. */}
-        <div className="a-modal__section">
-          <h4>How they got in</h4>
-          <AdmissionBadges a={a} />
-          {a.board_cutoff && (
-            <p className="modal-note">Cutoff {a.board_cutoff}</p>
-          )}
-        </div>
-
-        {(a.message_1 || a.message_2) && (
-          <div className="a-modal__section">
-            <h4>Their advice for juniors</h4>
-            {a.message_1 && <p className="a-modal__quote">{a.message_1}</p>}
-            {a.message_2 && <p className="a-modal__quote">{a.message_2}</p>}
-          </div>
-        )}
-
-        {a.school_note && (
-          <div className="a-modal__section">
-            <h4>A note from Veveaham</h4>
-            <p className="a-modal__quote a-modal__quote--school">{a.school_note}</p>
-          </div>
-        )}
-
-        {/* Education */}
-        <div className="a-modal__section">
-          <h4>Education</h4>
-          <div className="a-card__rows">
-            <Row icon="🏫" label="School">
-              {officialSchoolName(a.school_name) || '—'}
-              {boardForSchool(a.school_name) && (
-                <span style={{ color: 'var(--text-faint)' }}> · {boardForSchool(a.school_name)}</span>
-              )}
-            </Row>
-            {college && (
-              <Row icon="🏛️" label="College">
-                {college}{collegeDet?.state ? ` · ${collegeDet.state}` : ''}
-              </Row>
-            )}
-            {dept && <Row icon="🎓" label="Studied">{dept}</Row>}
-            {professionalLabel(a) && (
-              <Row icon="📜" label={a.degree ? 'Also pursuing' : 'Pursuing'}>
-                {professionalLabel(a)}
-                {a.professional_org && (
-                  <span style={{ color: 'var(--text-faint)' }}> · at {a.professional_org}</span>
-                )}
-              </Row>
-            )}
-            {a.expected_finish_year && (
-              <Row icon="📅" label="Expected to finish">{a.expected_finish_year}</Row>
-            )}
-          </div>
-        </div>
-
-        {/* Higher studies timeline */}
-        {studies.length > 0 && (
-          <div className="a-modal__section">
-            <h4>Higher studies</h4>
-            <ol className="timeline">
-              {studies.map((s) => (
-                <li key={s.id} className="timeline__item">
-                  <span className="timeline__dot" aria-hidden>🎓</span>
-                  <div>
-                    <div className="timeline__title">{s.degree_name}</div>
-                    {s.institution && <div className="timeline__sub">{s.institution}</div>}
-                    {yearRange(s.start_year, s.finish_year) && (
-                      <div className="timeline__years">{yearRange(s.start_year, s.finish_year)}</div>
-                    )}
-                  </div>
-                </li>
-              ))}
-            </ol>
-          </div>
-        )}
-
-        {/* Work timeline */}
-        {work.length > 0 && (
-          <div className="a-modal__section">
-            <h4>Work experience</h4>
-            <ol className="timeline">
-              {work.map((w) => (
-                <li key={w.id} className="timeline__item">
-                  <span className="timeline__dot" aria-hidden>💼</span>
-                  <div>
-                    <div className="timeline__title">
-                      {w.role ? `${w.role} · ` : ''}{w.company}
-                      {w.is_current && <span className="timeline__now">Present</span>}
-                    </div>
-                    {yearRange(w.start_year, w.end_year, w.is_current) && (
-                      <div className="timeline__years">{yearRange(w.start_year, w.end_year, w.is_current)}</div>
-                    )}
-                  </div>
-                </li>
-              ))}
-            </ol>
-          </div>
-        )}
-
-        {/* College details */}
-        {collegeDet && (collegeDet.website || collegeDet.university_name || collegeDet.established_year || collegeDet.management_type || collegeDet.description || a.college_thoughts) && (
-          <div className="a-modal__section">
-            <h4>About {college}</h4>
-            {collegeDet.description && <p className="college-desc">{collegeDet.description}</p>}
-            {a.college_thoughts && (
-              <p className="a-modal__quote">In their words: &ldquo;{a.college_thoughts}&rdquo;</p>
-            )}
-            <div className="college-facts">
-              <div className="college-facts__grid">
-                {collegeDet.university_name && collegeDet.university_name !== college && (
-                  <Fact label="University" value={collegeDet.university_name} />
-                )}
-                {collegeDet.management_type && <Fact label="Management" value={collegeDet.management_type} />}
-                {collegeDet.established_year && <Fact label="Established" value={String(collegeDet.established_year)} />}
-                {collegeDet.district && (
-                  <Fact label="Location" value={[collegeDet.district, collegeDet.state].filter(Boolean).join(', ')} />
-                )}
-              </div>
-              {collegeDet.website && (
-                <a
-                  href={collegeDet.website.startsWith('http') ? collegeDet.website : `https://${collegeDet.website}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="btn btn--primary"
-                  style={{ display: 'inline-flex', marginTop: 12, fontSize: '0.85rem' }}
-                >
-                  <span className="btn__inner">Know More about this College ↗</span>
-                </a>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Right now */}
-        <div className="a-modal__section">
-          <h4>Right now</h4>
-          <div className="a-card__rows">
-            <Row icon="📌" label="Status">{a.current_status ?? 'Alumnus'}</Row>
-            {now && <Row icon="💼" label="At">{now}</Row>}
-            {a.linkedin_url && (
-              <div className="a-row">
-                <span className="a-row__icon" aria-hidden>🔗</span>
-                <span>
-                  <span className="a-row__label">LinkedIn: </span>
-                  <a className="a-link" href={a.linkedin_url} target="_blank" rel="noopener noreferrer">
-                    View profile ↗
-                  </a>
-                </span>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {(a.last_updated || a.last_confirmed_at) && (
-          <p className="a-modal__meta">
-            {a.last_updated && <>Profile updated {formatMonthYear(a.last_updated)}</>}
-            {a.last_updated && a.last_confirmed_at && ' · '}
-            {a.last_confirmed_at && <>confirmed {formatMonthYear(a.last_confirmed_at)}</>}
-          </p>
-        )}
-
-      </div>
-    </div>
-  );
-}
 
 
 
