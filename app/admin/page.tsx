@@ -30,6 +30,9 @@ type AlumniRow = {
   college_id: string | null;
   organization_id: string | null;
   degree: string | null;
+  professional_course: string | null;
+  professional_stage: string | null;
+  professional_org: string | null;
   branch: string | null;
   field: string | null;
   admission_route: string | null;
@@ -1327,6 +1330,15 @@ function PersonDetails({ person, higherStudies, workExperience }: {
         <span><strong>Branch:</strong>&nbsp;{person.branch || '—'}</span>
         <span><strong>Field:</strong>&nbsp;{person.field || '—'}</span>
       </div>
+      {person.professional_course && (
+        <p className="a-row" style={{ margin: '4px 0' }}>
+          {/* A CA or CS student may have no degree at all, so without this the
+              review card showed them as an empty row. */}
+          <strong>Professional course:</strong>&nbsp;{person.professional_course}
+          {person.professional_stage ? ` (${person.professional_stage})` : ''}
+          {person.professional_org ? ` — ${person.professional_org}` : ''}
+        </p>
+      )}
       <p className="a-row" style={{ margin: '4px 0' }}>
         <strong>Admission through:</strong>&nbsp;{person.admission_route || '—'}
         {person.admission_rank ? ` (Rank: ${person.admission_rank})` : ''}
