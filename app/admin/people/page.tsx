@@ -2,9 +2,25 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../../../lib/supabaseClient';
-import { loadPeople, PAGE, type AlumniRow } from '../adminData';
+import { useRouter, useSearchParams } from 'next/navigation';
+import {
+  loadPeople, loadPeopleFacets, PAGE,
+  type AlumniRow, type PeopleFacets, type PeopleNeed,
+} from '../adminData';
 import { useAdminShell } from '../shell';
-import { AccountButton, ConfirmAction, EmptyCard } from '../ui';
+import { AccountButton, ConfirmAction, EmptyCard, TabButton } from '../ui';
+
+/** The states worth asking for, in the order the office asks for them. */
+const NEEDS: { key: PeopleNeed; label: string }[] = [
+  { key: 'all', label: 'Everyone' },
+  { key: 'no-login', label: 'No login yet' },
+  { key: 'email-unconfirmed', label: 'Email unconfirmed' },
+  { key: 'stale', label: 'Not confirmed in a year' },
+  { key: 'never-confirmed', label: 'Never confirmed' },
+  { key: 'no-college', label: 'College unmatched' },
+  { key: 'starred', label: 'Featured' },
+  { key: 'hidden', label: 'Hidden' },
+];
 
 /**
  * Everyone already decided on.
@@ -20,6 +36,13 @@ import { AccountButton, ConfirmAction, EmptyCard } from '../ui';
  */
 export default function PeoplePage() {
   const { refreshCounts } = useAdminShell();
+  const router = useRouter();
+  const params = useSearchParams();
+  const urlNeed = params.get('need') as PeopleNeed | null;
+  const [need, setNeed] = useState<PeopleNeed>(
+    urlNeed && NEEDS.some((n) => n.key === urlNeed) ? urlNeed : 'all',
+  );
+  const [facets, setFacets] = useState<PeopleFacets | null>(null);
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(0);
   const [rows, setRows] = useState<AlumniRow[]>([]);
@@ -29,9 +52,9 @@ export default function PeoplePage() {
   const [actionError, setActionError] = useState('');
   const [actionNote, setActionNote] = useState('');
 
-  const load = useCallback(async (q: string, p: number) => {
+  const load = useCallback(async (q: string, p: number, n: PeopleNeed) => {
     setLoading(true);
-    const data = await loadPeople(q, p);
+    const data = await loadPeople(q, p, n);
     setRows(data.rows);
     setTotal(data.total);
     setTruncated(data.truncated);
@@ -41,9 +64,19 @@ export default function PeoplePage() {
 
   // Typing searches the database, so wait for a pause rather than firing per key.
   useEffect(() => {
-    const t = setTimeout(() => { void load(query, page); }, query ? 300 : 0);
+    const t = setTimeout(() => { void load(query, page, need); }, query ? 300 : 0);
     return () => clearTimeout(t);
-  }, [query, page, load]);
+  }, [query, page, need, load]);
+
+  useEffect(() => { void loadPeopleFacets().then(setFacets); }, []);
+
+  function chooseNeed(next: PeopleNeed) {
+    setNeed(next);
+    setPage(0);
+    // In the URL so a filtered list is a link, and so the opening view's
+    // health lines can point straight at one.
+    router.replace(next === 'all' ? '/admin/people' : `/admin/people?need=${next}`);
+  }
 
   // Hiding is the reversible half of deleting: the profile leaves the public
   // view immediately but the row, the photo and the login all survive, so a
@@ -109,6 +142,18 @@ export default function PeoplePage() {
         Everyone who has been approved or hidden. This is where to remove test
         rows, duplicates and anyone who asks to be taken down.
       </p>
+
+      <div className="chips" style={{ marginBottom: 14 }}>
+        {NEEDS.map((n) => (
+          <TabButton
+            key={n.key}
+            active={need === n.key}
+            onClick={() => chooseNeed(n.key)}
+            label={n.label}
+            count={facets ? facets[n.key] : 0}
+          />
+        ))}
+      </div>
 
       <div className="search" style={{ marginBottom: 18 }}>
         <input

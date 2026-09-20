@@ -22,6 +22,7 @@ import { ShellContext } from './shell';
  */
 
 const AREAS = [
+  { href: '/admin/today', label: 'Today', hint: 'What is waiting, what arrived, what needs a look' },
   { href: '/admin/review', label: 'Review', hint: 'Everything waiting for a decision' },
   { href: '/admin/people', label: 'People', hint: 'Everyone already decided on' },
   { href: '/admin/data', label: 'Data', hint: 'Names, values and tidying up' },
@@ -33,7 +34,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [authState, setAuthState] = useState<'checking' | 'denied' | 'ok'>('checking');
   const [counts, setCounts] = useState<Counts>({ registrations: 0, edits: 0, photos: 0, options: 0 });
   const [lastVisit, setLastVisit] = useState<number | null>(null);
-  const [mailHealth, setMailHealth] = useState<{ domainStatus: string; apiKeySet: boolean; hint: string } | null>(null);
 
   const refreshCounts = useCallback(() => { void loadCounts().then(setCounts); }, []);
 
@@ -59,10 +59,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       setLastVisit(stored ? Number(stored) : null);
 
       void loadCounts().then((c) => { if (active) setCounts(c); });
-      void fetch('/api/admin/mail-health', { headers: { Authorization: `Bearer ${session.access_token}` } })
-        .then((r) => (r.ok ? r.json() : null))
-        .then((h) => { if (active && h) setMailHealth(h); })
-        .catch(() => undefined);
     });
 
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -133,7 +129,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <nav className="admin-nav" aria-label="Dashboard sections">
           {AREAS.map((a) => {
             const on = pathname === a.href || pathname.startsWith(`${a.href}/`);
-            const badge = a.href === '/admin/review' ? waiting : 0;
+            const badge = a.href === '/admin/today' ? waiting : 0;
             return (
               <Link
                 key={a.href} href={a.href} title={a.hint}
@@ -146,14 +142,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             );
           })}
         </nav>
-
-        {mailHealth && mailHealth.domainStatus !== 'verified' && (
-          <div className="alert alert--warn" role="status">
-            <strong>Email is not working yet.</strong> {mailHealth.hint} Until it is, password-reset links,
-            welcome emails and new-registration alerts are not delivered — use <em>Reset password</em> in
-            People to help someone who is locked out.
-          </div>
-        )}
 
         <Suspense fallback={<p className="subtitle">Loading…</p>}>{children}</Suspense>
       </div>

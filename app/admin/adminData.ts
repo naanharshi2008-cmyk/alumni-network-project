@@ -160,6 +160,108 @@ export async function loadCounts(): Promise<Counts> {
   };
 }
 
+export type Waiting = { count: number; oldest: string | null; label: string | null };
+export type TodayData = {
+  waiting: { registrations: Waiting; edits: Waiting; photos: Waiting; options: Waiting };
+  health: PeopleFacets;
+  arrivals: { id: string; full_name: string; created_at: string }[];
+  newSinceLastVisit: number;
+};
+
+/**
+ * The opening view: what is waiting, how long it has waited, and what is
+ * quietly wrong.
+ *
+ * Deliberately not built on loadReview(), which does select('*') on two
+ * queues: a page whose job is to say where to start must not cost more than
+ * the place it sends you. Everything here is a head-only count or a single
+ * row.
+ */
+export async function loadToday(lastVisit: number | null): Promise<TodayData> {
+  const pendingBase = () => supabase.from('alumni').select('id', { head: true, count: 'exact' });
+
+  const [counts, health, oldestReg, oldestEdit, oldestPhoto, oldestOption, arrivals, since] =
+    await Promise.all([
+      loadCounts(),
+      loadPeopleFacets(),
+      supabase.from('alumni').select('id, full_name, created_at')
+        .eq('approval_status', 'pending').order('created_at').limit(1).maybeSingle(),
+      supabase.from('alumni').select('id, full_name, created_at')
+        .eq('approval_status', 'approved').eq('modification_status', 'pending')
+        .order('created_at').limit(1).maybeSingle(),
+      supabase.from('college_photos').select('id, created_at')
+        .eq('status', 'pending').order('created_at').limit(1).maybeSingle(),
+      supabase.from('field_options').select('id, value, created_at')
+        .eq('status', 'pending').order('created_at').limit(1).maybeSingle(),
+      supabase.from('alumni').select('id, full_name, created_at')
+        .eq('approval_status', 'approved').order('created_at', { ascending: false }).limit(5),
+      lastVisit
+        ? pendingBase().gt('created_at', new Date(lastVisit).toISOString())
+        : Promise.resolve({ count: 0 } as { count: number | null }),
+    ]);
+
+  const waitingOf = (n: number, row: any, label: string | null): Waiting => ({
+    count: n,
+    oldest: row?.data?.created_at ?? null,
+    label,
+  });
+
+  return {
+    waiting: {
+      registrations: waitingOf(counts.registrations, oldestReg, (oldestReg.data as any)?.full_name ?? null),
+      edits: waitingOf(counts.edits, oldestEdit, (oldestEdit.data as any)?.full_name ?? null),
+      photos: waitingOf(counts.photos, oldestPhoto, null),
+      options: waitingOf(counts.options, oldestOption, (oldestOption.data as any)?.value ?? null),
+    },
+    health,
+    arrivals: ((arrivals.data ?? []) as any[]).map((r) => ({
+      id: r.id, full_name: r.full_name, created_at: r.created_at,
+    })),
+    newSinceLastVisit: (since as any).count ?? 0,
+  };
+}
+
+export type PeopleNeed =
+  | 'all' | 'hidden' | 'no-login' | 'email-unconfirmed'
+  | 'starred' | 'stale' | 'never-confirmed' | 'no-college';
+
+export type PeopleFacets = Record<Exclude<PeopleNeed, 'all'>, number> & { all: number };
+
+const oneYearAgo = () => new Date(Date.now() - 365 * 86_400_000).toISOString();
+
+/**
+ * How many people are in each state worth attending to.
+ *
+ * One function so the opening view's health lines and the People chips can
+ * never disagree about the same number.
+ */
+export async function loadPeopleFacets(): Promise<PeopleFacets> {
+  const head = () => supabase.from('alumni').select('id', { head: true, count: 'exact' });
+  const decided = () => head().neq('approval_status', 'pending');
+
+  const [all, hidden, noLogin, unconfirmed, starred, stale, never, noCollege] = await Promise.all([
+    decided(),
+    head().eq('approval_status', 'rejected'),
+    decided().is('user_id', null),
+    head().eq('approval_status', 'approved').not('personal_email', 'is', null).is('email_verified_at', null),
+    head().eq('featured', true),
+    head().eq('approval_status', 'approved').lt('last_confirmed_at', oneYearAgo()),
+    head().eq('approval_status', 'approved').is('last_confirmed_at', null),
+    decided().is('college_id', null).not('college_name_raw', 'is', null),
+  ]);
+
+  return {
+    all: all.count ?? 0,
+    hidden: hidden.count ?? 0,
+    'no-login': noLogin.count ?? 0,
+    'email-unconfirmed': unconfirmed.count ?? 0,
+    starred: starred.count ?? 0,
+    stale: stale.count ?? 0,
+    'never-confirmed': never.count ?? 0,
+    'no-college': noCollege.count ?? 0,
+  };
+}
+
 export type ReviewData = {
   pending: AlumniRow[];
   pendingEdits: AlumniRow[];
@@ -249,13 +351,27 @@ export type PeopleData = { rows: AlumniRow[]; total: number; truncated: boolean;
  * matters - `or()` is comma-delimited, so a comma or a % in the box would
  * change what the filter means.
  */
-export async function loadPeople(query: string, page: number): Promise<PeopleData> {
+export async function loadPeople(query: string, page: number, need: PeopleNeed = 'all'): Promise<PeopleData> {
   const from = page * PAGE;
   let q = supabase.from('alumni')
     .select('*', { count: 'exact' })
-    .neq('approval_status', 'pending')
     .order('full_name')
     .range(from, from + PAGE - 1);
+
+  // Every one of these is a plain predicate on a column that already exists.
+  // 'hidden' replaces the base filter rather than adding to it, because a
+  // hidden profile IS one of the decided ones.
+  if (need === 'hidden') q = q.eq('approval_status', 'rejected');
+  else q = q.neq('approval_status', 'pending');
+
+  if (need === 'no-login') q = q.is('user_id', null);
+  if (need === 'email-unconfirmed') {
+    q = q.eq('approval_status', 'approved').not('personal_email', 'is', null).is('email_verified_at', null);
+  }
+  if (need === 'starred') q = q.eq('featured', true);
+  if (need === 'stale') q = q.eq('approval_status', 'approved').lt('last_confirmed_at', oneYearAgo());
+  if (need === 'never-confirmed') q = q.eq('approval_status', 'approved').is('last_confirmed_at', null);
+  if (need === 'no-college') q = q.is('college_id', null).not('college_name_raw', 'is', null);
 
   const term = query.replace(/[%_,().]/g, ' ').trim();
   if (term) {

@@ -2379,3 +2379,23 @@ a.xcollege__thumb:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--rin
 
 /* A line above the College grouping saying what it is for. */
 .lens-note--hint { margin-bottom: 14px; }
+
+/* ── Admin: what needs you today ─────────────────────────────────────────── */
+.today__h {
+  margin: 0 0 12px; font-size: 0.8rem; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--text-faint);
+}
+.today__age { font-size: 0.75rem; color: var(--text-faint); margin-top: 2px; }
+.today__tile--done { opacity: 0.55; }
+.today__recent, .today__health { margin-bottom: 26px; padding: 16px 18px; }
+.today__recent-head, .today__new { margin: 0 0 10px; font-size: 0.88rem; }
+.today__list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.today__list li { display: flex; gap: 10px; align-items: baseline; font-size: 0.9rem; flex-wrap: wrap; }
+.today__when { color: var(--text-faint); font-size: 0.8rem; margin-left: auto; }
+.today__health-row { margin: 0 0 8px; font-size: 0.9rem; }
+.today__health-row:last-child { margin-bottom: 0; }
+.today__health-row--warn {
+  padding: 10px 12px; border-radius: var(--r-sm);
+  background: color-mix(in srgb, var(--gold) 12%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--gold) 45%, transparent);
+}

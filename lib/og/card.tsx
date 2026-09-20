@@ -34,7 +34,11 @@ const GOLD = '#d4af37';
 async function inlinePhoto(url: string | null | undefined): Promise<string | null> {
   if (!url) return null;
   try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(2500) });
+    // Generous on purpose: this runs once an hour per profile at most, and a
+    // cold function fetching from storage took longer than a browser does -
+    // which is how the first production card came out with initials instead
+    // of a face.
+    const res = await fetch(url, { signal: AbortSignal.timeout(6000) });
     if (!res.ok) return null;
     const type = res.headers.get('content-type') ?? 'image/jpeg';
     if (!type.startsWith('image/')) return null;

@@ -8,6 +8,7 @@ import {
 } from '../adminData';
 import { buildQueue, KIND_LABELS, waitedFor, type ReviewItem, type ReviewKind } from '../reviewModel';
 import { splitStaged } from '../editFields';
+import { useSearchParams } from 'next/navigation';
 import { useAdminShell } from '../shell';
 import AddAlumnus from '../AddAlumnus';
 import ProfileReview from '../ProfileReview';
@@ -38,7 +39,16 @@ export default function ReviewPage() {
   const [actionNote, setActionNote] = useState('');
   const [busy, setBusy] = useState(false);
 
-  const [filter, setFilter] = useState<ReviewKind | 'all'>('all');
+  // Seeded from the URL, so a tile on the opening view can point at one kind
+  // and so a filtered queue is a link somebody can send. useSearchParams is
+  // safe here: the admin layout already wraps its children in a Suspense
+  // boundary.
+  const params = useSearchParams();
+  const KINDS: ReviewKind[] = ['registration', 'edit', 'photo', 'option', 'unmatched'];
+  const fromUrl = params.get('kind');
+  const [filter, setFilter] = useState<ReviewKind | 'all'>(
+    fromUrl && (KINDS as string[]).includes(fromUrl) ? (fromUrl as ReviewKind) : 'all',
+  );
   const [cursor, setCursor] = useState(0);
   const [skipped, setSkipped] = useState<Set<string>>(new Set());
   const [showKeys, setShowKeys] = useState(false);
