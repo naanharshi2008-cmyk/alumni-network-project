@@ -8,7 +8,7 @@ import {
   type AlumniRow, type PeopleFacets, type PeopleNeed,
 } from '../adminData';
 import { useAdminShell } from '../shell';
-import { AccountButton, ConfirmAction, EmptyCard, TabButton } from '../ui';
+import { AccountButton, ConfirmAction, EmptyCard, TabButton, TempPassword } from '../ui';
 
 /** The states worth asking for, in the order the office asks for them. */
 const NEEDS: { key: PeopleNeed; label: string }[] = [
@@ -51,11 +51,22 @@ export default function PeoplePage() {
   const [loading, setLoading] = useState(true);
   const [actionError, setActionError] = useState('');
   const [actionNote, setActionNote] = useState('');
+  // Who the next bulk action applies to. Ids rather than rows, so a row that
+  // reloads under a new object identity stays ticked.
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [busy, setBusy] = useState('');
+  // Passwords come back once and are never retrievable again, so they are
+  // held on screen until the office says it has copied them.
+  const [logins, setLogins] = useState<{ name: string; password?: string; error?: string }[] | null>(null);
 
   const load = useCallback(async (q: string, p: number, n: PeopleNeed) => {
     setLoading(true);
     const data = await loadPeople(q, p, n);
     setRows(data.rows);
+    // A tick means "this person", and the people on screen have just changed.
+    // Carrying ticks across a filter is how a bulk action hits someone the
+    // office cannot see.
+    setSelected(new Set());
     setTotal(data.total);
     setTruncated(data.truncated);
     if (data.error) setActionError('Could not load the alumni list: ' + data.error);
@@ -113,6 +124,103 @@ export default function PeoplePage() {
       : `${person.full_name} is no longer featured; the home page fills the place automatically.`);
   }
 
+  /**
+   * PostgREST answers a filtered UPDATE with the rows it actually changed, and
+   * a row that RLS hid is simply absent - no error, no warning. One at a time
+   * that silence is survivable; across twenty people it is how the office ends
+   * up believing something happened that did not. So every bulk write asks for
+   * the ids back and reports the difference.
+   */
+  async function bulkUpdate(
+    ids: string[],
+    patch: Record<string, unknown>,
+    apply: (p: AlumniRow) => AlumniRow,
+    describe: (n: number) => string,
+    label: string,
+  ) {
+    if (!ids.length) return;
+    setActionError(''); setActionNote(''); setBusy(label);
+    const { data, error } = await supabase.from('alumni').update(patch).in('id', ids).select('id');
+    setBusy('');
+    if (error) { setActionError('That did not go through: ' + error.message); return; }
+    const changed = new Set((data ?? []).map((r) => r.id as string));
+    setRows((prev) => prev.map((p) => (changed.has(p.id) ? apply(p) : p)));
+    setSelected(new Set());
+    const missed = ids.length - changed.size;
+    setActionNote(describe(changed.size) + (missed > 0
+      ? ` ${missed} did not change — reload the list and try those again.`
+      : ''));
+    void loadPeopleFacets().then(setFacets);
+    refreshCounts();
+  }
+
+  function bulkHide(status: 'approved' | 'rejected') {
+    const ids = rows.filter((p) => selected.has(p.id) && p.approval_status !== status).map((p) => p.id);
+    return bulkUpdate(
+      ids, { approval_status: status }, (p) => ({ ...p, approval_status: status }),
+      (n) => status === 'approved'
+        ? `${n} ${n === 1 ? 'profile is' : 'profiles are'} back in the public directory.`
+        : `${n} ${n === 1 ? 'profile is' : 'profiles are'} hidden from the public directory.`,
+      status === 'approved' ? 'restore' : 'hide',
+    );
+  }
+
+  function bulkFeature(next: boolean) {
+    // Featuring somebody who is hidden would put a name on the home page that
+    // the home page cannot show, so those are left out and said so.
+    const eligible = rows.filter((p) => selected.has(p.id) && p.featured !== next
+      && (!next || p.approval_status === 'approved'));
+    const skipped = next
+      ? rows.filter((p) => selected.has(p.id) && p.approval_status !== 'approved').length
+      : 0;
+    return bulkUpdate(
+      eligible.map((p) => p.id), { featured: next }, (p) => ({ ...p, featured: next }),
+      (n) => (next
+        ? `${n} ${n === 1 ? 'profile is' : 'profiles are'} featured on the home page.`
+        : `${n} ${n === 1 ? 'profile is' : 'profiles are'} no longer featured; the home page fills the places automatically.`)
+        + (skipped ? ` ${skipped} hidden ${skipped === 1 ? 'profile was' : 'profiles were'} left out.` : ''),
+      next ? 'feature' : 'unfeature',
+    );
+  }
+
+  /**
+   * Logins, one at a time on purpose.
+   *
+   * Each call returns a password that is shown once and never again, so these
+   * cannot be fired off in parallel and summarised as "12 succeeded" - every
+   * one of them has to come back and be read. A failure part-way through stops
+   * nothing: the ones already created are still listed.
+   */
+  async function bulkCreateLogins() {
+    const people = rows.filter((p) => selected.has(p.id) && !p.user_id);
+    if (!people.length) return;
+    setActionError(''); setActionNote(''); setBusy('logins'); setLogins([]);
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) { setBusy(''); setActionError('Your session expired, please sign in again.'); return; }
+
+    const out: { name: string; password?: string; error?: string }[] = [];
+    for (const person of people) {
+      try {
+        const res = await fetch('/api/admin/create-login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+          body: JSON.stringify({ alumniId: person.id }),
+        });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) out.push({ name: person.full_name, error: body.error ?? 'did not work' });
+        else out.push({ name: person.full_name, password: body.temporaryPassword });
+      } catch {
+        out.push({ name: person.full_name, error: 'could not reach the server' });
+      }
+      setLogins([...out]);
+    }
+    setBusy('');
+    // Read the list back rather than guessing at it: the passwords above are
+    // the record of what happened, and the rows should agree with the server.
+    await load(query, page, need);
+    void loadPeopleFacets().then(setFacets);
+  }
+
   async function handleDelete(person: AlumniRow) {
     setActionError(''); setActionNote('');
     const { data: { session } } = await supabase.auth.getSession();
@@ -134,6 +242,21 @@ export default function PeoplePage() {
   }
 
   const pages = Math.max(1, Math.ceil(total / PAGE));
+  const chosen = rows.filter((p) => selected.has(p.id));
+  const allOnPage = rows.length > 0 && chosen.length === rows.length;
+  const canRestore = chosen.some((p) => p.approval_status !== 'approved');
+  const canHide = chosen.some((p) => p.approval_status === 'approved');
+  const canFeature = chosen.some((p) => p.approval_status === 'approved' && !p.featured);
+  const canUnfeature = chosen.some((p) => p.featured);
+  const needLogins = chosen.filter((p) => !p.user_id).length;
+
+  function toggle(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
 
   return (
     <div className="stagger">
@@ -174,6 +297,76 @@ export default function PeoplePage() {
         <EmptyCard emoji={query ? '🔍' : '👥'} text={query ? `Nothing matches “${query}”.` : 'No approved or hidden profiles yet.'} />
       ) : (
         <>
+          {chosen.length > 0 && (
+            <div className="bulk-bar">
+              <label className="bulk-bar__all">
+                <input
+                  type="checkbox" checked={allOnPage}
+                  onChange={() => setSelected(allOnPage ? new Set() : new Set(rows.map((p) => p.id)))}
+                />
+                {chosen.length} selected
+              </label>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {canHide && (
+                  <button type="button" className="btn btn--ghost" disabled={!!busy} onClick={() => void bulkHide('rejected')}>
+                    <span className="btn__inner">{busy === 'hide' ? 'Hiding…' : 'Hide'}</span>
+                  </button>
+                )}
+                {canRestore && (
+                  <button type="button" className="btn btn--ghost" disabled={!!busy} onClick={() => void bulkHide('approved')}>
+                    <span className="btn__inner">{busy === 'restore' ? 'Restoring…' : 'Restore'}</span>
+                  </button>
+                )}
+                {canFeature && (
+                  <button type="button" className="btn btn--ghost" disabled={!!busy} onClick={() => void bulkFeature(true)}>
+                    <span className="btn__inner">{busy === 'feature' ? 'Featuring…' : '★ Feature'}</span>
+                  </button>
+                )}
+                {canUnfeature && (
+                  <button type="button" className="btn btn--ghost" disabled={!!busy} onClick={() => void bulkFeature(false)}>
+                    <span className="btn__inner">{busy === 'unfeature' ? 'Working…' : '☆ Unfeature'}</span>
+                  </button>
+                )}
+                {needLogins > 0 && (
+                  <button type="button" className="btn btn--ghost" disabled={!!busy} onClick={() => void bulkCreateLogins()}>
+                    <span className="btn__inner">
+                      {busy === 'logins' ? 'Creating…' : `Create ${needLogins} login${needLogins === 1 ? '' : 's'}`}
+                    </span>
+                  </button>
+                )}
+                <button type="button" className="btn btn--ghost" disabled={!!busy} onClick={() => setSelected(new Set())}>
+                  <span className="btn__inner">Clear</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Deleting is deliberately absent from the bar. It takes the
+              profile, the photo and the login, there is no undo, and a
+              mis-ticked box is far too cheap a way to lose twenty of them. */}
+          {logins && (
+            <div className="card" style={{ marginBottom: 16 }}>
+              <strong>Temporary passwords</strong>
+              <p className="subtitle" style={{ margin: '4px 0 12px', fontSize: '0.85rem' }}>
+                Shown once. Send each one privately; they sign in with the email
+                or phone on their profile and then choose their own password.
+              </p>
+              {logins.map((l) => (
+                <div key={l.name} style={{ marginBottom: 14 }}>
+                  <p style={{ margin: '0 0 6px' }}><strong>{l.name}</strong></p>
+                  {l.password
+                    ? <TempPassword password={l.password}>&nbsp;</TempPassword>
+                    : <p className="field__error field__error--static">Could not create a login — {l.error}.</p>}
+                </div>
+              ))}
+              {!busy && (
+                <button type="button" className="btn btn--ghost" onClick={() => setLogins(null)}>
+                  <span className="btn__inner">Done, I have copied them</span>
+                </button>
+              )}
+            </div>
+          )}
+
           <p className="result-count" style={{ marginBottom: 14 }}>
             {total === rows.length ? `${total} profiles` : `${rows.length} of ${total} profiles`}
             {truncated && ' — narrow the search to see the rest'}
@@ -181,6 +374,11 @@ export default function PeoplePage() {
 
           {rows.map((person) => (
             <div key={person.id} className="card" style={{ marginBottom: 14 }}>
+              <label className="card-select">
+                <input type="checkbox" checked={selected.has(person.id)} onChange={() => toggle(person.id)} />
+                <span className="sr-only">Select {person.full_name}</span>
+                <span aria-hidden>Select</span>
+              </label>
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
                 <div style={{ flex: '1 1 260px', minWidth: 0 }}>
                   <strong>{person.full_name}</strong>{' '}

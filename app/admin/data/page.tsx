@@ -1,12 +1,12 @@
 'use client';
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   loadDataArea, loadValueBench, type AliasRow, type CollegeInfoRow,
 } from '../adminData';
 import { useAdminShell } from '../shell';
 import ValueMergeTab, { type OptionRow } from '../ValueMerge';
-import { CollegeInfoCard, FindInstitute } from '../institutes';
+import { CollegeInfoCard, FindInstitute, collegeGaps } from '../institutes';
 import { EmptyCard, TabButton, TabIntro } from '../ui';
 
 /**
@@ -18,6 +18,20 @@ import { EmptyCard, TabButton, TabIntro } from '../ui';
  */
 
 type Bench = 'values' | 'institutes';
+
+/**
+ * Which colleges, in which order.
+ *
+ * The gaps are the work, so that is the list the bench opens on. The other
+ * two exist because "which college has the most alumni" and "where is
+ * Vellore in this list" are the two other questions actually asked of it.
+ */
+const INST_VIEWS = [
+  { key: 'needs', label: 'Needs something' },
+  { key: 'students', label: 'Most students' },
+  { key: 'name', label: 'A–Z' },
+] as const;
+type InstView = (typeof INST_VIEWS)[number]['key'];
 
 export default function DataPage() {
   const { refreshCounts } = useAdminShell();
@@ -31,6 +45,33 @@ export default function DataPage() {
   const [people, setPeople] = useState<{ id: string }[]>([]);
   const [collegesInfo, setCollegesInfo] = useState<CollegeInfoRow[]>([]);
   const [aliases, setAliases] = useState<Record<string, AliasRow[]>>({});
+  const [instView, setInstView] = useState<InstView>('needs');
+  const [instQuery, setInstQuery] = useState('');
+  // Bounded by the colleges our alumni actually attend, never the 47,000-row
+  // table, so this search stays in the browser.
+  const [openCollege, setOpenCollege] = useState<string | null>(null);
+
+  const shownColleges = useMemo(() => {
+    const q = instQuery.trim().toLowerCase();
+    let list = collegesInfo;
+    if (q) {
+      list = list.filter((c) =>
+        c.name.toLowerCase().includes(q)
+        || (c.district ?? '').toLowerCase().includes(q)
+        || (c.state ?? '').toLowerCase().includes(q));
+    }
+    if (instView === 'needs') {
+      // Still sorted by how much is missing, so the emptiest is first.
+      return list.filter((c) => collegeGaps(c).length)
+        .sort((a, b) => collegeGaps(b).length - collegeGaps(a).length || a.name.localeCompare(b.name));
+    }
+    if (instView === 'students') {
+      return [...list].sort((a, b) => b.students.length - a.students.length || a.name.localeCompare(b.name));
+    }
+    return [...list].sort((a, b) => a.name.localeCompare(b.name));
+  }, [collegesInfo, instQuery, instView]);
+
+  const needCount = useMemo(() => collegesInfo.filter((c) => collegeGaps(c).length).length, [collegesInfo]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -92,13 +133,46 @@ export default function DataPage() {
             Veveaham&rdquo; for each student.
           </TabIntro>
           <FindInstitute onError={setActionError} onNote={setActionNote} onMerged={() => void load()} />
+
+          {collegesInfo.length > 0 && (
+            <div className="inst-bar">
+              <div className="chips" style={{ margin: 0 }}>
+                {INST_VIEWS.map((v) => (
+                  <TabButton
+                    key={v.key}
+                    active={instView === v.key}
+                    onClick={() => { setInstView(v.key); setOpenCollege(null); }}
+                    label={v.label}
+                    count={v.key === 'needs' ? needCount : collegesInfo.length}
+                  />
+                ))}
+              </div>
+              <div className="search" style={{ margin: 0, flex: '1 1 200px' }}>
+                <input
+                  type="text" placeholder="Find a college…" value={instQuery}
+                  onChange={(e) => setInstQuery(e.target.value)}
+                  aria-label="Find a college"
+                />
+              </div>
+            </div>
+          )}
+
           {collegesInfo.length === 0 ? (
             <EmptyCard emoji="🖼" text="No matched colleges yet — link some in the Unmatched Colleges tab first." />
+          ) : shownColleges.length === 0 ? (
+            <EmptyCard
+              emoji={instQuery ? '🔍' : '✅'}
+              text={instQuery
+                ? `Nothing matches “${instQuery}”.`
+                : 'Every college has a banner, a logo and a description. Nothing to do here.'}
+            />
           ) : (
-            collegesInfo.map((c) => (
+            shownColleges.map((c) => (
               <CollegeInfoCard
                 key={c.id}
                 college={c}
+                open={openCollege === c.id}
+                onToggle={() => setOpenCollege((cur) => (cur === c.id ? null : c.id))}
                 initialAliases={aliases[c.id]}
                 onChanged={(patch) =>
                   setCollegesInfo((prev) => prev.map((x) => (x.id === c.id ? { ...x, ...patch } : x)))

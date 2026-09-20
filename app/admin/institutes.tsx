@@ -27,11 +27,19 @@ import { ConfirmAction } from './ui';
  * disturb the staged-edits flow.
  */
 export function CollegeInfoCard({
-  college, onChanged, onNoteSaved, onError, onNote, onMerged, initialAliases,
+  college, onChanged, onNoteSaved, onError, onNote, onMerged, initialAliases, open, onToggle,
 }: {
   college: CollegeInfoRow;
   /** Fetched with the college list, so each card does not query for its own. */
   initialAliases?: AliasRow[];
+  /**
+   * One card is open at a time. Closed cards render their header and nothing
+   * else: eighteen colleges meant eighteen textareas and thirty-six file
+   * inputs in the page at once, and a scroll long enough that finding the one
+   * missing a logo was the work rather than fixing it.
+   */
+  open: boolean;
+  onToggle: () => void;
   onChanged: (patch: Partial<CollegeInfoRow>) => void;
   onNoteSaved: (studentId: string, note: string | null) => void;
   onError: (msg: string) => void;
@@ -140,18 +148,33 @@ export function CollegeInfoCard({
     }
   }
 
+  const gaps = collegeGaps(college);
+
   return (
-    <div className="card" style={{ marginBottom: 18, padding: '18px 22px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'baseline' }}>
-        <div>
-          <h3 style={{ margin: 0, fontSize: '1.02rem' }}>{college.name.split(',')[0]}</h3>
-          <p className="subtitle" style={{ margin: 0, fontSize: '0.8rem' }}>
+    <div className={`card inst-card${open ? ' inst-card--open' : ''}`} style={{ marginBottom: 14, padding: '14px 18px' }}>
+      <h3 style={{ margin: 0, fontSize: '1.02rem' }}>
+        <button type="button" className="inst-card__head" aria-expanded={open} onClick={onToggle}>
+          <span className="inst-card__name">{college.name.split(',')[0]}</span>
+          <span className="subtitle inst-card__where">
             {[college.district, college.state].filter(Boolean).join(', ') || '—'}
             {' · '}{college.students.length} {college.students.length === 1 ? 'student' : 'students'}
-          </p>
-        </div>
-      </div>
+          </span>
+          {/* Three dots, in the order a college page shows them. Cheaper to
+              scan down a column of eighteen than any wording would be. */}
+          <span className="inst-dots" aria-hidden>
+            <i className={college.banner_url ? 'on' : ''} title="Banner" />
+            <i className={college.logo_url ? 'on' : ''} title="Logo" />
+            <i className={college.description?.trim() ? 'on' : ''} title="Description" />
+          </span>
+          <span className={`inst-card__gaps${gaps.length ? '' : ' inst-card__gaps--done'}`}>
+            {gaps.length ? `needs ${gaps.join(', ')}` : 'complete'}
+          </span>
+          <span className="inst-card__chev" aria-hidden>{open ? '▲' : '▼'}</span>
+        </button>
+      </h3>
 
+      {!open ? null : (
+      <>
       <InstituteNamesEditor
         kind="college"
         id={college.id}
@@ -238,8 +261,19 @@ export function CollegeInfoCard({
       {showStudents && college.students.map((st) => (
         <StudentNoteRow key={st.id} student={st} onSaved={onNoteSaved} onError={onError} onNote={onNote} />
       ))}
+      </>
+      )}
     </div>
   );
+}
+
+/** What this college is still missing, in the order a college page shows it. */
+export function collegeGaps(college: CollegeInfoRow): string[] {
+  const gaps: string[] = [];
+  if (!college.banner_url) gaps.push('banner');
+  if (!college.logo_url) gaps.push('logo');
+  if (!college.description?.trim()) gaps.push('description');
+  return gaps;
 }
 
 /** One student's "Note from Veveaham" — a direct admin write to alumni.school_note. */

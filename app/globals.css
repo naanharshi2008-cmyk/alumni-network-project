@@ -1214,6 +1214,50 @@ textarea { min-height: 84px; resize: vertical; }
   margin-bottom: 10px; font-size: 0.82rem; color: var(--text-faint); cursor: pointer;
 }
 
+/* ── The institutes bench ──────────────────────────────────────────────
+   Eighteen colleges used to render eighteen textareas and thirty-six file
+   inputs at once, in one scroll with no way to ask which of them still
+   needed a logo. One card opens at a time now, and the header answers that
+   question before it is opened. */
+.inst-bar {
+  position: sticky; top: calc(var(--nav-h) + 8px); z-index: 20;
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 10px 14px; margin-bottom: 14px;
+  border-radius: var(--r);
+  background: var(--surface-glass);
+  backdrop-filter: saturate(180%) blur(14px);
+  border: 1px solid var(--border-strong);
+}
+.inst-bar .search input { margin: 0; }
+
+.inst-card { transition: border-color 0.18s ease; }
+.inst-card--open { border-color: var(--border-strong); }
+.inst-card__head {
+  display: flex; align-items: center; gap: 10px 14px; flex-wrap: wrap;
+  width: 100%; padding: 0; border: 0; background: none;
+  font: inherit; color: inherit; text-align: left; cursor: pointer;
+}
+.inst-card__name { font-weight: 700; }
+.inst-card__where { font-size: 0.8rem; font-weight: 400; }
+.inst-card__gaps {
+  margin-left: auto; font-size: 0.76rem; font-weight: 600;
+  color: var(--text-muted);
+}
+.inst-card__gaps--done { color: var(--ok-ink); font-weight: 500; }
+.inst-card__chev { color: var(--text-faint); font-size: 0.7rem; }
+
+/* Banner, logo, description - in the order a college page shows them. */
+.inst-dots { display: inline-flex; gap: 5px; }
+.inst-dots i {
+  width: 8px; height: 8px; border-radius: 50%;
+  border: 1px solid var(--border-strong); background: transparent;
+}
+.inst-dots i.on { background: var(--gold); border-color: var(--gold); }
+
+@media (max-width: 560px) {
+  .inst-card__gaps { margin-left: 0; flex-basis: 100%; }
+}
+
 /* Freshness block on the alumnus's own profile page. Public surfaces keep
    these dates subtle; here they are the point, next to the one-tap confirm. */
 .fresh-block {
