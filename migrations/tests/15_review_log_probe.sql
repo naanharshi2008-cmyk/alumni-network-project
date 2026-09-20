@@ -11,6 +11,11 @@ DO $$
 DECLARE
   victim   uuid;
   other    uuid := '11111111-1111-1111-1111-111111111111';
+  -- review_events.actor_id references auth.users, so the staff account this
+  -- probe pretends to be has to be a real login. Any of them will do: what
+  -- makes it the school is the email in the JWT claims, which is what
+  -- is_school_admin() reads. The whole transaction rolls back either way.
+  staff    uuid;
   n        int;
   ev       bigint;
   staged   timestamptz;
@@ -19,6 +24,8 @@ DECLARE
 BEGIN
   SELECT id INTO victim FROM public.alumni ORDER BY created_at LIMIT 1;
   IF victim IS NULL THEN RAISE EXCEPTION 'No profiles to test with.'; END IF;
+  SELECT id INTO staff FROM auth.users ORDER BY created_at LIMIT 1;
+  IF staff IS NULL THEN RAISE EXCEPTION 'No logins to borrow an id from.'; END IF;
 
   -- ── A signed-in alumnus must not be able to write, read or forge ────────
   PERFORM set_config('request.jwt.claims',
@@ -53,7 +60,7 @@ BEGIN
   -- ── The school ──────────────────────────────────────────────────────────
   EXECUTE 'RESET ROLE';
   PERFORM set_config('request.jwt.claims',
-    '{"sub":"99999999-9999-9999-9999-999999999999","role":"authenticated","email":"staff@veveaham-admin.local"}', true);
+    format('{"sub":"%s","role":"authenticated","email":"staff@veveaham-admin.local"}', staff), true);
   EXECUTE 'SET LOCAL ROLE authenticated';
 
   ev := public.admin_log_event(
