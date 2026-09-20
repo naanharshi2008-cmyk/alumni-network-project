@@ -6,7 +6,7 @@ import EntitySearchField from '../../lib/EntitySearchField';
 import { linkFor, toPick, type InstitutePick } from '../../lib/institutes';
 import SchoolPicker from '../../lib/SchoolPicker';
 import { cleanFreeText, cleanProperNoun } from '../../lib/text';
-import { fetchApprovedOptions, proposeOption } from '../../lib/publicData';
+import { canonicalOption, fetchApprovedOptions, fetchOptionAliases, proposeOption } from '../../lib/publicData';
 import {
   STREAMS, DEGREES, ADMISSION_ROUTES, NOW_CHOICES, boardForSchool, publicRouteLabel,
   COUNTRY_CODES, OTHER_OPTION, isInProgressStatus, mergeOptions, resolveValue,
@@ -320,6 +320,10 @@ export default function RegisterPage() {
   const [workExperience, setWorkExperience] = useState<WorkExperienceEntry[]>([emptyWorkExperience()]);
 
   useEffect(() => { void fetchApprovedOptions().then(setTagOptions); }, []);
+  // Spellings the school has already merged away, so typing an old one under
+  // "Other" lands on the name everyone else's profile uses.
+  const [optionAliases, setOptionAliases] = useState<Record<string, Record<string, string>>>({});
+  useEffect(() => { void fetchOptionAliases().then(setOptionAliases); }, []);
 
   // Move focus to the new step's heading so the form is followable by keyboard
   // and screen reader, and the page doesn't stay scrolled halfway down. Then,
@@ -572,11 +576,12 @@ export default function RegisterPage() {
       const typedOrg = cleanProperNoun(form.currently_at);
       const organizationId = await linkFor('organization', typedOrg, form.org_pick);
 
-      const finalStream = resolveValue(form.stream, form.stream_other);
-      const finalDegree = resolveValue(form.degree, form.degree_other);
-      const finalField = resolveValue(form.field, form.field_other);
-      const finalRoute = resolveValue(form.admission_route, form.admission_route_other);
-      const finalStatus = statusFromForm(form);
+      const canon = (category: string, value: string) => canonicalOption(optionAliases, category, value);
+      const finalStream = canon('stream', resolveValue(form.stream, form.stream_other));
+      const finalDegree = canon('degree', resolveValue(form.degree, form.degree_other));
+      const finalField = canon('field', resolveValue(form.field, form.field_other));
+      const finalRoute = canon('admission_route', resolveValue(form.admission_route, form.admission_route_other));
+      const finalStatus = canon('current_status', statusFromForm(form));
       const usesBoardMarks = finalRoute === 'Board Marks';
 
       // 5. The profile row.
@@ -596,7 +601,7 @@ export default function RegisterPage() {
         linkedin_url: cleanFreeText(form.linkedin_url),
         college_id: collegeId,
         college_name_raw: typedCollege,
-        professional_course: resolveValue(form.professional_course, form.professional_course_other) || null,
+        professional_course: canon('professional_course', resolveValue(form.professional_course, form.professional_course_other)) || null,
         professional_stage: form.professional_course ? (form.professional_stage || null) : null,
         professional_org: form.professional_course ? (cleanProperNoun(form.professional_org) || null) : null,
         degree: finalDegree || null,

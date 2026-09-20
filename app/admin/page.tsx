@@ -9,6 +9,8 @@ import { toTitleCase, formatMonthYear } from '../../lib/text';
 import { officialSchoolName, BUILT_IN_OPTIONS, OPTION_CATEGORY_LABELS, OptionCategory } from '../../lib/options';
 import { CATEGORIES } from '../../lib/types';
 import Crest from '../../lib/Crest';
+import ValueMergeTab, { type OptionRow } from './ValueMerge';
+import AddAlumnus from './AddAlumnus';
 
 const ADMIN_LOGIN_DOMAIN = 'veveaham-admin.local';
 const LAST_VISIT_KEY = 'veveaham.admin.lastVisit';
@@ -55,6 +57,9 @@ type AlumniRow = {
   college_thoughts: string | null;
   featured?: boolean | null;
   email_verified_at?: string | null;
+  // False on a row the school entered itself: nobody has agreed to anything
+  // yet, and the profile is a stub until they sign in and fill it in.
+  consent_given?: boolean | null;
 };
 
 type HigherStudyRow = {
@@ -129,6 +134,9 @@ export default function AdminPage() {
   const [workExperienceMap, setWorkExperienceMap] = useState<Record<string, WorkExperienceRow[]>>({});
   const [pendingOptions, setPendingOptions] = useState<PendingOption[]>([]);
   const [approvedOptions, setApprovedOptions] = useState<Record<string, string[]>>({});
+  // Every field_options row, so the merge tool can show which old spellings
+  // are being mapped and let the school forget one.
+  const [optionRows, setOptionRows] = useState<OptionRow[]>([]);
   const [unmatchedColleges, setUnmatchedColleges] = useState<{ key: string; display: string; alumniIds: string[] }[]>([]);
   const [unmatchedCompanies, setUnmatchedCompanies] = useState<{ key: string; display: string; alumniIds: string[] }[]>([]);
   // The "Colleges" tab: every matched college that has alumni, with its banner
@@ -196,7 +204,7 @@ export default function AdminPage() {
       supabase.from('alumni').select('*').eq('approval_status', 'pending').order('created_at', { ascending: true }),
       supabase.from('alumni').select('*').eq('approval_status', 'approved').eq('modification_status', 'pending').order('created_at', { ascending: true }),
       supabase.from('alumni').select('*').neq('approval_status', 'pending').order('full_name'),
-      supabase.from('field_options').select('id, category, value, status, created_at').order('created_at', { ascending: true }),
+      supabase.from('field_options').select('id, category, value, status, canonical_value, created_at').order('created_at', { ascending: true }),
       supabase.from('alumni').select('id, college_name_raw').is('college_id', null).not('college_name_raw', 'is', null),
       supabase.from('alumni').select('id, currently_at').is('organization_id', null).not('currently_at', 'is', null),
     ]);
@@ -209,10 +217,12 @@ export default function AdminPage() {
     else setDecided((decidedRes.data as AlumniRow[]) ?? []);
 
     // Split the options table into the review queue and the live lists.
-    const opts = (optRes.data as (PendingOption & { status: string })[]) ?? [];
+    const opts = (optRes.data as (PendingOption & OptionRow)[]) ?? [];
     setPendingOptions(opts.filter((o) => o.status === 'pending'));
+    setOptionRows(opts);
     const approved: Record<string, string[]> = {};
-    for (const o of opts.filter((o) => o.status === 'approved')) {
+    // An alias is not a choice - it points at the name that is.
+    for (const o of opts.filter((o) => o.status === 'approved' && !o.canonical_value)) {
       (approved[o.category] ??= []).push(o.value);
     }
     setApprovedOptions(approved);
@@ -601,7 +611,7 @@ export default function AdminPage() {
         <TabButton active={tab === 'directory'} onClick={() => setTab('directory')}
           label="👥 All Alumni" count={decided.length} />
         <TabButton active={tab === 'options'} onClick={() => setTab('options')}
-          label="🏷 Pending Options" count={totalPendingOptions} />
+          label="🏷 Values & options" count={totalPendingOptions} />
         <TabButton active={tab === 'colleges'} onClick={() => setTab('colleges')}
           label="🏫 Unmatched Colleges" count={unmatchedColleges.length} />
         <TabButton active={tab === 'companies'} onClick={() => setTab('companies')}
@@ -626,6 +636,7 @@ export default function AdminPage() {
       {/* ===== New registrations ===== */}
       {tab === 'registrations' && (
         <div className="stagger">
+          <AddAlumnus onAdded={loadAll} setError={setActionError} />
           {pending.length === 0 ? (
             <EmptyCard emoji="🎉" text="No pending registrations right now." />
           ) : (
@@ -850,6 +861,7 @@ export default function AdminPage() {
 
       {/* ===== Pending options ===== */}
       {tab === 'options' && (
+        <>
         <PendingOptionsTab
           pendingOptions={pendingOptions}
           approvedOptions={approvedOptions}
@@ -859,6 +871,23 @@ export default function AdminPage() {
           }
           setError={setActionError}
         />
+
+        <TabIntro title="One name per thing">
+          The same exam or degree often arrives spelt three different ways, and the
+          directory then offers all three as if they were different things. Tick the
+          spellings that mean the same thing, type the name the public should see, and
+          everyone moves onto it — including edits still waiting for review. Each old
+          spelling is remembered, so the same typing next year maps itself.
+        </TabIntro>
+        <ValueMergeTab
+          people={[...pending, ...pendingEdits, ...decided]}
+          approvedOptions={approvedOptions}
+          optionRows={optionRows}
+          onDone={loadAll}
+          setError={setActionError}
+          setNote={setActionNote}
+        />
+        </>
       )}
 
       {/* ===== Unmatched colleges ===== */}
@@ -1265,9 +1294,12 @@ function PersonHeader({ person, isNew }: { person: AlumniRow; isNew?: boolean })
         <h3 style={{ margin: '0 0 4px 0', fontSize: '1.1rem' }}>
           {person.full_name}
           {isNew && <span className="badge badge--xs badge--ok" style={{ marginLeft: 8 }}>NEW</span>}
+          {person.consent_given === false && (
+            <span className="badge badge--xs" style={{ marginLeft: 8 }}>added by the school</span>
+          )}
         </h3>
         <p className="subtitle" style={{ margin: 0, fontSize: '0.86rem' }}>
-          Class of {person.class_of} · {person.stream}
+          Class of {person.class_of}{person.stream ? ` · ${person.stream}` : ''}
           {/* The one field the office can actually verify someone against. */}
           {person.admission_number && <> · Adm. no. <strong>{person.admission_number}</strong></>}
           {person.last_updated && <> · Updated {formatMonthYear(person.last_updated)}</>}
@@ -1659,7 +1691,7 @@ function PendingOptionRow({
       if (finalValue !== option.value) await rewriteProfiles(option.value, finalValue);
       const { data: approved, error } = await supabase
         .from('field_options')
-        .update({ value: finalValue, status: 'approved', canonical_value: finalValue })
+        .update({ value: finalValue, status: 'approved', canonical_value: null })
         .eq('id', option.id)
         .select('id');
       if (error) throw error;

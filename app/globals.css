@@ -2065,3 +2065,80 @@ textarea { min-height: 84px; resize: vertical; }
   .cpage__head { grid-template-columns: 1fr; }
   .cpage__banner { height: 150px; }
 }
+
+/* The college name on a directory card opens that college's page. */
+.xcollege__link { color: inherit; text-decoration: none; }
+.xcollege__link:hover { color: var(--gold); }
+a.xcollege__thumb { cursor: pointer; }
+a.xcollege__thumb:hover { filter: brightness(1.08); }
+a.xcollege__thumb:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--ring); }
+
+/* ── Admin: merging value spellings into one public name ─────────────────── */
+.vmerge { margin-bottom: 18px; }
+.vmerge__head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: 12px; margin-bottom: 12px;
+}
+.vmerge__head h3 { margin: 0; font-size: 1rem; }
+.vmerge__count { font-size: 0.78rem; color: var(--text-faint); }
+.vmerge__list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.vmerge__item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 12px; border-radius: 10px; cursor: pointer;
+  border: 1px solid transparent; background: rgba(255, 255, 255, 0.02);
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.vmerge__item:hover { background: rgba(255, 255, 255, 0.05); }
+.vmerge__item.is-picked { border-color: var(--gold); background: rgba(212, 175, 55, 0.08); }
+.vmerge__item input { width: 16px; height: 16px; flex: none; margin: 0; accent-color: var(--gold); }
+.vmerge__value { font-size: 0.92rem; overflow-wrap: anywhere; white-space: pre-wrap; }
+.vmerge__meta { margin-left: auto; font-size: 0.78rem; color: var(--text-faint); white-space: nowrap; }
+.vmerge__act { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); }
+.vmerge__label {
+  display: block; font-size: 0.78rem; letter-spacing: 0.04em;
+  text-transform: uppercase; color: var(--text-muted); margin-bottom: 6px;
+}
+.vmerge__buttons { display: flex; gap: 10px; flex-wrap: wrap; }
+.vmerge__aliases { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
+.vmerge__aliases-head { margin: 0 0 8px; font-size: 0.78rem; color: var(--text-muted); }
+.vmerge__aliases ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.vmerge__aliases li {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 0.85rem; color: var(--text-muted); flex-wrap: wrap;
+}
+.vmerge__alias { text-decoration: line-through; overflow-wrap: anywhere; white-space: pre-wrap; }
+.vmerge__canon { color: var(--text); overflow-wrap: anywhere; }
+.vmerge__aliases li .link-btn { margin-left: auto; }
+
+/* ── Admin: the school adding an alumnus itself ──────────────────────────── */
+.add-alum__open { margin-bottom: 18px; }
+.add-alum { margin-bottom: 20px; }
+.add-alum__head { margin: 0 0 6px; font-size: 1rem; }
+.add-alum__grid {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px; margin-bottom: 14px;
+}
+.add-alum__field--wide { grid-column: 1 / -1; }
+.add-alum__field > span {
+  display: block; font-size: 0.78rem; letter-spacing: 0.04em;
+  text-transform: uppercase; color: var(--text-muted); margin-bottom: 6px;
+}
+.add-alum__field input, .add-alum__field select { width: 100%; }
+.add-alum__phone { display: flex; gap: 8px; }
+.add-alum__phone select { width: auto; flex: none; }
+.add-alum__check {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 0.9rem; margin-bottom: 14px; cursor: pointer;
+}
+.add-alum__check input { width: 16px; height: 16px; margin: 0; accent-color: var(--gold); }
+.add-alum__buttons { display: flex; gap: 10px; flex-wrap: wrap; }
+@media (max-width: 560px) {
+  .add-alum__grid { grid-template-columns: 1fr; }
+}
+
+/* A profile the school started: the person's own say-so, asked once. */
+.seed-consent {
+  display: flex; align-items: flex-start; gap: 10px;
+  margin-top: 12px; font-size: 0.9rem; cursor: pointer;
+}
+.seed-consent input { width: 16px; height: 16px; margin: 3px 0 0; flex: none; accent-color: var(--gold); }

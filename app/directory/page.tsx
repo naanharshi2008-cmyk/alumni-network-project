@@ -777,18 +777,32 @@ function CollegeExplorerCard({
     ),
   );
   const seniors = showAll ? college.seniors : college.seniors.slice(0, SENIOR_PREVIEW);
+  // Groups keyed by id are a real college row, and have a page of their own -
+  // banner, photos from the seniors there, the lot. A group that only exists
+  // as text somebody typed has nothing to link to yet.
+  const pageHref = college.key.startsWith('id:') ? `/colleges/${college.key.slice(3)}` : null;
 
   return (
     <article className="xcollege">
       <div className="xcollege__top">
-        <span className="xcollege__thumb" aria-hidden>
-          {det?.banner_url
-            ? <img src={det.banner_url} alt="" loading="lazy" decoding="async" />
-            : <span className="xcollege__initials">{instituteInitials(name)}</span>}
-        </span>
+        {pageHref ? (
+          <Link href={pageHref} className="xcollege__thumb" aria-label={`About ${name}`}>
+            {det?.banner_url
+              ? <img src={det.banner_url} alt="" loading="lazy" decoding="async" />
+              : <span className="xcollege__initials">{instituteInitials(name)}</span>}
+          </Link>
+        ) : (
+          <span className="xcollege__thumb" aria-hidden>
+            {det?.banner_url
+              ? <img src={det.banner_url} alt="" loading="lazy" decoding="async" />
+              : <span className="xcollege__initials">{instituteInitials(name)}</span>}
+          </span>
+        )}
 
         <div className="xcollege__head">
-          <h3 className="xcollege__name" title={college.name}>{name}</h3>
+          <h3 className="xcollege__name" title={college.name}>
+            {pageHref ? <Link href={pageHref} className="xcollege__link">{name}</Link> : name}
+          </h3>
           {(place || det?.university_name) && (
             <p className="xcollege__place">
               {place}
@@ -808,7 +822,11 @@ function CollegeExplorerCard({
           </div>
         </div>
 
-        {website && (
+        {pageHref ? (
+          <Link href={pageHref} className="btn btn--ghost xcollege__site">
+            <span className="btn__inner">Open college →</span>
+          </Link>
+        ) : website ? (
           <a
             href={website.startsWith('http') ? website : `https://${website}`}
             target="_blank"
@@ -817,7 +835,7 @@ function CollegeExplorerCard({
           >
             <span className="btn__inner">Website ↗</span>
           </a>
-        )}
+        ) : null}
       </div>
 
       {det?.description && <p className="college-desc">{det.description}</p>}

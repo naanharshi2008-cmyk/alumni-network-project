@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
-import { randomUUID } from 'crypto';
 import { getAdminClient, requireAdmin, safeErrorMessage } from '../../../../lib/supabaseAdmin';
-import { temporaryPassword } from '../../../../lib/throttle';
+import { issueLogin } from '../../../../lib/issueLogin';
 
 export const runtime = 'nodejs';
 
@@ -33,21 +32,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Add an email or phone number to this profile first — that is what they will sign in with.' }, { status: 409 });
   }
 
-  const password = temporaryPassword();
-  const { data: created, error: createErr } = await admin.auth.admin.createUser({
-    email: `${randomUUID()}@veveaham-alumni-network.com`,
-    password,
-    email_confirm: true,
-    app_metadata: { must_change_password: true },
-  });
-  if (createErr || !created?.user) {
-    return NextResponse.json({ error: `Could not create the login: ${safeErrorMessage(createErr)}` }, { status: 500 });
-  }
+  const issued = await issueLogin(admin, alumniId);
+  if (!issued.ok) return NextResponse.json({ error: issued.error }, { status: issued.status });
 
-  const { error: linkErr } = await admin.from('alumni').update({ user_id: created.user.id }).eq('id', alumniId);
-  if (linkErr) {
-    await admin.auth.admin.deleteUser(created.user.id).catch(() => undefined);
-    return NextResponse.json({ error: `Could not link the login: ${safeErrorMessage(linkErr)}` }, { status: 500 });
-  }
-  return NextResponse.json({ name: row.full_name, temporaryPassword: password });
+  return NextResponse.json({ name: row.full_name, temporaryPassword: issued.temporaryPassword });
 }

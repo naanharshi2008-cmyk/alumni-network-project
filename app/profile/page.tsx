@@ -8,7 +8,9 @@ import EntitySearchField from '../../lib/EntitySearchField';
 import { linkFor, toPick, type InstitutePick } from '../../lib/institutes';
 import SchoolPicker from '../../lib/SchoolPicker';
 import { cleanFreeText, cleanProperNoun , formatFullDate } from '../../lib/text';
-import { fetchApprovedOptions, fetchOrganizationNames, proposeOption } from '../../lib/publicData';
+import {
+  canonicalOption, fetchApprovedOptions, fetchOptionAliases, fetchOrganizationNames, proposeOption,
+} from '../../lib/publicData';
 import {
   STREAMS, DEGREES, ADMISSION_ROUTES, STATUSES, boardForSchool,
   COUNTRY_CODES, OTHER_OPTION, LEGACY_STREAM_MAP, officialSchoolName,
@@ -53,6 +55,7 @@ interface AlumnusData {
   last_updated: string | null;
   last_confirmed_at: string | null;
   email_verified_at: string | null;
+  seeded_by_school: boolean;
   college_thoughts: string;
 }
 
@@ -113,6 +116,8 @@ function normalizeProfile(raw: any): AlumnusData {
     last_updated: raw.last_updated ?? null,
     last_confirmed_at: raw.last_confirmed_at ?? null,
     email_verified_at: raw.email_verified_at ?? null,
+    // False only on a row the school entered before the person ever signed in.
+    seeded_by_school: raw.consent_given === false,
     college_thoughts: str(raw.college_thoughts),
   };
 }
@@ -122,6 +127,9 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  // Someone the school entered never saw the registration form, so they have
+  // never agreed to appear. They say so here, once, before their first save.
+  const [seedConsent, setSeedConsent] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [notice, setNotice] = useState<{ welcome: boolean; unsaved: string[]; passwordUpdated: boolean }>({
@@ -151,6 +159,7 @@ export default function ProfilePage() {
   const [workExperience, setWorkExperience] = useState<WorkExperienceEntry[]>([]);
   const [orgOptions, setOrgOptions] = useState<string[]>([]);
   const [tagOptions, setTagOptions] = useState<Record<string, string[]>>({});
+  const [optionAliases, setOptionAliases] = useState<Record<string, Record<string, string>>>({});
 
   // Free-typed "Other" values, kept beside the dropdown selection. The old
   // editor had no such box: choosing "Other" stored the literal word "Other"
@@ -229,9 +238,12 @@ export default function ProfilePage() {
         })));
       }
 
-      const [orgs, opts] = await Promise.all([fetchOrganizationNames(), fetchApprovedOptions()]);
+      const [orgs, opts, aliases] = await Promise.all([
+        fetchOrganizationNames(), fetchApprovedOptions(), fetchOptionAliases(),
+      ]);
       setOrgOptions(orgs);
       setTagOptions(opts);
+      setOptionAliases(aliases);
     } catch (e) {
       console.error(e);
       setError('Could not load your profile details.');
@@ -268,15 +280,20 @@ export default function ProfilePage() {
 
     try {
       // Resolve every "Other" selection back to the value we actually store.
-      const finalStream = resolveValue(profile.stream, others.stream);
-      const finalDegree = resolveValue(profile.degree, others.degree);
-      const finalProfessional = resolveValue(profile.professional_course, others.professional_course);
-      const finalRoute = resolveValue(profile.admission_route, others.admission_route);
-      const finalStatus = resolveValue(profile.current_status, others.current_status);
-      const finalField = resolveValue(profile.field, others.field);
+      // Typing an old spelling under "Other" lands on the name the school kept.
+      const canon = (category: string, value: string) => canonicalOption(optionAliases, category, value);
+      const finalStream = canon('stream', resolveValue(profile.stream, others.stream));
+      const finalDegree = canon('degree', resolveValue(profile.degree, others.degree));
+      const finalProfessional = canon('professional_course', resolveValue(profile.professional_course, others.professional_course));
+      const finalRoute = canon('admission_route', resolveValue(profile.admission_route, others.admission_route));
+      const finalStatus = canon('current_status', resolveValue(profile.current_status, others.current_status));
+      const finalField = canon('field', resolveValue(profile.field, others.field));
 
       if (!profile.full_name.trim()) throw new Error('Please keep your full name filled in.');
       if (!profile.personal_email.trim()) throw new Error('Please keep an email address on file.');
+      if (profile.seeded_by_school && !seedConsent) {
+        throw new Error('Please tick the box to say you are happy to appear in the directory.');
+      }
       const phoneIssue = phoneProblem(profile.phone_country_code, profile.phone_number);
       if (phoneIssue) throw new Error(phoneIssue);
       // Status is no longer required to save. Registration now derives it from
@@ -341,6 +358,7 @@ export default function ProfilePage() {
         college_thoughts: cleanFreeText(profile.college_thoughts),
         photo_url: photoUrl,
         show_photo: !!photoUrl,
+        ...(profile.seeded_by_school ? { consent_given: true } : {}),
       };
 
       const studiesPayload = higherStudies.filter((s) => s.degree_name.trim()).map((s) => ({
@@ -508,6 +526,24 @@ export default function ProfilePage() {
         </div>
 
         <StatusBanner approval={profile.approval_status} pendingReview={pendingReview} />
+
+        {profile.seeded_by_school && profile.approval_status !== 'approved' && (
+          <div className="welcome-card">
+            <h2 className="welcome-card__title">The school started this for you</h2>
+            <p>
+              Your name and batch came from the school office — everything else is yours to write.
+              Add your college, how you got in, and what you would tell someone in Class 12 now, then
+              save. The school publishes it once you have.
+            </p>
+            <label className="seed-consent">
+              <input type="checkbox" checked={seedConsent} onChange={(e) => setSeedConsent(e.target.checked)} />
+              <span>
+                I&apos;m happy for this profile to appear in the alumni directory once the school
+                approves it. My phone number and email stay private.
+              </span>
+            </label>
+          </div>
+        )}
 
         {notice.welcome && (
           <div className="welcome-card">

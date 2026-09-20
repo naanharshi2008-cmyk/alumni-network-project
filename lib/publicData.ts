@@ -74,12 +74,52 @@ export async function fetchApprovedOptions(): Promise<Record<string, string[]>> 
   const { data } = await supabase
     .from('field_options')
     .select('category, value')
-    .eq('status', 'approved');
+    .eq('status', 'approved')
+    // An old spelling the school has merged away is still readable - the forms
+    // use it to map what someone types - but it is not an option any more.
+    .is('canonical_value', null);
   const grouped: Record<string, string[]> = {};
   for (const row of (data as { category: string; value: string }[]) ?? []) {
     (grouped[row.category] ??= []).push(row.value);
   }
   return grouped;
+}
+
+/**
+ * Old spellings, and the display name each one now means.
+ *
+ * Keyed by category, then by the spelling in lower case with its spacing
+ * collapsed, so "IISER  Aptitude test" finds "IAT (IISER Aptitude Test)".
+ * This is what stops a list splitting again the moment someone types the old
+ * name under "Other".
+ */
+export async function fetchOptionAliases(): Promise<Record<string, Record<string, string>>> {
+  if (!isSupabaseConfigured) return {};
+  const { data } = await supabase
+    .from('field_options')
+    .select('category, value, canonical_value')
+    .not('canonical_value', 'is', null);
+  const map: Record<string, Record<string, string>> = {};
+  for (const row of (data as { category: string; value: string; canonical_value: string }[]) ?? []) {
+    (map[row.category] ??= {})[normaliseOptionValue(row.value)] = row.canonical_value;
+  }
+  return map;
+}
+
+/** The form of a value we compare on: trimmed, single-spaced, lower case. */
+export function normaliseOptionValue(value: string | null | undefined): string {
+  return (value ?? '').replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
+/** The display name for what someone typed, if the school has merged it away. */
+export function canonicalOption(
+  aliases: Record<string, Record<string, string>>,
+  category: string,
+  value: string | null | undefined,
+): string {
+  const clean = (value ?? '').replace(/\s+/g, ' ').trim();
+  if (!clean) return clean;
+  return aliases[category]?.[normaliseOptionValue(clean)] ?? clean;
 }
 
 /** Organisation names for the "Currently at" suggestions. */
