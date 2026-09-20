@@ -340,11 +340,11 @@ export default function RegisterPage() {
     return () => clearTimeout(settle);
   }, [step]);
 
-  const streamOptions = useMemo(() => mergeOptions(STREAMS, tagOptions.stream), [tagOptions]);
-  const degreeOptions = useMemo(() => mergeOptions(DEGREES, tagOptions.degree), [tagOptions]);
-  const professionalOptions = useMemo(() => mergeOptions(PROFESSIONAL_COURSES, tagOptions.professional_course), [tagOptions]);
-  const routeOptions = useMemo(() => mergeOptions(ADMISSION_ROUTES, tagOptions.admission_route), [tagOptions]);
-  const fieldOptions = useMemo(() => mergeOptions([...CATEGORIES.map((c) => c.label)], tagOptions.field), [tagOptions]);
+  const streamOptions = useMemo(() => mergeOptions(STREAMS, tagOptions.stream, optionAliases.stream), [tagOptions, optionAliases]);
+  const degreeOptions = useMemo(() => mergeOptions(DEGREES, tagOptions.degree, optionAliases.degree), [tagOptions, optionAliases]);
+  const professionalOptions = useMemo(() => mergeOptions(PROFESSIONAL_COURSES, tagOptions.professional_course, optionAliases.professional_course), [tagOptions, optionAliases]);
+  const routeOptions = useMemo(() => mergeOptions(ADMISSION_ROUTES, tagOptions.admission_route, optionAliases.admission_route), [tagOptions, optionAliases]);
+  const fieldOptions = useMemo(() => mergeOptions([...CATEGORIES.map((c) => c.label)], tagOptions.field, optionAliases.field), [tagOptions, optionAliases]);
 
   function update<K extends FieldKey>(key: K, value: FormState[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));

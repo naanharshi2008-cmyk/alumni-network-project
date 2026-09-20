@@ -259,14 +259,14 @@ export default function ProfilePage() {
     setOthers((prev) => ({ ...prev, [key]: value }));
   }
 
-  const streamOptions = useMemo(() => mergeOptions(STREAMS, tagOptions.stream), [tagOptions]);
-  const degreeOptions = useMemo(() => mergeOptions(DEGREES, tagOptions.degree), [tagOptions]);
-  const professionalOptions = useMemo(() => mergeOptions(PROFESSIONAL_COURSES, tagOptions.professional_course), [tagOptions]);
-  const routeOptions = useMemo(() => mergeOptions(ADMISSION_ROUTES, tagOptions.admission_route), [tagOptions]);
-  const statusOptions = useMemo(() => mergeOptions(STATUSES, tagOptions.current_status), [tagOptions]);
+  const streamOptions = useMemo(() => mergeOptions(STREAMS, tagOptions.stream, optionAliases.stream), [tagOptions, optionAliases]);
+  const degreeOptions = useMemo(() => mergeOptions(DEGREES, tagOptions.degree, optionAliases.degree), [tagOptions, optionAliases]);
+  const professionalOptions = useMemo(() => mergeOptions(PROFESSIONAL_COURSES, tagOptions.professional_course, optionAliases.professional_course), [tagOptions, optionAliases]);
+  const routeOptions = useMemo(() => mergeOptions(ADMISSION_ROUTES, tagOptions.admission_route, optionAliases.admission_route), [tagOptions, optionAliases]);
+  const statusOptions = useMemo(() => mergeOptions(STATUSES, tagOptions.current_status, optionAliases.current_status), [tagOptions, optionAliases]);
   const fieldOptions = useMemo(
-    () => mergeOptions([...CATEGORIES.map((c) => c.label)], tagOptions.field),
-    [tagOptions],
+    () => mergeOptions([...CATEGORIES.map((c) => c.label)], tagOptions.field, optionAliases.field),
+    [tagOptions, optionAliases],
   );
 
   const isApproved = profile?.approval_status === 'approved';

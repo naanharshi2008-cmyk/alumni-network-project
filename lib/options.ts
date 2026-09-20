@@ -237,17 +237,32 @@ export const OPTION_CATEGORY_LABELS: Record<OptionCategory, string> = {
   professional_course: 'Professional course',
 };
 
+/** The form of a value we compare on: trimmed, single-spaced, lower case. */
+export function normaliseOptionValue(value: string | null | undefined): string {
+  return (value ?? '').replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
 /**
  * Merge admin-approved options into a built-in list, keeping "Other" last and
- * never introducing a case-insensitive duplicate.
+ * never introducing a case-insensitive duplicate. Values the school has merged
+ * away are dropped, whether they were built in or approved.
  */
-export function mergeOptions(base: string[], approved?: string[]): string[] {
-  if (!approved || approved.length === 0) return base;
-  const core = base.filter((o) => o !== OTHER_OPTION);
+export function mergeOptions(
+  base: string[],
+  approved?: string[],
+  aliases?: Record<string, string>,
+): string[] {
+  const merged = aliases && Object.keys(aliases).length > 0
+    ? (v: string) => Object.prototype.hasOwnProperty.call(aliases, normaliseOptionValue(v))
+    : () => false;
+  if ((!approved || approved.length === 0) && !aliases) return base;
+  // A built-in the school has merged away must stop being offered, or the list
+  // keeps showing a name that now silently saves as something else.
+  const core = base.filter((o) => o !== OTHER_OPTION && !merged(o));
   const seen = new Set(core.map((o) => o.toLowerCase()));
-  for (const extra of approved) {
+  for (const extra of approved ?? []) {
     const value = extra?.trim();
-    if (!value || seen.has(value.toLowerCase())) continue;
+    if (!value || seen.has(value.toLowerCase()) || merged(value)) continue;
     seen.add(value.toLowerCase());
     core.push(value);
   }

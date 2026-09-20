@@ -8,6 +8,7 @@
 
 import { supabase, isSupabaseConfigured } from './supabaseClient';
 import type { Alumnus, HigherStudy, WorkExperience } from './types';
+import { normaliseOptionValue } from './options';
 
 /**
  * Columns pulled for the directory and home galleries. Listed explicitly rather than
@@ -106,10 +107,7 @@ export async function fetchOptionAliases(): Promise<Record<string, Record<string
   return map;
 }
 
-/** The form of a value we compare on: trimmed, single-spaced, lower case. */
-export function normaliseOptionValue(value: string | null | undefined): string {
-  return (value ?? '').replace(/\s+/g, ' ').trim().toLowerCase();
-}
+export { normaliseOptionValue };
 
 /** The display name for what someone typed, if the school has merged it away. */
 export function canonicalOption(
