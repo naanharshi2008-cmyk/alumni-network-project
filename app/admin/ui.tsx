@@ -12,6 +12,7 @@
 import React, { useState } from 'react';
 import { formatMonthYear } from '../../lib/text';
 import { officialSchoolName } from '../../lib/options';
+import { categoryForDegree } from '../../lib/types';
 import { supabase } from '../../lib/supabaseClient';
 import type { AlumniRow, HigherStudyRow, WorkExperienceRow } from './adminData';
 import { FIELD_LABELS } from './adminData';
@@ -171,6 +172,14 @@ export function PersonHeader({ person, isNew }: { person: AlumniRow; isNew?: boo
   );
 }
 
+/** "corrected from Engineering", when the stored area is not the one the degree implies. */
+function fieldCorrection(person: AlumniRow): string | null {
+  const guess = categoryForDegree(person.degree, person.branch, person.professional_course);
+  const stored = (person.field ?? '').trim();
+  if (!guess || !stored || guess.label === stored) return null;
+  return `corrected from ${guess.label}`;
+}
+
 export function PersonDetails({ person, higherStudies, workExperience }: {
   person: AlumniRow;
   higherStudies?: HigherStudyRow[];
@@ -182,7 +191,13 @@ export function PersonDetails({ person, higherStudies, workExperience }: {
         <span><strong>College:</strong>&nbsp;{person.college_name_raw || '—'}{!person.college_id && person.college_name_raw && <span className="badge badge--xs" style={{ marginLeft: 6 }}>unmatched</span>}</span>
         <span><strong>Degree:</strong>&nbsp;{person.degree || '—'}</span>
         <span><strong>Branch:</strong>&nbsp;{person.branch || '—'}</span>
-        <span><strong>Field:</strong>&nbsp;{person.field || '—'}</span>
+        <span>
+          <strong>Field:</strong>&nbsp;{person.field || '—'}
+          {/* Worked out from the degree at registration, so saying when it
+              was overruled is the only way to tell a considered answer from
+              the default. */}
+          {fieldCorrection(person) && <span className="hint">{fieldCorrection(person)}</span>}
+        </span>
       </div>
       {person.professional_course && (
         <p className="a-row" style={{ margin: '4px 0' }}>

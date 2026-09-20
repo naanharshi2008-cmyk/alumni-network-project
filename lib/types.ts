@@ -88,6 +88,66 @@ export function categorize(field: string | null | undefined): Category {
   return CATEGORY_BY_KEY.other;
 }
 
+/**
+ * Degree to area, spelled out.
+ *
+ * categorize() matches its aliases on whole words, which is right for free
+ * text and wrong for degree codes: in "btech" the alias "tech" is preceded by
+ * a letter, so it never matches, and the same is true of "bpharm", "bsc" and
+ * about nineteen of the thirty degrees the form offers. Running categorize()
+ * on a degree would file every engineer under Other - the largest cohort at a
+ * Tamil Nadu school - so the mapping is written out instead, and categorize()
+ * stays what it is: a rescue for text somebody typed.
+ */
+const DEGREE_CATEGORY: Record<string, CategoryKey> = {
+  be: 'engineering', btech: 'engineering', bengineering: 'engineering',
+  barch: 'architecture', bdes: 'design',
+  mbbs: 'medicine', bds: 'medicine', bams: 'medicine', bhms: 'medicine',
+  bsms: 'medicine', bnys: 'medicine',
+  bpharm: 'pharmacy', pharmd: 'pharmacy',
+  bscnursing: 'nursing', bpt: 'nursing',
+  bvsc: 'agriculture', bscagriculture: 'agriculture',
+  bsc: 'sciences', integratedmsc: 'sciences', msc: 'sciences',
+  bca: 'computer_applications',
+  bcom: 'commerce',
+  bba: 'management', bhm: 'management',
+  ba: 'humanities', bsw: 'humanities',
+  bed: 'education',
+  llb: 'law', balb: 'law', bballb: 'law',
+  // BVoc and Diploma say nothing about the area, so they are deliberately absent.
+};
+
+const normDegree = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+/**
+ * The area a degree implies, or null when we genuinely cannot tell.
+ *
+ * The null is the point: it is what makes the registration form ask instead of
+ * guessing, rather than quietly filing someone under "Other".
+ */
+export function categoryForDegree(
+  degree?: string | null,
+  branch?: string | null,
+  professionalCourse?: string | null,
+): Category | null {
+  if ((professionalCourse ?? '').trim()) return CATEGORY_BY_KEY.commerce;
+
+  const hit = DEGREE_CATEGORY[normDegree(degree ?? '')];
+  if (hit) return CATEGORY_BY_KEY[hit];
+
+  // "Computer Science", "Mechanical" - a branch is free text, which is what
+  // categorize is for.
+  const fromBranch = branch?.trim() ? categorize(branch) : null;
+  if (fromBranch && fromBranch.key !== 'other') return fromBranch;
+
+  // A degree an admin approved later will not be in the table above, but may
+  // still be recognisable as text.
+  const fromDegree = degree?.trim() ? categorize(degree) : null;
+  if (fromDegree && fromDegree.key !== 'other') return fromDegree;
+
+  return null;
+}
+
 // The one school this alumni network belongs to.
 /**
  * The group, as it should be written wherever the school names itself -

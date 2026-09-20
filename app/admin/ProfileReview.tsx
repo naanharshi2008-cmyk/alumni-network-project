@@ -3,6 +3,7 @@
 import React from 'react';
 import { formatMonthYear } from '../../lib/text';
 import { officialSchoolName } from '../../lib/options';
+import { categoryForDegree } from '../../lib/types';
 import type { AlumniRow, HigherStudyRow, WorkExperienceRow } from './adminData';
 import { FIELD_LABELS } from './adminData';
 import { splitStaged } from './editFields';
@@ -38,10 +39,10 @@ function show(value: unknown): string {
 
 /** One field: what is live, and underneath it what they want instead. */
 function Field({
-  label, live, staged, has, wide, photo,
+  label, live, staged, has, wide, photo, note,
 }: {
   label: string; live: unknown; staged?: Record<string, any> | null;
-  has: string; wide?: boolean; photo?: boolean;
+  has: string; wide?: boolean; photo?: boolean; note?: string | null;
 }) {
   const proposed = staged && has in staged ? staged[has] : undefined;
   const changed = proposed !== undefined && proposed !== live && !(!proposed && !live);
@@ -70,10 +71,23 @@ function Field({
               <span aria-hidden>→ </span>{show(proposed)}
             </span>
           )}
+          {note && <span className="pr-field__new">{note}</span>}
         </>
       )}
     </div>
   );
+}
+
+/**
+ * "corrected from Engineering" - or nothing, when the stored area is simply
+ * what the degree implies. Also silent when the degree tells us nothing, so
+ * a hand-typed area on a Diploma is not reported as a correction.
+ */
+function correctedFrom(person: { degree?: string | null; branch?: string | null; professional_course?: string | null; field?: string | null }): string | null {
+  const guess = categoryForDegree(person.degree, person.branch, person.professional_course);
+  const stored = (person.field ?? '').trim();
+  if (!guess || !stored || guess.label === stored) return null;
+  return `corrected from ${guess.label}`;
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -145,7 +159,11 @@ export default function ProfileReview({ person, studies, work, staged }: Props) 
         <Field label="College" live={person.college_name_raw} staged={staged} has="college_name_raw" />
         <Field label="Degree" live={person.degree} staged={staged} has="degree" />
         <Field label="Branch" live={person.branch} staged={staged} has="branch" />
-        <Field label="Field" live={person.field} staged={staged} has="field" />
+        {/* The area of study is worked out from the degree unless somebody
+            disagreed with it, so recomputing the guess here tells you which
+            one this is. No column and no migration: the answer is already in
+            the row. */}
+        <Field label="Field" live={person.field} staged={staged} has="field" note={correctedFrom(person)} />
         <Field label="Admission route" live={person.admission_route} staged={staged} has="admission_route" />
         <Field label="Rank" live={person.admission_rank} staged={staged} has="admission_rank" />
         <Field label="Board marks" live={person.board_marks} staged={staged} has="board_marks" />

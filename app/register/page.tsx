@@ -8,12 +8,12 @@ import SchoolPicker from '../../lib/SchoolPicker';
 import { cleanFreeText, cleanProperNoun } from '../../lib/text';
 import { canonicalOption, fetchApprovedOptions, fetchOptionAliases, proposeOption } from '../../lib/publicData';
 import {
-  STREAMS, DEGREES, ADMISSION_ROUTES, NOW_CHOICES, asksForRank, boardForSchool, publicRouteLabel,
+  STREAMS, DEGREES, ADMISSION_ROUTES, asksForRank, boardForSchool, publicRouteLabel,
   COUNTRY_CODES, OTHER_OPTION, isInProgressStatus, mergeOptions, resolveValue,
-  statusForCourse, statusForNowChoice, PROFESSIONAL_COURSES, PROFESSIONAL_STAGES,
+  statusForCourse, PROFESSIONAL_COURSES, PROFESSIONAL_STAGES,
 } from '../../lib/options';
 import { phoneProblem } from '../../lib/contactKeys';
-import { CATEGORIES } from '../../lib/types';
+import { CATEGORIES, categoryForDegree } from '../../lib/types';
 
 /* ─────────────────────────────────────────────────────────────────────────
    Form model
@@ -27,7 +27,6 @@ interface FormState {
   stream_other: string;
   field: string;
   field_other: string;
-  joined_college: 'yes' | 'no' | 'not_yet';
   college_name: string;
   // The suggestion picked for each institute field, kept (and saved in the
   // draft) so submit links that exact row instead of re-matching the text.
@@ -45,12 +44,14 @@ interface FormState {
   admission_rank: string;
   board_marks: string;
   board_cutoff: string;
-  /* "Are you still doing this?" - yes means the course above is current, and
-     current_status is derived from it rather than asked as a dropdown. */
+  /* "Are you still studying this?" - the one question about now. Yes means
+     the course above is current; no opens the optional blocks below, and the
+     status is read from what they fill in there rather than asked again. */
   still_studying: string;
-  now_choice: string;
-  current_status: string;
-  current_status_other: string;
+  /* Whether `currently_at` is an employer or their own business. Two chips,
+     not a status question: the answer only changes a label and which of two
+     values STATUSES already has the profile ends up carrying. */
+  own_business: string;
   expected_finish_year: string;
   currently_at: string;
   designation: string;
@@ -73,10 +74,10 @@ const initialForm: FormState = {
   password_val: '',
   full_name: '', school_name: '',
   class_of: '', stream: '', stream_other: '',
-  field: '', field_other: '', joined_college: 'yes', college_name: '', college_pick: null, org_pick: null, degree: '', degree_other: '', branch: '',
+  field: '', field_other: '', college_name: '', college_pick: null, org_pick: null, degree: '', degree_other: '', branch: '',
   professional_course: '', professional_course_other: '', professional_stage: '', professional_org: '',
   admission_route: '', admission_route_other: '', admission_rank: '', board_marks: '', board_cutoff: '',
-  still_studying: '', now_choice: '', current_status: '', current_status_other: '', expected_finish_year: '',
+  still_studying: '', own_business: 'no', expected_finish_year: '',
   currently_at: '', designation: '',
   personal_email: '', phone_country_code: '+91', phone_number: '', linkedin_url: '',
   message_1: '', photo_file: null, consent_given: false,
@@ -143,15 +144,42 @@ function useAppear(shown: boolean) {
 
 /** Did they just describe a course — a degree, or a CA/CS/CMA qualification? */
 function describesCourse(form: FormState): boolean {
-  return form.joined_college === 'yes' || !!form.professional_course.trim();
+  return !!form.college_name.trim() || !!form.degree.trim() || !!form.professional_course.trim();
 }
 
-/** What they are doing now, as one of the values STATUSES already knows. */
-function statusFromForm(form: FormState): string {
+/**
+ * What they are doing now, as one of the values STATUSES already knows.
+ *
+ * Registration used to ask this twice - "are you still doing this?" and then
+ * "what are you doing now?" - and the profile page asked the same fact a third
+ * way, as an eleven-item dropdown someone who answered the chips had never
+ * seen. There is one question now, about the course they just described, and
+ * everything else is worked out from what they filled in below it.
+ *
+ * It may return an empty string, and that is allowed: the profile page stopped
+ * requiring a status, an empty one is never offered as a filter, and a guess
+ * would be worse than a blank.
+ */
+function statusFromForm(form: FormState, higherStudies: HigherStudyEntry[] = []): string {
   if (describesCourse(form) && form.still_studying === 'yes') {
-    return statusForCourse(form.joined_college === 'yes', form.professional_course);
+    return statusForCourse({
+      hasCollege: !!form.college_name.trim(),
+      hasDegree: !!form.degree.trim(),
+      professionalCourse: resolveValue(form.professional_course, form.professional_course_other),
+    });
   }
-  return resolveValue(statusForNowChoice(form.now_choice), form.current_status_other);
+  // Nobody who says "no" is asked a second time what they are doing instead.
+  // It is read from what they filled in underneath: a place of work, or a
+  // degree below with no finish year, which is how a degree in progress is
+  // written everywhere else on this form.
+  if (form.currently_at.trim()) return form.own_business === 'yes' ? 'Entrepreneur' : 'Working';
+  const ongoing = higherStudies.some((s) => {
+    if (!s.degree_name.trim()) return false;
+    const fin = parseInt(s.finish_year, 10);
+    return !s.finish_year.trim() || (!Number.isNaN(fin) && fin >= CURRENT_YEAR);
+  });
+  if (ongoing) return 'Higher Studies';
+  return '';
 }
 
 function validateField(key: FieldKey, form: FormState): string {
@@ -179,17 +207,18 @@ function validateField(key: FieldKey, form: FormState): string {
       if (form.stream === OTHER_OPTION && !val(form.stream_other)) return 'Type your stream.';
       return '';
     case 'field':
-      if (!val(form.field)) return 'Select your broad area.';
+      // Worked out from the degree now, and only ever corrected by hand - so
+      // there is nothing to require. The free text still needs a value when
+      // somebody has chosen to correct it to "Other".
       if (form.field === OTHER_OPTION && !val(form.field_other)) return 'Type your area of study.';
       return '';
     case 'college_name':
-      // Only required of people who actually joined a college. A CA student
-      // has no college to name, and the old required field forced them to
-      // invent one.
-      if (form.joined_college !== 'yes') return '';
-      return val(form.college_name) ? '' : 'Which college did you join?';
+      // Never required. "Did you join a college?" used to ask this as a
+      // three-way chip whose "No" and "Not yet" saved identical rows - an
+      // empty college field says the same thing, one question sooner.
+      return '';
     case 'degree':
-      if (form.joined_college !== 'yes') return '';
+      if (!val(form.college_name)) return '';
       if (!val(form.degree)) return 'Pick your degree.';
       if (form.degree === OTHER_OPTION && !val(form.degree_other)) return 'Type your degree.';
       return '';
@@ -200,6 +229,8 @@ function validateField(key: FieldKey, form: FormState): string {
       }
       return '';
     case 'admission_route':
+      // Got in to what? Only asked of someone who named a college.
+      if (!val(form.college_name)) return '';
       if (!val(form.admission_route)) return 'How did you get in?';
       if (form.admission_route === OTHER_OPTION && !val(form.admission_route_other)) return 'Type how you got in.';
       return '';
@@ -216,17 +247,10 @@ function validateField(key: FieldKey, form: FormState): string {
       return Number.isNaN(marks) || marks < 0 || marks > 100 ? 'Marks must be between 0 and 100.' : '';
     }
     case 'still_studying':
-      // Only asked of someone who named a course a moment ago.
+      // The one question about now, and only asked of someone who named a
+      // course a moment ago. Everything under it is optional.
       if (!describesCourse(form)) return '';
-      return val(form.still_studying) ? '' : 'Are you still doing this?';
-    case 'now_choice': {
-      // Only asked once "are you still doing this?" has been answered No - or
-      // when there was no course to ask about in the first place.
-      if (describesCourse(form) && form.still_studying !== 'no') return '';
-      if (!val(form.now_choice)) return 'What are you doing now?';
-      if (form.now_choice === 'other' && !val(form.current_status_other)) return 'Tell us what you are up to.';
-      return '';
-    }
+      return val(form.still_studying) ? '' : 'Yes or no is all we need.';
     case 'personal_email': {
       const v = val(form.personal_email);
       if (!v) return 'We need an email to reach you.';
@@ -248,7 +272,7 @@ function validateField(key: FieldKey, form: FormState): string {
 const STEP_FIELDS: FieldKey[][] = [
   ['full_name', 'personal_email', 'phone_number', 'password_val'],
   ['school_name', 'class_of', 'stream'],
-  ['field', 'college_name', 'degree', 'professional_course', 'admission_route', 'admission_rank', 'board_marks', 'still_studying', 'now_choice'],
+  ['field', 'college_name', 'degree', 'professional_course', 'admission_route', 'admission_rank', 'board_marks', 'still_studying'],
   ['linkedin_url'],
 ];
 
@@ -265,8 +289,9 @@ const STEP_FIELDS: FieldKey[][] = [
  */
 // Versioned so a future field rename cannot resurrect an incompatible draft.
 // v2: usernames removed and the steps reordered, so a v1 draft would land on
-// the wrong step.
-const DRAFT_KEY = 'veveaham.register.draft.v2';
+// the wrong step. v3: joined_college and now_choice are gone, and a draft
+// holding them would restore a form that no longer asks those questions.
+const DRAFT_KEY = 'veveaham.register.draft.v3';
 
 function friendlySubmitError(raw: string): string {
   const t = raw.toLowerCase();
@@ -571,7 +596,12 @@ export default function RegisterPage() {
       // 4. Link the college and organisation: the picked suggestion when there
       //    is one, else an unambiguous exact name or alias. Anything else is
       //    kept as typed and lands in the admin's unmatched queue.
-      const typedCollege = form.joined_college === 'yes' ? cleanProperNoun(form.college_name) : null;
+      // An empty college field is the answer "I didn't join one", so every
+      // college-shaped value below is gated on this rather than written
+      // regardless: typing a degree and then clearing the college used to
+      // ship a degree on a row that says no college.
+      const namedCollege = !!form.college_name.trim();
+      const typedCollege = namedCollege ? cleanProperNoun(form.college_name) : null;
       const collegeId = await linkFor('college', typedCollege, form.college_pick);
       const typedOrg = cleanProperNoun(form.currently_at);
       const organizationId = await linkFor('organization', typedOrg, form.org_pick);
@@ -579,9 +609,16 @@ export default function RegisterPage() {
       const canon = (category: string, value: string) => canonicalOption(optionAliases, category, value);
       const finalStream = canon('stream', resolveValue(form.stream, form.stream_other));
       const finalDegree = canon('degree', resolveValue(form.degree, form.degree_other));
-      const finalField = canon('field', resolveValue(form.field, form.field_other));
+      const finalCourse = canon('professional_course', resolveValue(form.professional_course, form.professional_course_other));
+      // The area of study is worked out from the degree unless they corrected
+      // it by hand. Always a concrete string: `field` is directory search text
+      // and an admin-visible value, so a blank would cost more than a guess.
+      const finalField = canon('field',
+        resolveValue(form.field, form.field_other)
+        || categoryForDegree(finalDegree, form.branch, finalCourse)?.label
+        || '');
       const finalRoute = canon('admission_route', resolveValue(form.admission_route, form.admission_route_other));
-      const finalStatus = canon('current_status', statusFromForm(form));
+      const finalStatus = canon('current_status', statusFromForm(form, higherStudies));
 
 
       // 5. The profile row.
@@ -601,20 +638,20 @@ export default function RegisterPage() {
         linkedin_url: cleanFreeText(form.linkedin_url),
         college_id: collegeId,
         college_name_raw: typedCollege,
-        professional_course: canon('professional_course', resolveValue(form.professional_course, form.professional_course_other)) || null,
+        professional_course: finalCourse || null,
         professional_stage: form.professional_course ? (form.professional_stage || null) : null,
         professional_org: form.professional_course ? (cleanProperNoun(form.professional_org) || null) : null,
-        degree: finalDegree || null,
-        branch: cleanProperNoun(form.branch),
+        degree: namedCollege ? (finalDegree || null) : null,
+        branch: namedCollege ? cleanProperNoun(form.branch) : null,
         field: finalField || null,
-        admission_route: finalRoute || null,
+        admission_route: namedCollege ? (finalRoute || null) : null,
         // All three are kept, whatever the route says today. Nulling the
         // unused half meant that changing your route from an exam to Board
         // Marks silently deleted the rank you had already typed. What is
         // *shown* is decided by asksForRank at the card, not here.
-        admission_rank: cleanFreeText(form.admission_rank),
-        board_marks: cleanFreeText(form.board_marks),
-        board_cutoff: cleanFreeText(form.board_cutoff),
+        admission_rank: namedCollege ? cleanFreeText(form.admission_rank) : null,
+        board_marks: namedCollege ? cleanFreeText(form.board_marks) : null,
+        board_cutoff: namedCollege ? cleanFreeText(form.board_cutoff) : null,
         current_status: finalStatus,
         expected_finish_year: isInProgressStatus(finalStatus) && form.expected_finish_year
           ? parseInt(form.expected_finish_year, 10) : null,
@@ -671,7 +708,6 @@ export default function RegisterPage() {
       if (form.stream === OTHER_OPTION) void proposeOption('stream', form.stream_other);
       if (form.degree === OTHER_OPTION) void proposeOption('degree', form.degree_other);
       if (form.admission_route === OTHER_OPTION) void proposeOption('admission_route', form.admission_route_other);
-      if (form.now_choice === 'other') void proposeOption('current_status', form.current_status_other);
       if (form.field === OTHER_OPTION) void proposeOption('field', form.field_other);
       if (form.professional_course === OTHER_OPTION) void proposeOption('professional_course', form.professional_course_other);
 
@@ -948,44 +984,46 @@ function StepStudies({
   const route = resolveValue(form.admission_route, form.admission_route_other);
   const usesBoardMarks = form.admission_route === 'Board Marks';
   const wantsRank = asksForRank(form.admission_route);
-  const collegeRef = useAppear(form.joined_college === 'yes');
+  const namedCollege = !!form.college_name.trim();
+  const collegeRef = useAppear(namedCollege);
+
+  // What we think their area is, from the degree they picked. categorize()
+  // cannot answer this - "btech" never matches its "tech" alias - so the
+  // mapping is explicit, and null means we genuinely cannot tell and should
+  // ask rather than file them under Other.
+  const guessed = categoryForDegree(
+    resolveValue(form.degree, form.degree_other),
+    form.branch,
+    resolveValue(form.professional_course, form.professional_course_other),
+  );
+  // Only once there is something to file. A college name alone is not a
+  // course, and asking for an area of study before a degree has been picked
+  // is the old required dropdown wearing a different hat.
+  const hasCourse = !!resolveValue(form.degree, form.degree_other).trim()
+    || !!resolveValue(form.professional_course, form.professional_course_other).trim();
+  const [correctingField, setCorrectingField] = useState(false);
+  const showFieldPicker = correctingField || !!form.field || (hasCourse && !guessed);
 
   return (
     <>
-      <SelectWithOther
-        name="field" label="Broad area of study" required options={fieldOptions}
-        value={form.field} onChange={(v) => { update('field', v); markTouched('field'); }}
-        otherValue={form.field_other} onOtherChange={(v) => update('field_other', v)}
-        error={errorFor('field')}
-      />
-
-      {/* Asked before the college fields, because the honest answer for a CA
-          student is "no" - and the old form had no way to say that, forcing
-          them to invent a college name to get past validation. */}
-      <div className="field" data-field="joined_college">
-        <label>After 12th, did you join a college?</label>
-        <Chips
-          options={['Yes', 'Not yet', 'No']}
-          value={form.joined_college === 'yes' ? 'Yes' : form.joined_college === 'not_yet' ? 'Not yet' : 'No'}
-          onChange={(v) => update('joined_college', v === 'Yes' ? 'yes' : v === 'Not yet' ? 'not_yet' : 'no')}
+      {/* The college field IS the question. A three-way "did you join a
+          college?" chip came first for a while, but "No" and "Not yet" saved
+          byte-for-byte identical rows and the distinction was stored nowhere -
+          so leaving this blank says the same thing, one question sooner. */}
+      <div onBlur={() => markTouched('college_name')}>
+        <EntitySearchField
+          kind="college" label="College / University"
+          hint="leave blank if you didn’t join one — short names work too, “IIT Madras”, “CEG”"
+          value={form.college_name}
+          onChange={(v) => update('college_name', v)}
+          onSelect={(hit) => update('college_pick', toPick(hit))}
+          invalid={!!errorFor('college_name')}
         />
       </div>
 
       <div ref={collegeRef}>
-      {form.joined_college === 'yes' && (
+      {namedCollege && (
         <>
-          <div onBlur={() => markTouched('college_name')}>
-            <EntitySearchField
-              kind="college" label="College / University" required
-              hint="short names work too — “IIT Madras”, “CEG”, “NIT Trichy”"
-              value={form.college_name}
-              onChange={(v) => update('college_name', v)}
-              onSelect={(hit) => update('college_pick', toPick(hit))}
-              invalid={!!errorFor('college_name')}
-            />
-          </div>
-          {errorFor('college_name') && <p className="field__error">{errorFor('college_name')}</p>}
-
           <SelectWithOther
             name="degree" label="Degree" required options={degreeOptions}
             value={form.degree} onChange={(v) => { update('degree', v); markTouched('degree'); }}
@@ -1004,12 +1042,35 @@ function StepStudies({
 
       </div>
 
-      <SelectWithOther
-        name="admission_route" label="How did you get in?" required options={routeOptions}
-        value={form.admission_route} onChange={(v) => { update('admission_route', v); markTouched('admission_route'); }}
-        otherValue={form.admission_route_other} onOtherChange={(v) => update('admission_route_other', v)}
-        error={errorFor('admission_route')}
-      />
+      {/* Derived, and correctable. It used to be a required dropdown asking
+          for something the site can work out from the degree - and then
+          worked it out again anyway, every time it read the value. */}
+      {guessed && !showFieldPicker && (
+        <p className="derived">
+          <span className="derived__label">Area of study</span>
+          <span className="derived__value">{guessed.emoji} {guessed.label}</span>
+          <button type="button" className="link-btn" onClick={() => setCorrectingField(true)}>
+            not right? change it
+          </button>
+        </p>
+      )}
+      {showFieldPicker && (
+        <SelectWithOther
+          name="field" label="Broad area of study" options={fieldOptions}
+          value={form.field} onChange={(v) => { update('field', v); markTouched('field'); }}
+          otherValue={form.field_other} onOtherChange={(v) => update('field_other', v)}
+          error={errorFor('field')}
+        />
+      )}
+
+      {namedCollege && (
+        <SelectWithOther
+          name="admission_route" label="How did you get in?" required options={routeOptions}
+          value={form.admission_route} onChange={(v) => { update('admission_route', v); markTouched('admission_route'); }}
+          otherValue={form.admission_route_other} onOtherChange={(v) => update('admission_route_other', v)}
+          error={errorFor('admission_route')}
+        />
+      )}
 
       {usesBoardMarks ? (
         <div className="two-col">
@@ -1087,15 +1148,19 @@ function StepStudies({
 }
 
 /**
- * What they are doing now.
+ * What they are doing now - one question, then blocks they may ignore.
  *
- * This used to be an eleven-item dropdown standing on its own, and people were
- * guessing at it: a class-of-2026 student picked "Higher Studies" for the UG
- * degree they are still in the middle of. Since they have just described a
- * course, the honest first question is whether they are still on it - one tap,
- * and the school knows it has a current student. Only if they are not do we ask
- * what they moved to, and then in the shape LinkedIn uses: what, where, which
- * role.
+ * This used to be an eleven-item dropdown, and people were plainly guessing at
+ * it: a class-of-2026 student picked "Higher Studies" for the UG degree they
+ * are still in the middle of. Then it became two chip rows, "are you still
+ * doing this?" followed by "what are you doing now?", which is the same fact
+ * asked twice.
+ *
+ * There is one question here now - are you still studying it - and nothing
+ * after it is required. Someone who says no is told, in as many words, that
+ * work, a business or further study can go in below or wait until after they
+ * have registered; whatever they fill in is what the status is read from. A
+ * blank status is a fine outcome and the profile page nudges for it later.
  */
 function StepNow({
   form, update, markTouched, errorFor, isValid,
@@ -1107,21 +1172,24 @@ function StepNow({
   showWorkExperience: boolean; setShowWorkExperience: (v: boolean) => void;
   workExperience: WorkExperienceEntry[]; setWorkExperience: React.Dispatch<React.SetStateAction<WorkExperienceEntry[]>>;
 }) {
-  const asksStill = describesCourse(form);
-  const stillStudying = asksStill && form.still_studying === 'yes';
-  // One question at a time: "what are you doing now?" only makes sense once
-  // they have said they are no longer on the course above.
-  const asksNow = !asksStill || form.still_studying === 'no';
-  const course = [resolveValue(form.degree, form.degree_other), form.professional_course]
-    .filter(Boolean).join(' / ');
-  const choice = NOW_CHOICES.find((c) => c.key === form.now_choice);
-  const nowRef = useAppear(asksNow && !!form.now_choice && form.now_choice !== 'break');
+  const describes = describesCourse(form);
+  const stillStudying = describes && form.still_studying === 'yes';
+  // Finished, or never started one to begin with - the same blocks help both.
+  // Someone who has been asked but has not answered yet sees neither, so the
+  // page never puts two questions on screen at once.
+  const finished = !describes || form.still_studying === 'no';
+  const course = [
+    resolveValue(form.degree, form.degree_other),
+    resolveValue(form.professional_course, form.professional_course_other),
+  ].filter(Boolean).join(' / ');
+  const ownBusiness = form.own_business === 'yes';
+  const nowRef = useAppear(finished);
 
   return (
     <>
-      {asksStill && (
+      {describes && (
         <div className="field" data-field="still_studying">
-          <label>Are you still doing {course || 'this'}? <span className="req" aria-hidden> *</span></label>
+          <label>Are you still studying {course || 'this'}? <span className="req" aria-hidden> *</span></label>
           <Chips
             options={['Yes', 'No']}
             value={form.still_studying === 'yes' ? 'Yes' : form.still_studying === 'no' ? 'No' : ''}
@@ -1136,33 +1204,7 @@ function StepNow({
         </div>
       )}
 
-      {asksNow && (
-        <div className="field" data-field="now_choice">
-          <label>What are you doing now? <span className="req" aria-hidden> *</span></label>
-          <Chips
-            options={NOW_CHOICES.map((c) => c.label)}
-            value={choice?.label ?? ''}
-            onChange={(v) => {
-              update('now_choice', NOW_CHOICES.find((c) => c.label === v)?.key ?? '');
-              markTouched('now_choice');
-            }}
-          />
-          {errorFor('now_choice') && (
-            <p className="field__error" style={{ position: 'static', marginTop: 6 }}>{errorFor('now_choice')}</p>
-          )}
-          {form.now_choice === 'other' && (
-            <div style={{ marginTop: 12 }}>
-              <Field
-                label="Tell us in a few words" value={form.current_status_other}
-                onChange={(v) => update('current_status_other', v)}
-                onBlur={() => markTouched('now_choice')} error="" valid={false}
-              />
-            </div>
-          )}
-        </div>
-      )}
-
-      {isInProgressStatus(statusFromForm(form)) && (
+      {stillStudying && (
         <Field
           label="Expected to finish in" optional type="number" hint="year"
           min={CURRENT_YEAR - 10} max={CURRENT_YEAR + 10}
@@ -1172,31 +1214,58 @@ function StepNow({
         />
       )}
 
-      {asksNow && !!form.now_choice && form.now_choice !== 'break' && (
-        <div className="two-col" ref={nowRef}>
-          <EntitySearchField
-            kind="organization"
-            label={form.now_choice === 'working' ? 'Where do you work?' : 'Where?'}
-            hint="company or institute, optional"
-            value={form.currently_at}
-            onChange={(v) => update('currently_at', v)}
-            onSelect={(hit) => update('org_pick', toPick(hit))}
-          />
-          <Field
-            label={form.now_choice === 'working' ? 'Your role' : 'Role / Title'} optional
-            value={form.designation} onChange={(v) => update('designation', v)}
-            onBlur={() => markTouched('designation')} error="" valid={false}
-          />
-        </div>
+      <div ref={nowRef}>
+      {finished && (
+        <>
+          {/* Said plainly, because the alternative is someone abandoning the
+              form at the last step over a job they have not started yet. */}
+          <p className="form-note form-note--warm">
+            {describes
+              ? 'That’s the hard part done. '
+              : 'No college, or not yet? That is an answer juniors need to hear too. '}
+            Whatever you are doing — a job, a business of your own, more study —
+            goes in below if you have a minute, and can wait for your profile if
+            you don&apos;t. None of it is required, and you can change any of it
+            later.
+          </p>
+
+          <div className="field" data-field="own_business">
+            <label>Working somewhere, or is it your own?</label>
+            <Chips
+              options={['I work somewhere', 'It’s my own business']}
+              value={ownBusiness ? 'It’s my own business' : 'I work somewhere'}
+              onChange={(v) => update('own_business', v === 'I work somewhere' ? 'no' : 'yes')}
+            />
+          </div>
+
+          <div className="two-col">
+            <EntitySearchField
+              kind="organization"
+              label={ownBusiness ? 'What is it called?' : 'Where do you work?'}
+              hint="optional — leave it if you would rather not say"
+              value={form.currently_at}
+              onChange={(v) => update('currently_at', v)}
+              onSelect={(hit) => update('org_pick', toPick(hit))}
+            />
+            <Field
+              label={ownBusiness ? 'What you do there' : 'Your role'} optional
+              value={form.designation} onChange={(v) => update('designation', v)}
+              onBlur={() => markTouched('designation')} error="" valid={false}
+            />
+          </div>
+        </>
+      )}
+      </div>
+
+      {stillStudying && (
+        <p className="form-note">
+          Done something else already — another degree, a job? Add it below if you
+          like, or leave it and add it from your profile whenever you have a minute.
+        </p>
       )}
 
-      <p className="form-note">
-        Been somewhere before this? Add it below if you like — or leave it, and add it
-        from your profile whenever you have a minute.
-      </p>
-
       <OptionalSection
-        title="Courses before this" caption="PG, PhD, diploma — optional, you can add these later"
+        title="Degrees and courses" caption="PG, PhD, diploma — before or after this one, optional"
         open={showHigherStudies} onToggle={setShowHigherStudies}
       >
         {higherStudies.map((entry, i) => (
@@ -1228,7 +1297,7 @@ function StepNow({
       </OptionalSection>
 
       <OptionalSection
-        title="Jobs before this" caption="company, role, years — optional"
+        title="Jobs" caption="company, role, years — optional, and you can add these later"
         open={showWorkExperience} onToggle={setShowWorkExperience}
       >
         {workExperience.map((entry, i) => (
@@ -1286,7 +1355,7 @@ function StepFinish({ form, update, markTouched, errorFor, isValid }: StepProps)
   }, [form.photo_file]);
 
   const route = publicRouteLabel(resolveValue(form.admission_route, form.admission_route_other));
-  const college = form.joined_college === 'yes' ? cleanProperNoun(form.college_name) : null;
+  const college = cleanProperNoun(form.college_name);
   const initials = form.full_name.trim().split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase() || '?';
 
   return (

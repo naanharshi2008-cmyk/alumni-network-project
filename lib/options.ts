@@ -221,6 +221,10 @@ export function isInProgressStatus(status: string | null | undefined): boolean {
  */
 export const NOW_CHOICES = [
   { key: 'working', label: 'Working', status: 'Working' },
+  // 'Entrepreneur' has been in STATUSES since the beginning and was reachable
+  // from no form at all, so nobody could ever say it. It says something the
+  // other answers do not, and juniors ask about it.
+  { key: 'business', label: 'My own business', status: 'Entrepreneur' },
   { key: 'studies', label: 'Higher studies', status: 'Higher Studies' },
   { key: 'preparing', label: 'Preparing for exams', status: 'Preparing (Competitive Exams)' },
   { key: 'break', label: 'Taking a break', status: 'On Break' },
@@ -229,10 +233,21 @@ export const NOW_CHOICES = [
 
 export type NowChoiceKey = (typeof NOW_CHOICES)[number]['key'];
 
-/** The status of someone still on the course they described a moment ago. */
-export function statusForCourse(joinedCollege: boolean, professionalCourse: string | null | undefined): string {
-  if (joinedCollege) return 'Studying UG';
-  if ((professionalCourse ?? '').trim()) return 'Studying (CA / CS / CMA)';
+/**
+ * The status of someone still on the course they described a moment ago.
+ *
+ * Takes the pieces by name rather than positionally: the caller used to pass
+ * a single `joinedCollege` boolean that stood for a three-way chip, and now
+ * that the college field is the question there are two separate things - a
+ * college was named, or a degree was - that both mean the same status.
+ */
+export function statusForCourse(course: {
+  hasCollege: boolean;
+  hasDegree: boolean;
+  professionalCourse: string | null | undefined;
+}): string {
+  if (course.hasCollege || course.hasDegree) return 'Studying UG';
+  if ((course.professionalCourse ?? '').trim()) return 'Studying (CA / CS / CMA)';
   return 'Studying UG';
 }
 

@@ -12,7 +12,7 @@ import {
   canonicalOption, fetchApprovedOptions, fetchOptionAliases, fetchOrganizationNames, proposeOption,
 } from '../../lib/publicData';
 import {
-  STREAMS, DEGREES, ADMISSION_ROUTES, STATUSES, asksForRank, boardForSchool,
+  STREAMS, DEGREES, ADMISSION_ROUTES, STATUSES, NOW_CHOICES, asksForRank, boardForSchool,
   COUNTRY_CODES, OTHER_OPTION, LEGACY_STREAM_MAP, officialSchoolName,
   PROFESSIONAL_COURSES, PROFESSIONAL_STAGES,
   isInProgressStatus, mergeOptions, splitStoredValue, resolveValue,
@@ -72,6 +72,12 @@ const emptyHigherStudy = (): HigherStudyEntry => ({ degree_name: '', institution
 const emptyWorkExperience = (): WorkExperienceEntry => ({ company: '', role: '', start_year: '', end_year: '', is_current: false });
 
 const CURRENT_YEAR = new Date().getFullYear();
+
+/* The answers worth a tap, and the escape hatch to the full list. The chips
+   are NOW_CHOICES minus its own "Something else", which is spelled out here
+   so the two lists cannot drift apart. */
+const SOMETHING_ELSE = 'Something else';
+const NOW_CHIPS = NOW_CHOICES.filter((c) => c.key !== 'other');
 
 /**
  * The DB allows most of these to be null, but every .trim() here assumes a
@@ -165,6 +171,8 @@ export default function ProfilePage() {
   // editor had no such box: choosing "Other" stored the literal word "Other"
   // and wiped whatever the person had actually written.
   const [others, setOthers] = useState({ stream: '', degree: '', admission_route: '', current_status: '', field: '', professional_course: '' });
+  // "Something else" has been tapped, so the full status list is on screen.
+  const [statusOpen, setStatusOpen] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -439,6 +447,12 @@ export default function ProfilePage() {
       if (profile.degree === OTHER_OPTION && others.degree.trim()) void proposeOption('degree', others.degree);
       if (profile.admission_route === OTHER_OPTION && others.admission_route.trim()) void proposeOption('admission_route', others.admission_route);
       if (profile.current_status === OTHER_OPTION && others.current_status.trim()) void proposeOption('current_status', others.current_status);
+      // These two were missing, so an area of study or a qualification typed
+      // here reached the profile but never the staff list it should join.
+      if (profile.field === OTHER_OPTION && others.field.trim()) void proposeOption('field', others.field);
+      if (profile.professional_course === OTHER_OPTION && others.professional_course.trim()) {
+        void proposeOption('professional_course', others.professional_course);
+      }
 
       setProfile((prev) => (prev ? { ...prev, photo_url: photoUrl, modification_status: isApproved ? 'pending' : prev.modification_status } : prev));
       setPhotoFile(null);
@@ -509,6 +523,11 @@ export default function ProfilePage() {
   const professionalSel = splitStoredValue(profile.professional_course, professionalOptions).selected;
   const routeSel = splitStoredValue(profile.admission_route, routeOptions).selected;
   const statusSel = splitStoredValue(profile.current_status, statusOptions).selected;
+  // Which chip, if any, says what is already stored. Anything else - a status
+  // from the longer list, or free text - opens the select instead of quietly
+  // showing no chip selected while a value is saved.
+  const statusChip = NOW_CHIPS.find((c) => c.status === statusSel);
+  const showStatusSelect = statusOpen || (!!statusSel && !statusChip);
   const fieldSel = splitStoredValue(profile.field, fieldOptions).selected;
   const pendingReview = profile.modification_status === 'pending';
 
@@ -735,14 +754,37 @@ export default function ProfilePage() {
           </button>
 
           <Divider />
-          <h2>Right now</h2>
+          <h2 id="profile-now">Right now</h2>
 
-          <SelectWithOther
-            label="What are you up to?" options={statusOptions} value={statusSel}
-            onChange={(v) => updateField('current_status', v)}
-            otherValue={others.current_status} onOtherChange={(v) => updateOther('current_status', v)}
-            required
-          />
+          {/* The same question, asked the same way, as on the form they
+              filled in to get here. It was an eleven-item dropdown that
+              someone who answered chips at registration had never seen, and
+              the full list is still one tap away for the answers chips cannot
+              carry - "Studying UG" among them, which is how a current student
+              arrives here in the first place. */}
+          <div className="field" data-field="current_status">
+            <label>What are you up to? <span className="hint">optional</span></label>
+            <Chips
+              options={[...NOW_CHIPS.map((c) => c.label), SOMETHING_ELSE]}
+              // No chip lights up for a status the chips do not carry - the
+              // select below is showing it instead, and pretending "Something
+              // else" was chosen would misreport what is saved.
+              value={statusChip?.label ?? (statusOpen ? SOMETHING_ELSE : '')}
+              onChange={(v) => {
+                if (v === SOMETHING_ELSE) { setStatusOpen(true); return; }
+                const picked = NOW_CHIPS.find((c) => c.label === v);
+                if (picked) { updateField('current_status', picked.status); setStatusOpen(false); }
+              }}
+            />
+          </div>
+
+          {showStatusSelect && (
+            <SelectWithOther
+              label="Or pick from the full list" options={statusOptions} value={statusSel}
+              onChange={(v) => updateField('current_status', v)}
+              otherValue={others.current_status} onOtherChange={(v) => updateOther('current_status', v)}
+            />
+          )}
 
           {isInProgressStatus(resolveValue(statusSel, others.current_status)) && (
             <FloatingField
@@ -1035,6 +1077,10 @@ function ProfileChecklist({
     { done: !!profile.message_1.trim(), label: 'A line of advice for your junior self', why: 'the part juniors read most', href: '#profile-advice' },
     { done: !!profile.college_thoughts.trim(), label: 'What your college is really like', why: 'helps someone choosing it', href: '#profile-college-thoughts' },
     { done: hasHigherStudies || hasWork, label: 'Higher studies or work experience', why: 'shows where the path led', href: hasWork ? '#profile-work' : '#profile-higher-studies' },
+    // Registration no longer makes anyone pick a label for this, so the
+    // nudge lives here instead - where it can be ignored without abandoning
+    // a form half way through.
+    { done: !!profile.current_status.trim(), label: "Say what you're doing now", why: 'juniors filter by it', href: '#profile-now' },
     { done: !!profile.linkedin_url.trim(), label: 'Your LinkedIn', why: 'so juniors can reach out', href: '#profile-linkedin' },
     { done: confirmedRecently, label: 'Confirm your details this year', why: 'keeps your profile trusted', href: '#profile-confirm' },
   ];
