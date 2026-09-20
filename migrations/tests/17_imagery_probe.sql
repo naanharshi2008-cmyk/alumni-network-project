@@ -9,6 +9,11 @@
 DO $$
 DECLARE
   keeper uuid;
+  -- review_events.actor_id references auth.users, so the staff account this
+  -- probe pretends to be has to be a real login. What makes a caller the
+  -- school is the email in the JWT claims, not the id, so any real id will
+  -- do. It all rolls back either way.
+  staff  uuid;
   loser  uuid;
   photo  uuid;
   res    jsonb;
@@ -16,6 +21,9 @@ DECLARE
   txt    text;
   r      text := E'\n';
 BEGIN
+  SELECT id INTO staff FROM auth.users ORDER BY created_at LIMIT 1;
+  IF staff IS NULL THEN RAISE EXCEPTION 'No logins to borrow an id from.'; END IF;
+
   -- ── The view carries the logo now ───────────────────────────────────────
   SELECT count(*) INTO n
     FROM information_schema.columns
@@ -38,7 +46,7 @@ BEGIN
 
   -- ── Two colleges, one with imagery, one with a photo ────────────────────
   PERFORM set_config('request.jwt.claims',
-    '{"sub":"99999999-9999-9999-9999-999999999999","role":"authenticated","email":"staff@veveaham-admin.local"}', true);
+    format('{"sub":"%s","role":"authenticated","email":"staff@veveaham-admin.local"}', staff), true);
 
   INSERT INTO public.colleges (name, state, banner_url, banner_credit)
   VALUES ('ZZ Probe Keeper College', 'Tamil Nadu', 'https://example.com/keeper.jpg', NULL)
@@ -58,7 +66,7 @@ BEGIN
   res := public.merge_institute('college', loser, keeper);
   EXECUTE 'RESET ROLE';
   PERFORM set_config('request.jwt.claims',
-    '{"sub":"99999999-9999-9999-9999-999999999999","role":"authenticated","email":"staff@veveaham-admin.local"}', true);
+    format('{"sub":"%s","role":"authenticated","email":"staff@veveaham-admin.local"}', staff), true);
   r := r || 'note    ' || res::text || E'\n';
 
   SELECT banner_url INTO txt FROM public.colleges WHERE id = keeper;

@@ -12,6 +12,11 @@
 DO $$
 DECLARE
   victim   uuid;
+  -- review_events.actor_id references auth.users, so the staff account this
+  -- probe pretends to be has to be a real login. What makes a caller the
+  -- school is the email in the JWT claims, not the id, so any real id will
+  -- do. It all rolls back either way.
+  staff    uuid;
   before   public.alumni;
   after    public.alumni;
   res      jsonb;
@@ -21,6 +26,8 @@ DECLARE
 BEGIN
   SELECT id INTO victim FROM public.alumni WHERE approval_status = 'approved' ORDER BY created_at LIMIT 1;
   IF victim IS NULL THEN RAISE EXCEPTION 'No approved profile to test with.'; END IF;
+  SELECT id INTO staff FROM auth.users ORDER BY created_at LIMIT 1;
+  IF staff IS NULL THEN RAISE EXCEPTION 'No logins to borrow an id from.'; END IF;
   SELECT * INTO before FROM public.alumni WHERE id = victim;
 
   -- A blob with three real edits and four reaches for columns the profile
@@ -52,7 +59,7 @@ BEGIN
 
   EXECUTE 'RESET ROLE';
   PERFORM set_config('request.jwt.claims',
-    '{"sub":"99999999-9999-9999-9999-999999999999","role":"authenticated","email":"staff@veveaham-admin.local"}', true);
+    format('{"sub":"%s","role":"authenticated","email":"staff@veveaham-admin.local"}', staff), true);
   EXECUTE 'SET LOCAL ROLE authenticated';
 
   -- ── The one that matters: ask for the dangerous keys explicitly ─────────
