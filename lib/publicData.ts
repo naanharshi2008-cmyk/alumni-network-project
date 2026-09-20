@@ -102,7 +102,9 @@ export async function fetchOrganizationNames(limit = 300): Promise<string[]> {
  */
 export async function proposeOption(category: string, value: string): Promise<void> {
   if (!isSupabaseConfigured) return;
-  const clean = value?.trim();
+  // "IAT  (IISER Aptitude Test)" with two spaces became its own approved
+  // option, sitting in the filter next to the single-spaced one.
+  const clean = value?.replace(/\s+/g, ' ').trim();
   if (!clean) return;
   try {
     await supabase.from('field_options').insert({ category, value: clean, status: 'pending' });

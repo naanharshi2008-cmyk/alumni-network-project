@@ -33,6 +33,31 @@ export function phoneLoginCandidates(input: string): string[] {
   return [...new Set([phoneKey('+91', digits), phoneKey('', digits), digits].filter(Boolean) as string[])];
 }
 
+/**
+ * Why a typed number cannot be real, or '' if it could be.
+ *
+ * The registration check was `value.length < 7` on a string that counts spaces,
+ * so "12 34 5" - five digits - was accepted. A number is how half the people
+ * here sign in, and the only way the school can reach them, so it is worth
+ * being exact: Indian mobiles are ten digits starting 6-9, everything else
+ * gets the E.164 range.
+ */
+export function phoneProblem(code: string | null | undefined, number: string | null | undefined): string {
+  const digits = (number ?? '').replace(/\D/g, '').replace(/^0+/, '');
+  if (!digits) return 'We need a phone number to reach you.';
+  const cc = (code ?? '').replace(/\D/g, '') || '91';
+  if (cc === '91') {
+    if (digits.length !== 10) {
+      return digits.length < 10 ? 'An Indian mobile number has 10 digits.' : 'That is more than 10 digits.';
+    }
+    if (!/^[6-9]/.test(digits)) return 'Indian mobile numbers start with 6, 7, 8 or 9.';
+    return '';
+  }
+  if (digits.length < 7) return 'That number looks too short.';
+  if (digits.length > 15) return 'That number looks too long.';
+  return '';
+}
+
 export function looksLikePhone(value: string): boolean {
   return /^[+\d\s()-]+$/.test(value.trim()) && value.replace(/\D/g, '').length >= 7;
 }

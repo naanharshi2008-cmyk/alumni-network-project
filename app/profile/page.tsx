@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase, isSupabaseConfigured } from '../../lib/supabaseClient';
+import { phoneProblem } from '../../lib/contactKeys';
 import EntitySearchField from '../../lib/EntitySearchField';
 import { linkFor, toPick, type InstitutePick } from '../../lib/institutes';
 import SchoolPicker from '../../lib/SchoolPicker';
@@ -274,8 +275,12 @@ export default function ProfilePage() {
 
       if (!profile.full_name.trim()) throw new Error('Please keep your full name filled in.');
       if (!profile.personal_email.trim()) throw new Error('Please keep an email address on file.');
-      if (!profile.phone_number.trim()) throw new Error('Please keep a phone number on file.');
-      if (!finalStatus) throw new Error('Please select your current status.');
+      const phoneIssue = phoneProblem(profile.phone_country_code, profile.phone_number);
+      if (phoneIssue) throw new Error(phoneIssue);
+      // Status is no longer required to save. Registration now derives it from
+      // "are you still doing this?", and rows written before that can have
+      // none - blocking the save would leave those people unable to edit
+      // anything at all until they picked from a dropdown they never saw.
 
       let photoUrl = profile.photo_url;
       if (photoFile) {

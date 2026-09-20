@@ -8,10 +8,11 @@ import SchoolPicker from '../../lib/SchoolPicker';
 import { cleanFreeText, cleanProperNoun } from '../../lib/text';
 import { fetchApprovedOptions, proposeOption } from '../../lib/publicData';
 import {
-  STREAMS, DEGREES, ADMISSION_ROUTES, STATUSES, boardForSchool, publicRouteLabel,
+  STREAMS, DEGREES, ADMISSION_ROUTES, NOW_CHOICES, boardForSchool, publicRouteLabel,
   COUNTRY_CODES, OTHER_OPTION, isInProgressStatus, mergeOptions, resolveValue,
-  PROFESSIONAL_COURSES, PROFESSIONAL_STAGES,
+  statusForCourse, statusForNowChoice, PROFESSIONAL_COURSES, PROFESSIONAL_STAGES,
 } from '../../lib/options';
+import { phoneProblem } from '../../lib/contactKeys';
 import { CATEGORIES } from '../../lib/types';
 
 /* ─────────────────────────────────────────────────────────────────────────
@@ -44,6 +45,10 @@ interface FormState {
   admission_rank: string;
   board_marks: string;
   board_cutoff: string;
+  /* "Are you still doing this?" - yes means the course above is current, and
+     current_status is derived from it rather than asked as a dropdown. */
+  still_studying: string;
+  now_choice: string;
   current_status: string;
   current_status_other: string;
   expected_finish_year: string;
@@ -71,7 +76,7 @@ const initialForm: FormState = {
   field: '', field_other: '', joined_college: 'yes', college_name: '', college_pick: null, org_pick: null, degree: '', degree_other: '', branch: '',
   professional_course: '', professional_course_other: '', professional_stage: '', professional_org: '',
   admission_route: '', admission_route_other: '', admission_rank: '', board_marks: '', board_cutoff: '',
-  current_status: '', current_status_other: '', expected_finish_year: '',
+  still_studying: '', now_choice: '', current_status: '', current_status_other: '', expected_finish_year: '',
   currently_at: '', designation: '',
   personal_email: '', phone_country_code: '+91', phone_number: '', linkedin_url: '',
   message_1: '', photo_file: null, consent_given: false,
@@ -97,6 +102,57 @@ const URL_RE = /^https?:\/\/.+/i;
    Validation — one rule set, used both per-field (on blur) and per-step.
 ───────────────────────────────────────────────────────────────────────── */
 type FieldKey = keyof FormState;
+
+/** Smooth scrolling, unless the visitor has asked for less movement. */
+function scrollBehavior(): ScrollBehavior {
+  return typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    ? 'auto' : 'smooth';
+}
+
+/** The first control on this step that still has nothing in it. */
+function firstEmptyControl(root: HTMLElement | null): HTMLElement | null {
+  if (!root) return null;
+  const controls = root.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>(
+    'input:not([type="hidden"]):not([type="checkbox"]):not([type="file"]), select, textarea',
+  );
+  for (const c of Array.from(controls)) {
+    if (c.disabled || c.offsetParent === null) continue;
+    if (!c.value.trim()) return c;
+  }
+  return null;
+}
+
+/**
+ * Bring a block that has just appeared into view.
+ *
+ * Answering "yes, I joined a college" adds four more questions below the fold,
+ * and the form used to leave you to find them. This moves the page the moment
+ * they appear, which is the scrolling people were doing by hand.
+ */
+function useAppear(shown: boolean) {
+  const ref = useRef<HTMLDivElement>(null);
+  const was = useRef(shown);
+  useEffect(() => {
+    if (shown && !was.current) {
+      ref.current?.scrollIntoView({ block: 'nearest', behavior: scrollBehavior() });
+    }
+    was.current = shown;
+  }, [shown]);
+  return ref;
+}
+
+/** Did they just describe a course — a degree, or a CA/CS/CMA qualification? */
+function describesCourse(form: FormState): boolean {
+  return form.joined_college === 'yes' || !!form.professional_course.trim();
+}
+
+/** What they are doing now, as one of the values STATUSES already knows. */
+function statusFromForm(form: FormState): string {
+  if (describesCourse(form) && form.still_studying === 'yes') {
+    return statusForCourse(form.joined_college === 'yes', form.professional_course);
+  }
+  return resolveValue(statusForNowChoice(form.now_choice), form.current_status_other);
+}
 
 function validateField(key: FieldKey, form: FormState): string {
   const val = (v: unknown) => String(v ?? '').trim();
@@ -159,20 +215,25 @@ function validateField(key: FieldKey, form: FormState): string {
       const marks = parseFloat(v);
       return Number.isNaN(marks) || marks < 0 || marks > 100 ? 'Marks must be between 0 and 100.' : '';
     }
-    case 'current_status':
-      if (!val(form.current_status)) return 'Select what you are doing now.';
-      if (form.current_status === OTHER_OPTION && !val(form.current_status_other)) return 'Tell us what you are up to.';
+    case 'still_studying':
+      // Only asked of someone who named a course a moment ago.
+      if (!describesCourse(form)) return '';
+      return val(form.still_studying) ? '' : 'Are you still doing this?';
+    case 'now_choice': {
+      // Only asked once "are you still doing this?" has been answered No - or
+      // when there was no course to ask about in the first place.
+      if (describesCourse(form) && form.still_studying !== 'no') return '';
+      if (!val(form.now_choice)) return 'What are you doing now?';
+      if (form.now_choice === 'other' && !val(form.current_status_other)) return 'Tell us what you are up to.';
       return '';
+    }
     case 'personal_email': {
       const v = val(form.personal_email);
       if (!v) return 'We need an email to reach you.';
       return EMAIL_RE.test(v) ? '' : 'That email does not look right.';
     }
-    case 'phone_number': {
-      const v = val(form.phone_number);
-      if (!v) return 'We need a phone number to reach you.';
-      return v.length < 7 ? 'That number looks too short.' : '';
-    }
+    case 'phone_number':
+      return phoneProblem(form.phone_country_code, form.phone_number);
     case 'linkedin_url': {
       const v = val(form.linkedin_url);
       if (!v) return '';
@@ -187,7 +248,7 @@ function validateField(key: FieldKey, form: FormState): string {
 const STEP_FIELDS: FieldKey[][] = [
   ['full_name', 'personal_email', 'phone_number', 'password_val'],
   ['school_name', 'class_of', 'stream'],
-  ['field', 'college_name', 'degree', 'professional_course', 'admission_route', 'admission_rank', 'board_marks', 'current_status'],
+  ['field', 'college_name', 'degree', 'professional_course', 'admission_route', 'admission_rank', 'board_marks', 'still_studying', 'now_choice'],
   ['linkedin_url'],
 ];
 
@@ -241,12 +302,17 @@ export default function RegisterPage() {
   // Email and phone are now how people sign in, so they must be unique.
   // Checked on blur so nobody fills in four steps before finding out.
   const [contactState, setContactState] = useState<{ email: ContactCheck; phone: ContactCheck }>({ email: 'idle', phone: 'idle' });
+  // Whether the typed address could receive mail at all - see /api/validate/email.
+  const [emailDomain, setEmailDomain] = useState<{ state: 'idle' | 'bad'; message: string; suggestion: string | null }>(
+    { state: 'idle', message: '', suggestion: null },
+  );
   const [tagOptions, setTagOptions] = useState<Record<string, string[]>>({});
 
   // A ref (not state) so a double-click can't slip through before React
   // re-renders the disabled button.
   const submitLockRef = useRef(false);
   const headingRef = useRef<HTMLHeadingElement>(null);
+  const stepBodyRef = useRef<HTMLDivElement>(null);
 
   const [showHigherStudies, setShowHigherStudies] = useState(false);
   const [higherStudies, setHigherStudies] = useState<HigherStudyEntry[]>([emptyHigherStudy()]);
@@ -256,17 +322,24 @@ export default function RegisterPage() {
   useEffect(() => { void fetchApprovedOptions().then(setTagOptions); }, []);
 
   // Move focus to the new step's heading so the form is followable by keyboard
-  // and screen reader, and the page doesn't stay scrolled halfway down.
+  // and screen reader, and the page doesn't stay scrolled halfway down. Then,
+  // on a pointer device, put the cursor in the first empty field so typing can
+  // start immediately - not on touch, where it would throw the keyboard up over
+  // the step the moment it opens.
   useEffect(() => {
     headingRef.current?.focus();
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    window.scrollTo({ top: 0, behavior: scrollBehavior() });
+    if (!window.matchMedia('(pointer: fine)').matches) return undefined;
+    const settle = setTimeout(() => {
+      firstEmptyControl(stepBodyRef.current)?.focus({ preventScroll: true });
+    }, scrollBehavior() === 'auto' ? 0 : 340);
+    return () => clearTimeout(settle);
   }, [step]);
 
   const streamOptions = useMemo(() => mergeOptions(STREAMS, tagOptions.stream), [tagOptions]);
   const degreeOptions = useMemo(() => mergeOptions(DEGREES, tagOptions.degree), [tagOptions]);
   const professionalOptions = useMemo(() => mergeOptions(PROFESSIONAL_COURSES, tagOptions.professional_course), [tagOptions]);
   const routeOptions = useMemo(() => mergeOptions(ADMISSION_ROUTES, tagOptions.admission_route), [tagOptions]);
-  const statusOptions = useMemo(() => mergeOptions(STATUSES, tagOptions.current_status), [tagOptions]);
   const fieldOptions = useMemo(() => mergeOptions([...CATEGORIES.map((c) => c.label)], tagOptions.field), [tagOptions]);
 
   function update<K extends FieldKey>(key: K, value: FormState[K]) {
@@ -296,9 +369,23 @@ export default function RegisterPage() {
     try {
       const saved = window.localStorage.getItem(DRAFT_KEY);
       if (!saved) return;
-      const parsed = JSON.parse(saved) as { form?: Partial<FormState>; step?: number };
+      const parsed = JSON.parse(saved) as {
+        form?: Partial<FormState>; step?: number;
+        higherStudies?: HigherStudyEntry[]; workExperience?: WorkExperienceEntry[];
+      };
       if (!parsed.form) return;
       setForm((f) => ({ ...f, ...parsed.form, password_val: '', photo_file: null }));
+      // Past courses and jobs are held outside `form`, and used to be dropped
+      // from the draft entirely - someone who typed three jobs and came back
+      // the next day found them gone.
+      if (parsed.higherStudies?.length) {
+        setHigherStudies(parsed.higherStudies);
+        if (parsed.higherStudies.some((r) => r.degree_name.trim())) setShowHigherStudies(true);
+      }
+      if (parsed.workExperience?.length) {
+        setWorkExperience(parsed.workExperience);
+        if (parsed.workExperience.some((r) => r.company.trim())) setShowWorkExperience(true);
+      }
       // The password is never saved, and step 1 is where it is asked, so a
       // restored draft starts there with everything else still filled in.
       setStep(0);
@@ -312,12 +399,46 @@ export default function RegisterPage() {
     if (submitted) return;
     try {
       const { password_val: _pw, photo_file: _pf, ...safe } = form;
-      window.localStorage.setItem(DRAFT_KEY, JSON.stringify({ form: safe, step }));
+      window.localStorage.setItem(DRAFT_KEY, JSON.stringify({ form: safe, step, higherStudies, workExperience }));
     } catch {
       // Private browsing and full quotas both throw here; losing the draft is
       // not worth breaking the form over.
     }
-  }, [form, step, submitted]);
+  }, [form, step, higherStudies, workExperience, submitted]);
+
+  /**
+   * Can this address actually receive the welcome mail and a reset link?
+   *
+   * Only a definite no - a domain that does not exist, or accepts no mail -
+   * stops the step. Anything ambiguous passes: being unable to register
+   * because DNS was slow would be far worse than a typo slipping through.
+   */
+  async function checkEmailDomain() {
+    const email = form.personal_email.trim();
+    if (!EMAIL_RE.test(email)) { setEmailDomain({ state: 'idle', message: '', suggestion: null }); return; }
+    try {
+      const res = await fetch('/api/validate/email', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      const body = (await res.json()) as { ok?: boolean; reason?: string; suggestion?: string | null };
+      const domain = email.slice(email.lastIndexOf('@') + 1);
+      if (body.ok) {
+        setEmailDomain({ state: 'idle', message: '', suggestion: body.suggestion ?? null });
+        return;
+      }
+      setEmailDomain({
+        state: 'bad',
+        message: body.reason === 'no-domain'
+          ? `We can't find “${domain}” — is there a typo?`
+          : `“${domain}” doesn't seem to accept email.`,
+        suggestion: body.suggestion ?? null,
+      });
+    } catch {
+      setEmailDomain({ state: 'idle', message: '', suggestion: null });
+    }
+  }
 
   // Fires on blur only. A failed check falls back to 'idle' rather than
   // blocking: submit() checks again, and the database enforces uniqueness.
@@ -345,18 +466,22 @@ export default function RegisterPage() {
     // Reveal every problem on this step at once rather than one at a time.
     const fields = STEP_FIELDS[step];
     setTouched((prev) => ({ ...prev, ...Object.fromEntries(fields.map((f) => [f, true])) }));
-    const taken = step === 0 && (contactState.email === 'taken' || contactState.phone === 'taken');
+    const taken = step === 0
+      && (contactState.email === 'taken' || contactState.phone === 'taken' || emailDomain.state === 'bad');
     const firstBadField = fields.find((k) => validateField(k, form))
-      ?? (taken ? (contactState.email === 'taken' ? 'personal_email' : 'phone_number') : undefined);
+      ?? (taken
+        ? (contactState.email === 'taken' || emailDomain.state === 'bad' ? 'personal_email' : 'phone_number')
+        : undefined);
     if (firstBadField) {
       // Take the person to the problem. goNext does not change `step`, so the
       // scroll-to-top effect never fires here - without this the error can sit
       // far above the fold and Continue looks like it simply did nothing.
+      // Named field first: the old selector took whichever invalid field came
+      // first in the document, which is often not the one being complained about.
       requestAnimationFrame(() => {
-        const el = document.querySelector<HTMLElement>(
-          `.f-field--invalid input, .f-field--invalid select, [data-field="${firstBadField}"]`,
-        );
-        el?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        const holder = document.querySelector<HTMLElement>(`[data-field="${firstBadField}"]`);
+        const el = holder?.querySelector<HTMLElement>('input, select, textarea, button') ?? holder;
+        el?.scrollIntoView({ block: 'center', behavior: scrollBehavior() });
         el?.focus?.({ preventScroll: true });
       });
       return;
@@ -451,7 +576,7 @@ export default function RegisterPage() {
       const finalDegree = resolveValue(form.degree, form.degree_other);
       const finalField = resolveValue(form.field, form.field_other);
       const finalRoute = resolveValue(form.admission_route, form.admission_route_other);
-      const finalStatus = resolveValue(form.current_status, form.current_status_other);
+      const finalStatus = statusFromForm(form);
       const usesBoardMarks = finalRoute === 'Board Marks';
 
       // 5. The profile row.
@@ -504,7 +629,7 @@ export default function RegisterPage() {
       // 6. Optional timelines. The profile is already saved, so a failure here
       //    must not fail the registration - but it must not vanish either.
       const lostSections: string[] = [];
-      if (newId && showHigherStudies) {
+      if (newId) {
         const rows = higherStudies.filter((s) => s.degree_name.trim()).map((s) => ({
           alumni_id: newId,
           degree_name: s.degree_name.trim(),
@@ -517,7 +642,7 @@ export default function RegisterPage() {
           if (hsErr) { console.error('higher_studies insert', hsErr); lostSections.push('higher studies'); }
         }
       }
-      if (newId && showWorkExperience) {
+      if (newId) {
         const rows = workExperience.filter((w) => w.company.trim()).map((w) => ({
           alumni_id: newId,
           company: cleanProperNoun(w.company)!,
@@ -537,7 +662,7 @@ export default function RegisterPage() {
       if (form.stream === OTHER_OPTION) void proposeOption('stream', form.stream_other);
       if (form.degree === OTHER_OPTION) void proposeOption('degree', form.degree_other);
       if (form.admission_route === OTHER_OPTION) void proposeOption('admission_route', form.admission_route_other);
-      if (form.current_status === OTHER_OPTION) void proposeOption('current_status', form.current_status_other);
+      if (form.now_choice === 'other') void proposeOption('current_status', form.current_status_other);
       if (form.field === OTHER_OPTION) void proposeOption('field', form.field_other);
       if (form.professional_course === OTHER_OPTION) void proposeOption('professional_course', form.professional_course_other);
 
@@ -607,11 +732,17 @@ export default function RegisterPage() {
         {error && <div className="alert alert--error" role="alert">{error}</div>}
 
         <form onSubmit={handleFormSubmit} noValidate>
-          <div key={step} className="fade-up">
+          <div key={step} className="fade-up" ref={stepBodyRef}>
             {step === 0 && (
               <StepYou
                 {...stepProps}
                 contactState={contactState}
+                emailDomain={emailDomain}
+                checkEmailDomain={checkEmailDomain}
+                useSuggestion={(fixed) => {
+                  update('personal_email', fixed);
+                  setEmailDomain({ state: 'idle', message: '', suggestion: null });
+                }}
                 checkContact={checkContact}
                 resetContact={(which) => setContactState((c) => (c[which] === 'idle' ? c : { ...c, [which]: 'idle' }))}
               />
@@ -623,7 +754,6 @@ export default function RegisterPage() {
                 <h3 className="step-subhead">What you&apos;re doing now</h3>
                 <StepNow
                   {...stepProps}
-                  statusOptions={statusOptions}
                   showHigherStudies={showHigherStudies} setShowHigherStudies={setShowHigherStudies}
                   higherStudies={higherStudies} setHigherStudies={setHigherStudies}
                   showWorkExperience={showWorkExperience} setShowWorkExperience={setShowWorkExperience}
@@ -675,8 +805,12 @@ type ContactCheck = 'idle' | 'checking' | 'free' | 'taken';
 
 function StepYou({
   form, update, markTouched, errorFor, isValid, contactState, checkContact, resetContact,
+  emailDomain, checkEmailDomain, useSuggestion,
 }: StepProps & {
   contactState: { email: ContactCheck; phone: ContactCheck };
+  emailDomain: { state: 'idle' | 'bad'; message: string; suggestion: string | null };
+  checkEmailDomain: () => void;
+  useSuggestion: (fixedEmail: string) => void;
   checkContact: (which: 'email' | 'phone') => void;
   // Editing after a check makes the old answer stale; it is re-checked on blur.
   resetContact: (which: 'email' | 'phone') => void;
@@ -687,7 +821,7 @@ function StepYou({
   return (
     <>
       <Field
-        label="Full name" required autoFocus autoComplete="name"
+        name="full_name" label="Full name" required autoFocus autoComplete="name"
         value={form.full_name}
         onChange={(v) => update('full_name', v)}
         onBlur={() => markTouched('full_name')}
@@ -696,15 +830,31 @@ function StepYou({
 
       <div data-field="personal_email">
         <Field
-          label="Email" required type="email" autoComplete="email" inputMode="email"
+          name="personal_email" label="Email" required type="email" autoComplete="email" inputMode="email"
           hint={contactState.email === 'checking' ? 'checking…' : 'you can sign in with this'}
           value={form.personal_email}
           onChange={(v) => { update('personal_email', v); resetContact('email'); }}
-          onBlur={() => { markTouched('personal_email'); checkContact('email'); }}
+          onBlur={() => { markTouched('personal_email'); checkContact('email'); checkEmailDomain(); }}
           error={errorFor('personal_email')}
-          valid={isValid('personal_email') && contactState.email !== 'taken'}
+          valid={isValid('personal_email') && contactState.email !== 'taken' && emailDomain.state !== 'bad'}
         />
         {contactState.email === 'taken' && <p className="field__error field__error--static">{takenNote('email')}</p>}
+        {emailDomain.state === 'bad' && (
+          <p className="field__error field__error--static">{emailDomain.message}</p>
+        )}
+        {emailDomain.suggestion && (
+          <p className="hint" style={{ display: 'block', margin: '6px 0 0' }}>
+            Did you mean{' '}
+            <button
+              type="button" className="link-btn"
+              onClick={() => useSuggestion(
+                `${form.personal_email.trim().slice(0, form.personal_email.trim().lastIndexOf('@') + 1)}${emailDomain.suggestion}`,
+              )}
+            >
+              {form.personal_email.trim().split('@')[0]}@{emailDomain.suggestion}
+            </button>?
+          </p>
+        )}
       </div>
 
       <div className="two-col two-col--code" data-field="phone_number">
@@ -713,7 +863,7 @@ function StepYou({
           onChange={(v) => update('phone_country_code', v)} options={COUNTRY_CODES}
         />
         <Field
-          label="Phone number" required type="tel" inputMode="tel" autoComplete="tel-national"
+          name="phone_number" label="Phone number" required type="tel" inputMode="tel" autoComplete="tel-national"
           hint={contactState.phone === 'checking' ? 'checking…' : 'or sign in with this'}
           value={form.phone_number}
           onChange={(v) => { update('phone_number', v.replace(/[^\d\s]/g, '')); resetContact('phone'); }}
@@ -725,7 +875,7 @@ function StepYou({
       {contactState.phone === 'taken' && <p className="field__error field__error--static">{takenNote('phone number')}</p>}
 
       <Field
-        label="Choose a password" required type="password" revealable autoComplete="new-password"
+        name="password_val" label="Choose a password" required type="password" revealable autoComplete="new-password"
         hint={`at least ${MIN_PASSWORD} characters`}
         value={form.password_val}
         onChange={(v) => update('password_val', v)}
@@ -757,7 +907,7 @@ function StepSchool({ form, update, markTouched, errorFor, isValid, streamOption
       </div>
 
       <Field
-        label="Graduating year (Class of)" required type="number"
+        name="class_of" label="Graduating year (Class of)" required type="number"
         min={1960} max={CURRENT_YEAR} inputMode="numeric"
         value={form.class_of}
         onChange={(v) => update('class_of', v.replace(/[^\d]/g, ''))}
@@ -766,7 +916,7 @@ function StepSchool({ form, update, markTouched, errorFor, isValid, streamOption
       />
 
       <SelectWithOther
-        label="Stream at school" required options={streamOptions}
+        name="stream" label="Stream at school" required options={streamOptions}
         value={form.stream} onChange={(v) => { update('stream', v); markTouched('stream'); }}
         otherValue={form.stream_other} onOtherChange={(v) => update('stream_other', v)}
         error={errorFor('stream')}
@@ -781,11 +931,12 @@ function StepStudies({
   const route = resolveValue(form.admission_route, form.admission_route_other);
   const usesBoardMarks = form.admission_route === 'Board Marks';
   const skipsRank = ['Merit / Direct', 'Management Quota', 'Sports Quota', OTHER_OPTION, ''].includes(form.admission_route);
+  const collegeRef = useAppear(form.joined_college === 'yes');
 
   return (
     <>
       <SelectWithOther
-        label="Broad area of study" required options={fieldOptions}
+        name="field" label="Broad area of study" required options={fieldOptions}
         value={form.field} onChange={(v) => { update('field', v); markTouched('field'); }}
         otherValue={form.field_other} onOtherChange={(v) => update('field_other', v)}
         error={errorFor('field')}
@@ -803,6 +954,7 @@ function StepStudies({
         />
       </div>
 
+      <div ref={collegeRef}>
       {form.joined_college === 'yes' && (
         <>
           <div onBlur={() => markTouched('college_name')}>
@@ -818,7 +970,7 @@ function StepStudies({
           {errorFor('college_name') && <p className="field__error">{errorFor('college_name')}</p>}
 
           <SelectWithOther
-            label="Degree" required options={degreeOptions}
+            name="degree" label="Degree" required options={degreeOptions}
             value={form.degree} onChange={(v) => { update('degree', v); markTouched('degree'); }}
             otherValue={form.degree_other} onOtherChange={(v) => update('degree_other', v)}
             error={errorFor('degree')}
@@ -833,44 +985,10 @@ function StepStudies({
         </>
       )}
 
-      {/* Always shown, whichever way the question above was answered: plenty of
-          people read for CA alongside a degree, and plenty do it instead of
-          one. Presenting it as an either/or would misrepresent both. */}
-      <div className="opt-section opt-section--static">
-        <div className="opt-section__body">
-          <p className="opt-section__title">Doing CA, CS, CMA or ACCA? <span className="opt">optional</span></p>
-          <p className="opt-section__caption" style={{ marginBottom: 12 }}>
-            Many people do this alongside a degree, and many do it on its own — either way it belongs here.
-          </p>
-        <SelectWithOther
-          label="Qualification" optional options={professionalOptions}
-          value={form.professional_course}
-          onChange={(v) => { update('professional_course', v); markTouched('professional_course'); }}
-          otherValue={form.professional_course_other}
-          onOtherChange={(v) => update('professional_course_other', v)}
-          error={errorFor('professional_course')}
-        />
-        {form.professional_course && (
-          <SelectField
-            label="How far along?" value={form.professional_stage}
-            onChange={(v) => update('professional_stage', v)}
-            options={PROFESSIONAL_STAGES}
-            placeholder="Select stage"
-          />
-        )}
-        {form.professional_course && (
-          <Field
-            label="Articling / studying at" optional
-            hint="the firm or institute, if you'd like to name it"
-            value={form.professional_org} onChange={(v) => update('professional_org', v)}
-            onBlur={() => markTouched('professional_org')} error="" valid={false}
-          />
-        )}
-        </div>
       </div>
 
       <SelectWithOther
-        label="How did you get in?" required options={routeOptions}
+        name="admission_route" label="How did you get in?" required options={routeOptions}
         value={form.admission_route} onChange={(v) => { update('admission_route', v); markTouched('admission_route'); }}
         otherValue={form.admission_route_other} onOtherChange={(v) => update('admission_route_other', v)}
         error={errorFor('admission_route')}
@@ -909,33 +1027,125 @@ function StepStudies({
           &ldquo;Rank 10,000–25,000&rdquo;.
         </p>
       )}
+
+      {/* Always shown, whichever way the college question was answered: plenty
+          of people read for CA alongside a degree, and plenty do it instead of
+          one. Presenting it as an either/or would misrepresent both. It sits
+          after "how did you get in" so the college questions run together
+          rather than being interrupted by a qualification most people skip. */}
+      <div className="opt-section opt-section--static">
+        <div className="opt-section__body">
+          <p className="opt-section__title">Doing CA, CS, CMA or ACCA? <span className="opt">optional</span></p>
+          <p className="opt-section__caption" style={{ marginBottom: 12 }}>
+            Many people do this alongside a degree, and many do it on its own — either way it belongs here.
+          </p>
+        <SelectWithOther
+          name="professional_course" label="Qualification" optional options={professionalOptions}
+          value={form.professional_course}
+          onChange={(v) => { update('professional_course', v); markTouched('professional_course'); }}
+          otherValue={form.professional_course_other}
+          onOtherChange={(v) => update('professional_course_other', v)}
+          error={errorFor('professional_course')}
+        />
+        {form.professional_course && (
+          <SelectField
+            label="How far along?" value={form.professional_stage}
+            onChange={(v) => update('professional_stage', v)}
+            options={PROFESSIONAL_STAGES}
+            placeholder="Select stage"
+          />
+        )}
+        {form.professional_course && (
+          <Field
+            label="Articling / studying at" optional
+            hint="the firm or institute, if you'd like to name it"
+            value={form.professional_org} onChange={(v) => update('professional_org', v)}
+            onBlur={() => markTouched('professional_org')} error="" valid={false}
+          />
+        )}
+        </div>
+      </div>
     </>
   );
 }
 
+/**
+ * What they are doing now.
+ *
+ * This used to be an eleven-item dropdown standing on its own, and people were
+ * guessing at it: a class-of-2026 student picked "Higher Studies" for the UG
+ * degree they are still in the middle of. Since they have just described a
+ * course, the honest first question is whether they are still on it - one tap,
+ * and the school knows it has a current student. Only if they are not do we ask
+ * what they moved to, and then in the shape LinkedIn uses: what, where, which
+ * role.
+ */
 function StepNow({
-  form, update, markTouched, errorFor, isValid, statusOptions,
+  form, update, markTouched, errorFor, isValid,
   showHigherStudies, setShowHigherStudies, higherStudies, setHigherStudies,
   showWorkExperience, setShowWorkExperience, workExperience, setWorkExperience,
 }: StepProps & {
-  statusOptions: string[];
   showHigherStudies: boolean; setShowHigherStudies: (v: boolean) => void;
   higherStudies: HigherStudyEntry[]; setHigherStudies: React.Dispatch<React.SetStateAction<HigherStudyEntry[]>>;
   showWorkExperience: boolean; setShowWorkExperience: (v: boolean) => void;
   workExperience: WorkExperienceEntry[]; setWorkExperience: React.Dispatch<React.SetStateAction<WorkExperienceEntry[]>>;
 }) {
-  const status = resolveValue(form.current_status, form.current_status_other);
+  const asksStill = describesCourse(form);
+  const stillStudying = asksStill && form.still_studying === 'yes';
+  // One question at a time: "what are you doing now?" only makes sense once
+  // they have said they are no longer on the course above.
+  const asksNow = !asksStill || form.still_studying === 'no';
+  const course = [resolveValue(form.degree, form.degree_other), form.professional_course]
+    .filter(Boolean).join(' / ');
+  const choice = NOW_CHOICES.find((c) => c.key === form.now_choice);
+  const nowRef = useAppear(asksNow && !!form.now_choice && form.now_choice !== 'break');
 
   return (
     <>
-      <SelectWithOther
-        label="What are you up to now?" required options={statusOptions}
-        value={form.current_status} onChange={(v) => { update('current_status', v); markTouched('current_status'); }}
-        otherValue={form.current_status_other} onOtherChange={(v) => update('current_status_other', v)}
-        error={errorFor('current_status')}
-      />
+      {asksStill && (
+        <div className="field" data-field="still_studying">
+          <label>Are you still doing {course || 'this'}? <span className="req" aria-hidden> *</span></label>
+          <Chips
+            options={['Yes', 'No']}
+            value={form.still_studying === 'yes' ? 'Yes' : form.still_studying === 'no' ? 'No' : ''}
+            onChange={(v) => { update('still_studying', v === 'Yes' ? 'yes' : 'no'); markTouched('still_studying'); }}
+          />
+          <p className="hint" style={{ display: 'block', margin: '6px 0 0' }}>
+            Yes tells the school you are a current student, and juniors see it that way too.
+          </p>
+          {errorFor('still_studying') && (
+            <p className="field__error" style={{ position: 'static', marginTop: 6 }}>{errorFor('still_studying')}</p>
+          )}
+        </div>
+      )}
 
-      {isInProgressStatus(status) && (
+      {asksNow && (
+        <div className="field" data-field="now_choice">
+          <label>What are you doing now? <span className="req" aria-hidden> *</span></label>
+          <Chips
+            options={NOW_CHOICES.map((c) => c.label)}
+            value={choice?.label ?? ''}
+            onChange={(v) => {
+              update('now_choice', NOW_CHOICES.find((c) => c.label === v)?.key ?? '');
+              markTouched('now_choice');
+            }}
+          />
+          {errorFor('now_choice') && (
+            <p className="field__error" style={{ position: 'static', marginTop: 6 }}>{errorFor('now_choice')}</p>
+          )}
+          {form.now_choice === 'other' && (
+            <div style={{ marginTop: 12 }}>
+              <Field
+                label="Tell us in a few words" value={form.current_status_other}
+                onChange={(v) => update('current_status_other', v)}
+                onBlur={() => markTouched('now_choice')} error="" valid={false}
+              />
+            </div>
+          )}
+        </div>
+      )}
+
+      {isInProgressStatus(statusFromForm(form)) && (
         <Field
           label="Expected to finish in" optional type="number" hint="year"
           min={CURRENT_YEAR - 10} max={CURRENT_YEAR + 10}
@@ -945,23 +1155,31 @@ function StepNow({
         />
       )}
 
-      <div className="two-col">
-        <EntitySearchField
-          kind="organization" label="Currently at"
-          hint="company or institute, optional"
-          value={form.currently_at}
-          onChange={(v) => update('currently_at', v)}
-          onSelect={(hit) => update('org_pick', toPick(hit))}
-        />
-        <Field
-          label="Role / Designation" optional
-          value={form.designation} onChange={(v) => update('designation', v)}
-          onBlur={() => markTouched('designation')} error="" valid={false}
-        />
-      </div>
+      {asksNow && !!form.now_choice && form.now_choice !== 'break' && (
+        <div className="two-col" ref={nowRef}>
+          <EntitySearchField
+            kind="organization"
+            label={form.now_choice === 'working' ? 'Where do you work?' : 'Where?'}
+            hint="company or institute, optional"
+            value={form.currently_at}
+            onChange={(v) => update('currently_at', v)}
+            onSelect={(hit) => update('org_pick', toPick(hit))}
+          />
+          <Field
+            label={form.now_choice === 'working' ? 'Your role' : 'Role / Title'} optional
+            value={form.designation} onChange={(v) => update('designation', v)}
+            onBlur={() => markTouched('designation')} error="" valid={false}
+          />
+        </div>
+      )}
+
+      <p className="form-note">
+        Been somewhere before this? Add it below if you like — or leave it, and add it
+        from your profile whenever you have a minute.
+      </p>
 
       <OptionalSection
-        title="Higher studies" caption="PG, PhD, diploma — add as many as you like"
+        title="Courses before this" caption="PG, PhD, diploma — optional, you can add these later"
         open={showHigherStudies} onToggle={setShowHigherStudies}
       >
         {higherStudies.map((entry, i) => (
@@ -993,7 +1211,7 @@ function StepNow({
       </OptionalSection>
 
       <OptionalSection
-        title="Work experience" caption="like a LinkedIn timeline"
+        title="Jobs before this" caption="company, role, years — optional"
         open={showWorkExperience} onToggle={setShowWorkExperience}
       >
         {workExperience.map((entry, i) => (
@@ -1130,7 +1348,7 @@ function StepFinish({ form, update, markTouched, errorFor, isValid }: StepProps)
       </div>
 
       <Field
-        label="LinkedIn" optional type="url" autoComplete="url" hint="shown publicly if you add it"
+        name="linkedin_url" label="LinkedIn" optional type="url" autoComplete="url" hint="shown publicly if you add it"
         value={form.linkedin_url} onChange={(v) => update('linkedin_url', v)}
         onBlur={() => markTouched('linkedin_url')}
         error={errorFor('linkedin_url')} valid={isValid('linkedin_url')}
@@ -1157,10 +1375,12 @@ function Req() { return <span className="req" aria-hidden> *</span>; }
 function Optional() { return <span className="opt">optional</span>; }
 
 function Field({
-  label, hint, value, onChange, onBlur, error, valid,
+  name, label, hint, value, onChange, onBlur, error, valid,
   type = 'text', required, optional, autoFocus, min, max, step, inputMode, revealable,
   autoComplete,
 }: {
+  /** The FormState key, so "fix this field" can scroll to exactly this one. */
+  name?: FieldKey;
   label: string; hint?: string; value: string;
   onChange: (v: string) => void; onBlur: () => void;
   error: string; valid: boolean;
@@ -1177,7 +1397,10 @@ function Field({
   const effectiveType = revealable && revealed ? 'text' : type;
 
   return (
-    <div className={`f-field${active ? ' f-field--active' : ''}${error ? ' f-field--invalid' : ''}${valid ? ' f-field--valid' : ''}`}>
+    <div
+      className={`f-field${active ? ' f-field--active' : ''}${error ? ' f-field--invalid' : ''}${valid ? ' f-field--valid' : ''}`}
+      data-field={name}
+    >
       <input
         id={id} type={effectiveType} value={value}
         onChange={(e) => onChange(e.target.value)}
@@ -1210,13 +1433,14 @@ function Field({
   );
 }
 
-function SelectField({ label, value, onChange, options, placeholder }: {
+function SelectField({ name, label, value, onChange, options, placeholder }: {
+  name?: FieldKey;
   label: string; value: string; onChange: (v: string) => void; options: string[];
   placeholder?: string;
 }) {
   const id = `f-${label.replace(/\s+/g, '-').toLowerCase()}`;
   return (
-    <div className="f-field f-field--active">
+    <div className="f-field f-field--active" data-field={name}>
       <select id={id} value={value} onChange={(e) => onChange(e.target.value)}>
         {placeholder && <option value="">{placeholder}</option>}
         {options.map((o) => <option key={o} value={o}>{o}</option>)}
@@ -1227,15 +1451,17 @@ function SelectField({ label, value, onChange, options, placeholder }: {
 }
 
 function SelectWithOther({
-  label, options, value, onChange, otherValue, onOtherChange, error, required, optional,
+  name, label, options, value, onChange, otherValue, onOtherChange, error, required, optional,
 }: {
+  /** The FormState key, so "fix this field" can scroll to exactly this one. */
+  name?: FieldKey;
   label: string; options: string[]; value: string; onChange: (v: string) => void;
   otherValue: string; onOtherChange: (v: string) => void; error: string;
   required?: boolean; optional?: boolean;
 }) {
   const id = `f-${label.replace(/\s+/g, '-').toLowerCase()}`;
   return (
-    <div className="field">
+    <div className="field" data-field={name}>
       <div className={`f-field f-field--active${error ? ' f-field--invalid' : ''}`}>
         <select id={id} value={value} onChange={(e) => onChange(e.target.value)} aria-required={required} aria-invalid={!!error}>
           <option value="" disabled hidden>Select…</option>

@@ -154,6 +154,7 @@ export const ADMISSION_ROUTES = [
 export const STATUSES = [
   'Studying UG',
   'Studying PG',
+  'Studying (CA / CS / CMA)',
   'Higher Studies',
   'Higher Studies Abroad',
   'Working',
@@ -167,8 +168,8 @@ export const STATUSES = [
 
 /** Statuses that imply the person is still studying, so we ask for a finish year. */
 const IN_PROGRESS_STATUSES = new Set([
-  'Studying UG', 'Studying PG', 'Higher Studies', 'Higher Studies Abroad',
-  'Interning', 'Preparing (Competitive Exams)',
+  'Studying UG', 'Studying PG', 'Studying (CA / CS / CMA)', 'Higher Studies',
+  'Higher Studies Abroad', 'Interning', 'Preparing (Competitive Exams)',
 ]);
 
 export function isInProgressStatus(status: string | null | undefined): boolean {
@@ -177,6 +178,38 @@ export function isInProgressStatus(status: string | null | undefined): boolean {
   // Free-typed "Other" values still get the courtesy of the same heuristic.
   const l = s.toLowerCase();
   return l.includes('studying') || l.includes('higher studies') || l.includes('preparing');
+}
+
+/**
+ * "What are you doing now?", for someone who has finished - or never started -
+ * the course they just described.
+ *
+ * Registration used to ask this as an eleven-item dropdown, and people were
+ * plainly guessing: a class-of-2026 student picked "Higher Studies" for the UG
+ * degree they are in the middle of. These are the few answers that actually
+ * differ, and each maps onto a value STATUSES already had, so the directory
+ * filter, the cards and the admin queue carry on unchanged.
+ */
+export const NOW_CHOICES = [
+  { key: 'working', label: 'Working', status: 'Working' },
+  { key: 'studies', label: 'Higher studies', status: 'Higher Studies' },
+  { key: 'preparing', label: 'Preparing for exams', status: 'Preparing (Competitive Exams)' },
+  { key: 'break', label: 'Taking a break', status: 'On Break' },
+  { key: 'other', label: 'Something else', status: OTHER_OPTION },
+] as const;
+
+export type NowChoiceKey = (typeof NOW_CHOICES)[number]['key'];
+
+/** The status of someone still on the course they described a moment ago. */
+export function statusForCourse(joinedCollege: boolean, professionalCourse: string | null | undefined): string {
+  if (joinedCollege) return 'Studying UG';
+  if ((professionalCourse ?? '').trim()) return 'Studying (CA / CS / CMA)';
+  return 'Studying UG';
+}
+
+/** The status behind a "what are you doing now" answer. */
+export function statusForNowChoice(key: string): string {
+  return NOW_CHOICES.find((c) => c.key === key)?.status ?? '';
 }
 
 export const COUNTRY_CODES = ['+91', '+1', '+44', '+61', '+971', '+65', '+49', '+33', '+81', '+86'];
