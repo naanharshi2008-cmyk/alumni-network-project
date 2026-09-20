@@ -115,13 +115,13 @@ export const FIELD_LABELS: Record<string, string> = {
   message_1: 'Advice', message_2: 'Advice (second)', college_thoughts: 'College experience', linkedin_url: 'LinkedIn', photo_url: 'Photo',
 };
 
-export type TypedNameGroup = { key: string; display: string; alumniIds: string[] };
+export type TypedNameGroup = { key: string; display: string; alumniIds: string[]; waitingSince?: string };
 
 /* ─────────────────────────────────────────────────────────────────────────
    Helpers
 ───────────────────────────────────────────────────────────────────────── */
-export function groupByTypedName(rows: any[], column: string) {
-  const groups: Record<string, { display: string; alumniIds: string[] }> = {};
+export function groupByTypedName(rows: any[], column: string): TypedNameGroup[] {
+  const groups: Record<string, { display: string; alumniIds: string[]; waitingSince?: string }> = {};
   for (const row of rows) {
     const raw = (row[column] ?? '').trim();
     if (!raw) continue;
@@ -129,9 +129,14 @@ export function groupByTypedName(rows: any[], column: string) {
     const key = instKey(raw) || raw.toLowerCase();
     if (!groups[key]) groups[key] = { display: raw, alumniIds: [] };
     groups[key].alumniIds.push(row.id);
+    // The group has waited as long as its oldest member.
+    const at = row.created_at as string | undefined;
+    if (at && (!groups[key].waitingSince || at < groups[key].waitingSince!)) {
+      groups[key].waitingSince = at;
+    }
   }
   return Object.entries(groups)
-    .map(([key, v]) => ({ key, display: v.display, alumniIds: v.alumniIds }))
+    .map(([key, v]) => ({ key, display: v.display, alumniIds: v.alumniIds, waitingSince: v.waitingSince }))
     .sort((a, b) => b.alumniIds.length - a.alumniIds.length);
 }
 
@@ -270,6 +275,41 @@ export async function loadPeople(query: string, page: number): Promise<PeopleDat
     total: count ?? rows.length,
     truncated: (count ?? 0) > from + rows.length,
     error: error?.message ?? '',
+  };
+}
+
+export type ValueBenchData = {
+  approvedOptions: Record<string, string[]>;
+  optionRows: OptionRow[];
+  people: { id: string }[];
+  error: string;
+};
+
+/**
+ * What the merge tool needs: the option lists, and every profile's six option
+ * columns so it can say how many people are on each spelling.
+ *
+ * Six columns rather than select('*'): counting how many profiles say "BTech"
+ * does not need anybody's phone number.
+ */
+export async function loadValueBench(): Promise<ValueBenchData> {
+  const [optRes, peopleRes] = await Promise.all([
+    supabase.from('field_options').select('id, category, value, status, canonical_value, created_at')
+      .order('created_at', { ascending: true }),
+    supabase.from('alumni')
+      .select('id, stream, degree, admission_route, current_status, field, professional_course'),
+  ]);
+
+  const opts = (optRes.data as OptionRow[]) ?? [];
+  const approved: Record<string, string[]> = {};
+  for (const o of opts.filter((o) => o.status === 'approved' && !o.canonical_value)) {
+    (approved[o.category] ??= []).push(o.value);
+  }
+  return {
+    approvedOptions: approved,
+    optionRows: opts,
+    people: (peopleRes.data as { id: string }[]) ?? [],
+    error: optRes.error?.message ?? peopleRes.error?.message ?? '',
   };
 }
 

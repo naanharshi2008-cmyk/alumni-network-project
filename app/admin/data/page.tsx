@@ -2,25 +2,22 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  loadDataArea, loadReview, type AliasRow, type AlumniRow, type CollegeInfoRow,
-  type PendingOption, type TypedNameGroup,
+  loadDataArea, loadValueBench, type AliasRow, type CollegeInfoRow,
 } from '../adminData';
 import { useAdminShell } from '../shell';
 import ValueMergeTab, { type OptionRow } from '../ValueMerge';
 import { CollegeInfoCard, FindInstitute } from '../institutes';
-import { PendingOptionsTab } from '../options';
-import { UnmatchedEntityRow } from '../unmatched';
 import { EmptyCard, TabButton, TabIntro } from '../ui';
 
 /**
  * The cleanup bench.
  *
- * Nobody is waiting on any of this the way they wait on an approval, but it is
- * what keeps the directory coherent: one name per college, one spelling per
- * exam, and every typed name eventually attached to a real institute.
+ * Nobody is waiting on any of this the way they wait on an approval - the
+ * things that are waiting all live in Review now - but it is what keeps the
+ * directory coherent: one name per college, one spelling per exam.
  */
 
-type Bench = 'values' | 'colleges' | 'companies' | 'institutes';
+type Bench = 'values' | 'institutes';
 
 export default function DataPage() {
   const { refreshCounts } = useAdminShell();
@@ -29,29 +26,23 @@ export default function DataPage() {
   const [actionError, setActionError] = useState('');
   const [actionNote, setActionNote] = useState('');
 
-  const [pendingOptions, setPendingOptions] = useState<PendingOption[]>([]);
   const [approvedOptions, setApprovedOptions] = useState<Record<string, string[]>>({});
   const [optionRows, setOptionRows] = useState<OptionRow[]>([]);
-  const [people, setPeople] = useState<AlumniRow[]>([]);
-  const [unmatchedColleges, setUnmatchedColleges] = useState<TypedNameGroup[]>([]);
-  const [unmatchedCompanies, setUnmatchedCompanies] = useState<TypedNameGroup[]>([]);
+  const [people, setPeople] = useState<{ id: string }[]>([]);
   const [collegesInfo, setCollegesInfo] = useState<CollegeInfoRow[]>([]);
   const [aliases, setAliases] = useState<Record<string, AliasRow[]>>({});
 
   const load = useCallback(async () => {
     setLoading(true);
-    // The merge tool counts how many profiles use each value, so it needs the
-    // people as well as the lists.
-    const [review, area] = await Promise.all([loadReview(), loadDataArea()]);
-    setPendingOptions(review.options);
-    setApprovedOptions(review.approvedOptions);
-    setOptionRows(review.optionRows);
-    setPeople([...review.pending, ...review.pendingEdits]);
-    setUnmatchedColleges(review.unmatchedColleges);
-    setUnmatchedCompanies(review.unmatchedCompanies);
+    // The merge tool counts how many profiles are on each spelling, so it
+    // needs everyone's option columns as well as the lists.
+    const [values, area] = await Promise.all([loadValueBench(), loadDataArea()]);
+    setApprovedOptions(values.approvedOptions);
+    setOptionRows(values.optionRows);
+    setPeople(values.people);
     setCollegesInfo(area.colleges);
     setAliases(area.aliases);
-    if (area.error) setActionError('Could not load the colleges: ' + area.error);
+    if (area.error || values.error) setActionError('Could not load everything: ' + (area.error || values.error));
     setLoading(false);
     refreshCounts();
   }, [refreshCounts]);
@@ -64,11 +55,7 @@ export default function DataPage() {
     <>
       <div className="chips" style={{ marginBottom: 24 }}>
         <TabButton active={bench === 'values'} onClick={() => setBench('values')}
-          label="🏷 Values & options" count={pendingOptions.length} />
-        <TabButton active={bench === 'colleges'} onClick={() => setBench('colleges')}
-          label="🏫 Unmatched Colleges" count={unmatchedColleges.length} />
-        <TabButton active={bench === 'companies'} onClick={() => setBench('companies')}
-          label="🏢 Unmatched Companies" count={unmatchedCompanies.length} />
+          label="🏷 Values & spellings" count={Object.keys(approvedOptions).length} />
         <TabButton active={bench === 'institutes'} onClick={() => setBench('institutes')}
           label="🏛 Institutes" count={collegesInfo.length} />
       </div>
@@ -78,16 +65,6 @@ export default function DataPage() {
 
       {bench === 'values' && (
         <>
-          <PendingOptionsTab
-            pendingOptions={pendingOptions}
-            approvedOptions={approvedOptions}
-            onResolved={(id) => setPendingOptions((prev) => prev.filter((o) => o.id !== id))}
-            onApprovedValue={(category, value) =>
-              setApprovedOptions((prev) => ({ ...prev, [category]: [...(prev[category] ?? []), value] }))
-            }
-            setError={setActionError}
-          />
-
           <TabIntro title="One name per thing">
             The same exam or degree often arrives spelt three different ways, and the
             directory then offers all three as if they were different things. Tick the
@@ -104,54 +81,6 @@ export default function DataPage() {
             setNote={setActionNote}
           />
         </>
-      )}
-
-      {bench === 'colleges' && (
-        <div className="stagger">
-          <TabIntro title="Colleges we didn't recognise">
-            These students typed a college name that didn&apos;t match our list — usually
-            just a spelling difference. Fix the spelling once here and everyone who typed
-            it gets linked to the same college. If the name is already right, save it as-is
-            to add it to the list.
-          </TabIntro>
-          {unmatchedColleges.length === 0 ? (
-            <EmptyCard emoji="🏫" text="No unmatched colleges right now — nice and tidy." />
-          ) : (
-            unmatchedColleges.map((group) => (
-              <UnmatchedEntityRow
-                key={group.key}
-                kind="colleges"
-                groupKey={group.key}
-                display={group.display}
-                alumniIds={group.alumniIds}
-                onResolved={(k) => setUnmatchedColleges((prev) => prev.filter((g) => g.key !== k))}
-              />
-            ))
-          )}
-        </div>
-      )}
-
-      {bench === 'companies' && (
-        <div className="stagger">
-          <TabIntro title="Employers we didn't recognise">
-            Same idea as colleges: someone typed an employer that isn&apos;t on our list yet.
-            Correct it once and every student who typed it is linked to the same record.
-          </TabIntro>
-          {unmatchedCompanies.length === 0 ? (
-            <EmptyCard emoji="🏢" text="Every organisation an alumnus typed is already on the list." />
-          ) : (
-            unmatchedCompanies.map((group) => (
-              <UnmatchedEntityRow
-                key={group.key}
-                kind="organizations"
-                groupKey={group.key}
-                display={group.display}
-                alumniIds={group.alumniIds}
-                onResolved={(k) => setUnmatchedCompanies((prev) => prev.filter((g) => g.key !== k))}
-              />
-            ))
-          )}
-        </div>
       )}
 
       {bench === 'institutes' && (
