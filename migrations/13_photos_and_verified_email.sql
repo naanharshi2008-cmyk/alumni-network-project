@@ -78,9 +78,18 @@ GRANT SELECT ON public.college_photos TO anon, authenticated;
 -- and without the grant a student cannot flip their own row to 'approved'.
 GRANT INSERT, DELETE ON public.college_photos TO authenticated;
 
+-- Two policies rather than one, because a policy's expression runs with the
+-- caller's own rights: anonymous visitors have no SELECT on `alumni` at all
+-- (migration 02 revoked it), so a single policy that mentions that table makes
+-- the whole gallery unreadable to the public with "permission denied".
 DROP POLICY IF EXISTS "Approved photos are public" ON public.college_photos;
 CREATE POLICY "Approved photos are public" ON public.college_photos
-  FOR SELECT TO anon, authenticated
+  FOR SELECT TO anon
+  USING (status = 'approved');
+
+DROP POLICY IF EXISTS "Signed in: approved, own, or admin" ON public.college_photos;
+CREATE POLICY "Signed in: approved, own, or admin" ON public.college_photos
+  FOR SELECT TO authenticated
   USING (
     status = 'approved'
     OR public.is_school_admin()
