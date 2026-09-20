@@ -2142,3 +2142,18 @@ a.xcollege__thumb:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--rin
   margin-top: 12px; font-size: 0.9rem; cursor: pointer;
 }
 .seed-consent input { width: 16px; height: 16px; margin: 3px 0 0; flex: none; accent-color: var(--gold); }
+
+/* Staged values that reach for a column the profile editor never sets. */
+.diff-unknown {
+  background: var(--danger-bg); border: 1px solid var(--danger-border); color: var(--danger-ink);
+  border-radius: var(--r-sm); padding: 12px 14px; margin-bottom: 14px;
+}
+.diff-unknown__head { margin: 0 0 8px; font-size: 0.86rem; font-weight: 600; }
+.diff-unknown ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.diff-unknown li { display: flex; gap: 8px; font-size: 0.85rem; flex-wrap: wrap; }
+.diff-unknown code {
+  font-size: 0.82rem; padding: 1px 6px; border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+}
+.diff-unknown li span { opacity: 0.85; overflow-wrap: anywhere; }
+.diff-unknown__note { margin: 8px 0 0; font-size: 0.8rem; opacity: 0.85; }

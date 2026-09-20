@@ -11,6 +11,7 @@ import { CATEGORIES } from '../../lib/types';
 import Crest from '../../lib/Crest';
 import ValueMergeTab, { type OptionRow } from './ValueMerge';
 import AddAlumnus from './AddAlumnus';
+import { splitStaged } from './editFields';
 
 const ADMIN_LOGIN_DOMAIN = 'veveaham-admin.local';
 const LAST_VISIT_KEY = 'veveaham.admin.lastVisit';
@@ -493,7 +494,15 @@ export default function AdminPage() {
     if (!staged) { setActionError('Nothing staged for this person.'); return; }
 
     // Publish the staged values into the live columns the directory reads.
-    const { higher_studies, work_experience, ...columns } = staged;
+    //
+    // Only the fields the profile editor can actually set. The blob is written
+    // by the alumnus and this update runs as the school, so spreading it whole
+    // published anything they cared to put in it - see editFields.ts.
+    const { higher_studies, work_experience } = staged;
+    const { columns, unknown } = splitStaged(staged);
+    if (unknown.length) {
+      console.warn('Staged keys refused at publish:', unknown.map(([k]) => k));
+    }
     const { data: published, error } = await supabase.from('alumni')
       // last_updated sits AFTER the spread on purpose: publishing is the
       // moment the public content changes, so publish time always wins - even
@@ -534,7 +543,10 @@ export default function AdminPage() {
         }
       }
     }
-    setActionNote(`Published ${person.full_name}'s changes — the directory shows them now.`);
+    setActionNote(
+      `Published ${person.full_name}'s changes — the directory shows them now.` +
+      (unknown.length ? ` ${unknown.length} unrecognised value(s) were not published.` : ''),
+    );
     setPendingEdits((prev) => prev.filter((p) => p.id !== person.id));
   }
 
@@ -1395,6 +1407,10 @@ function PersonDetails({ person, higherStudies, workExperience }: {
 /** Side-by-side "what's published" vs "what they want to change it to". */
 function EditDiff({ person }: { person: AlumniRow }) {
   const staged = person.pending_changes ?? {};
+  // Anything the profile editor never sets. It is dropped at publish time, but
+  // silence would be worse than the old bug: the school should see that
+  // something tried to reach a column nobody asked about.
+  const { unknown } = splitStaged(staged);
   const changed = Object.keys(FIELD_LABELS).filter((key) => {
     if (!(key in staged)) return false;
     const oldVal = (person as any)[key];
@@ -1403,11 +1419,29 @@ function EditDiff({ person }: { person: AlumniRow }) {
     return !(!oldVal && !newVal);
   });
 
-  if (changed.length === 0) {
+  if (changed.length === 0 && unknown.length === 0) {
     return <p className="subtitle" style={{ fontSize: '0.86rem' }}>No field changes — only timeline entries were edited.</p>;
   }
 
   return (
+    <>
+    {unknown.length > 0 && (
+      <div className="diff-unknown">
+        <p className="diff-unknown__head">Not recognised — these will not be published</p>
+        <ul>
+          {unknown.map(([key, value]) => (
+            <li key={key}><code>{key}</code> <span>{JSON.stringify(value)}</span></li>
+          ))}
+        </ul>
+        <p className="diff-unknown__note">
+          The profile editor never sets these, so nothing here reaches the directory.
+          If it keeps happening, tell whoever maintains the site.
+        </p>
+      </div>
+    )}
+    {changed.length === 0 ? (
+      <p className="subtitle" style={{ fontSize: '0.86rem' }}>No other field changes.</p>
+    ) : (
     <div className="diff-grid">
       <div className="diff-col diff-col--old">
         <p className="diff-col__title">Live on the directory now</p>
@@ -1428,6 +1462,8 @@ function EditDiff({ person }: { person: AlumniRow }) {
         ))}
       </div>
     </div>
+    )}
+    </>
   );
 }
 
