@@ -697,6 +697,7 @@ textarea { min-height: 84px; resize: vertical; }
 @keyframes shimmer { to { background-position: -200% 0; } }
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+@keyframes labelIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 @keyframes sheen { to { background-position: 200% center; } }
 @keyframes splash {
   0% { transform: scale(0) rotate(40deg); opacity: 0; }
@@ -899,24 +900,7 @@ textarea { min-height: 84px; resize: vertical; }
    ========================================================================== */
 .chip__sub { opacity: 0.85; font-size: 0.8em; margin-left: 6px; }
 
-.senior-mini {
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--r-sm); padding: 12px 14px;
-}
-.senior-mini__timeline {
-  margin-top: 8px; display: flex; flex-direction: column; gap: 3px;
-  font-size: 0.79rem; color: var(--text-muted);
-}
-.senior-mini__quote {
-  margin: 8px 0 0; font-size: 0.83rem; color: var(--text-muted);
-  font-style: italic; line-height: 1.5;
-  border-left: 2px solid var(--border-strong); padding-left: 10px;
-}
 
-/* ==========================================================================
-   Profile modal: study / work timelines
-   ========================================================================== */
-.timeline { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 14px; }
 .timeline__item { display: flex; gap: 12px; align-items: flex-start; position: relative; }
 /* Connecting line between consecutive entries. */
 .timeline__item:not(:last-child)::before {
@@ -1380,10 +1364,6 @@ textarea { min-height: 84px; resize: vertical; }
   padding: 12px 14px; border-radius: var(--r-sm);
   border: 1px dashed var(--border-strong);
 }
-.senior-mini__more {
-  margin-top: 8px; font-size: 0.8rem;
-}
-
 /* ═══ Professional qualification (CA & co.) ═══
    Its own colour so a dual degree + CA card reads as two facts, not one. */
 .badge-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
@@ -1658,16 +1638,27 @@ textarea { min-height: 84px; resize: vertical; }
   background: var(--surface); border: 1px solid rgba(255, 255, 255, 0.14);
   box-shadow: var(--shadow-lg);
   animation: float 7s ease-in-out infinite;
-  transition: scale 0.25s var(--ease), border-color 0.25s var(--ease);
+  transition: scale 0.25s var(--ease), border-color 0.25s var(--ease), opacity 0.45s ease;
 }
+/* Mid-swap: the card fades out, its person changes, and it fades back in. */
+.face-card.is-fading, .quote-card.is-fading { opacity: 0; }
+.quote-card { transition: scale 0.25s var(--ease), opacity 0.45s ease; }
 .face-card:hover { scale: 1.045; z-index: 4; border-color: rgba(255, 255, 255, 0.3); }
 .face-card:focus-visible { outline: none; box-shadow: 0 0 0 4px var(--ring), var(--shadow-lg); z-index: 4; }
 .face-card img { display: block; width: 100%; height: 100%; object-fit: cover; }
-.face-card__shade { position: absolute; inset: 0; background: linear-gradient(180deg, transparent 42%, rgba(6, 6, 8, 0.9) 100%); }
-.face-card__text { position: absolute; left: 13px; right: 38px; bottom: 12px; display: flex; flex-direction: column; gap: 1px; }
-.face-card__college { color: #fff; font-weight: 700; font-size: 0.9rem; line-height: 1.2; overflow-wrap: anywhere; }
+/* Starts lower and stays lighter for longer than it used to: the face is the
+   point of the card, and the label was sitting on top of it. */
+.face-card__shade {
+  position: absolute; inset: 0;
+  background: linear-gradient(180deg, transparent 54%, rgba(6, 6, 8, 0.58) 74%, rgba(6, 6, 8, 0.93) 100%);
+}
+.face-card__text { position: absolute; left: 11px; right: 34px; bottom: 10px; display: flex; flex-direction: column; gap: 1px; }
+.face-card__college {
+  color: #fff; font-weight: 700; font-size: 0.78rem; line-height: 1.22; overflow-wrap: anywhere;
+  animation: labelIn 0.45s var(--ease);
+}
 .face-card__path {
-  color: rgba(255, 255, 255, 0.72); font-size: 0.74rem; line-height: 1.3;
+  color: rgba(255, 255, 255, 0.78); font-size: 0.68rem; line-height: 1.3;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
 .face-card__check {
@@ -1675,17 +1666,23 @@ textarea { min-height: 84px; resize: vertical; }
   display: grid; place-items: center; color: #05140d; background: var(--emerald);
   box-shadow: 0 0 0 3px rgba(6, 6, 8, 0.55);
 }
-/* Placed so the quote card only ever covers corners, never a card's label. */
-.face-card--0 { top: 0; left: 4%; rotate: -6deg; }
-.face-card--1 { top: 16%; right: 0; rotate: 7deg; animation-delay: -2.3s; }
-.face-card--2 { bottom: 5%; left: 0; rotate: -7deg; animation-delay: -4.1s; }
-.face-card--3 { bottom: 0; right: 8%; rotate: 6deg; animation-delay: -5.4s; }
+/* An arc around the quote rather than four corners, and the far pair sits a
+   little smaller and dimmer so the group reads as depth instead of a grid.
+   Placed so the quote card only ever covers corners, never a card's label. */
+.face-card--0 { top: 0; left: 2%; rotate: -7deg; scale: 0.95; filter: brightness(0.9); }
+.face-card--1 { top: 10%; right: 0; rotate: 7deg; animation-delay: -2.3s; }
+.face-card--2 { bottom: 4%; left: 0; rotate: -5deg; animation-delay: -4.1s; }
+.face-card--3 { bottom: 0; right: 4%; rotate: 6deg; scale: 0.95; filter: brightness(0.9); animation-delay: -5.4s; }
+.face-card--0:hover, .face-card--3:hover { filter: none; }
 /* Two faces read better on a diagonal than side by side above the quote. */
 .collage--n2 .face-card--1 { top: auto; bottom: 1%; right: 5%; }
 
 .quote-card {
-  position: absolute; left: 50%; top: 48%; translate: -50% -50%; rotate: 7deg; z-index: 3;
-  width: 228px; padding: 20px 20px 18px; border-radius: 24px;
+  /* 47%, not 50%: the card is rotated, so its corners reach further than its
+     width suggests, and at 50% the top-right card's label sat under one. */
+  position: absolute; left: 48%; top: 48%; translate: -50% -50%; rotate: 7deg; z-index: 3;
+  /* Narrow enough to sit between the cards without covering their labels. */
+  width: 196px; padding: 18px 18px 16px; border-radius: 24px;
   display: flex; flex-direction: column; gap: 6px;
   color: var(--text); text-decoration: none;
   background: linear-gradient(var(--surface), var(--surface)) padding-box, var(--grad) border-box;
@@ -1700,7 +1697,11 @@ textarea { min-height: 84px; resize: vertical; }
   font-family: Georgia, 'Times New Roman', serif; font-size: 3.4rem; line-height: 0.8; height: 30px;
   background: var(--grad-text); -webkit-background-clip: text; background-clip: text; color: transparent;
 }
-.quote-card__text { font-family: var(--font-sora), sans-serif; font-size: 0.96rem; font-weight: 600; line-height: 1.45; }
+.quote-card__text {
+  font-family: var(--font-sora), sans-serif; font-size: 0.96rem; font-weight: 600; line-height: 1.45;
+  /* One unbroken word must not widen the card out over a face. */
+  overflow-wrap: anywhere;
+}
 .quote-card__rule { height: 1px; margin: 10px 0 4px; background: var(--border-strong); }
 .quote-card__who { color: var(--gold); font-weight: 700; font-size: 0.92rem; }
 .quote-card__where { color: var(--emerald); font-size: 0.8rem; }
@@ -1902,3 +1903,97 @@ textarea { min-height: 84px; resize: vertical; }
   .about__cta { flex-direction: row; flex-wrap: wrap; }
 }
 
+
+/* ═══ Directory: groups that fold, grids that grow ═══════════════════════
+   A batch header is now the control that opens it, so a long directory reads
+   as a list of years rather than one endless wall of cards. */
+.dgroup { margin-bottom: 14px; }
+.dgroup--open { margin-bottom: 36px; }
+.dgroup__head {
+  display: flex; align-items: center; gap: 12px; width: 100%;
+  padding: 12px 14px; margin-bottom: 4px;
+  background: transparent; border: 1px solid transparent; border-radius: var(--r-sm);
+  font: inherit; color: var(--text); text-align: left; cursor: pointer;
+  transition: background 0.18s var(--ease), border-color 0.18s var(--ease);
+}
+.dgroup__head:hover { background: rgba(255, 255, 255, 0.035); border-color: var(--border); }
+.dgroup__head:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--ring); }
+.dgroup__chev { color: var(--text-faint); font-size: 0.8rem; transition: rotate 0.2s var(--ease); }
+.dgroup--open .dgroup__chev { rotate: 180deg; }
+.dgroup__title {
+  font-family: var(--font-sora), sans-serif; font-size: 1.1rem; font-weight: 700; white-space: nowrap;
+  background: var(--grad-text); -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.dgroup__rule { flex: 1; height: 1px; background: var(--border); }
+.dgroup__count { font-size: 0.82rem; color: var(--text-faint); white-space: nowrap; }
+.dgroup__body { padding-top: 6px; }
+
+.show-more {
+  display: block; margin: 18px auto 0; padding: 11px 22px;
+  border-radius: var(--r-full); border: 1.5px solid var(--border-strong);
+  background: var(--surface-2); color: var(--text);
+  font: inherit; font-weight: 650; font-size: 0.88rem; cursor: pointer;
+  transition: border-color 0.2s var(--ease), transform 0.2s var(--ease);
+}
+.show-more:hover { border-color: var(--gold); transform: translateY(-2px); }
+.show-more:focus-visible { outline: none; box-shadow: 0 0 0 4px var(--ring); }
+.show-more__of { color: var(--text-faint); font-weight: 500; }
+
+/* ═══ Directory: one college, and who from here is there ═════════════════ */
+.xcollege {
+  display: flex; flex-direction: column; gap: 12px;
+  padding: 16px; margin-bottom: 14px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg);
+  transition: border-color 0.2s var(--ease);
+}
+.xcollege:hover { border-color: var(--border-strong); }
+.xcollege__top { display: flex; gap: 14px; align-items: flex-start; }
+.xcollege__thumb {
+  flex: 0 0 96px; height: 72px; display: block; overflow: hidden;
+  border-radius: var(--r-sm); background: var(--surface-2);
+}
+.xcollege__thumb img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.xcollege__initials {
+  display: grid; place-items: center; width: 100%; height: 100%; padding: 4px; text-align: center;
+  font-family: var(--font-sora), sans-serif; font-weight: 800; font-size: 1.3rem; letter-spacing: 0.02em;
+  color: rgba(11, 10, 12, 0.88); background: var(--grad);
+}
+.xcollege__head { flex: 1; min-width: 0; }
+.xcollege__name { margin: 0 0 3px; font-size: 1.05rem; line-height: 1.25; }
+.xcollege__place { margin: 0 0 8px; font-size: 0.83rem; color: var(--text-muted); }
+.xcollege__univ { color: var(--text-faint); }
+.xcollege__chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.xcollege__site { flex: none; }
+.xcollege__site .btn__inner { padding: 8px 15px; font-size: 0.8rem; }
+.xcollege__seniors { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* The faces are the answer to "who from my school is there?", so they sit on
+   the card rather than behind a control. */
+.senior-chip {
+  display: flex; align-items: center; gap: 9px; min-width: 0;
+  padding: 6px 14px 6px 6px; border-radius: var(--r-full);
+  background: var(--surface-2); border: 1px solid var(--border);
+  color: var(--text); font: inherit; text-align: left; cursor: pointer;
+  transition: border-color 0.18s var(--ease), transform 0.18s var(--ease), background 0.18s var(--ease);
+}
+.senior-chip:hover { border-color: var(--gold); transform: translateY(-2px); background: rgba(255, 255, 255, 0.05); }
+.senior-chip:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--ring); }
+.senior-chip__text { display: flex; flex-direction: column; min-width: 0; }
+.senior-chip__name { font-size: 0.86rem; font-weight: 650; line-height: 1.2; }
+.senior-chip__meta {
+  font-size: 0.74rem; color: var(--text-faint); max-width: 30ch;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.senior-chip--more { padding: 8px 16px; color: var(--text-muted); font-size: 0.84rem; font-weight: 650; }
+.avatar--xs { width: 34px; height: 34px; font-size: 0.8rem; flex: none; }
+
+@media (max-width: 560px) {
+  .xcollege__top { flex-wrap: wrap; }
+  .xcollege__thumb { flex-basis: 76px; height: 58px; }
+  .xcollege__site { width: 100%; }
+  .xcollege__site .btn__inner { width: 100%; }
+  .senior-chip { width: 100%; }
+  .senior-chip__meta { max-width: none; }
+  .dgroup__head { padding: 12px 6px; gap: 8px; }
+}

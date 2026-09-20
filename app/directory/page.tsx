@@ -7,6 +7,7 @@ import { fetchApprovedAlumni, fetchTimelines } from '../../lib/publicData';
 import { boardForSchool, officialSchoolName, publicRouteLabel, SCHOOLS } from '../../lib/options';
 import { formatRankBand, formatMarksBand, formatRankSpan, formatMonthYear } from '../../lib/text';
 import { buildSearchDoc, searchItems, type SearchDoc } from '../../lib/search';
+import { instituteInitials } from '../../lib/showcase';
 import {
   Alumnus,
   CATEGORIES,
@@ -25,6 +26,17 @@ import {
 } from '../../lib/types';
 
 type EnrichedAlumnus = { a: Alumnus; cat: ReturnType<typeof categorize> };
+
+/* How much of a long directory to render at once.
+   The directory is meant to be read, not scrolled past: a batch of forty
+   seniors rendered in full is a wall, and every card pulls a photo. So a group
+   shows a dozen and offers the rest, and only the newest batches start open -
+   older ones are a line you can click, which is also how a visitor finds "my
+   brother's year" without scrolling through everyone else's. */
+const PAGE = 12;
+const OPEN_GROUPS = 2;
+const COLLEGE_PAGE = 8;
+const SENIOR_PREVIEW = 6;
 type Timelines = { studies: Record<string, HigherStudy[]>; work: Record<string, WorkExperience[]> };
 
 /* ── Batch/year grouping helpers ─────────────────────────────────────────── */
@@ -511,48 +523,39 @@ export default function DirectoryPage() {
       ) : filtered.length === 0 ? (
         <Empty hasData={total > 0} />
       ) : lens === 'batch' ? (
-        Array.from(grouped.entries()).map(([year, items]) => (
-          <div key={year ?? 'unknown'} style={{ marginBottom: 40 }}>
-            <div className="year-head">
-              <h2 className="year-head__title">Class of {year ?? 'Unknown'}</h2>
-              <div className="year-head__rule" />
-              <span className="year-head__count">{items.length} alumni</span>
-            </div>
-
+        Array.from(grouped.entries()).map(([year, items], gi) => (
+          <GroupSection
+            key={year ?? 'unknown'}
+            title={`Class of ${year ?? 'Unknown'}`}
+            count={items.length}
+            defaultOpen={gi < OPEN_GROUPS}
+            signature={filterSignature}
+          >
             {groupBySchool(items).map(([school, schoolItems]) => (
               <div key={school} style={{ marginBottom: 24 }}>
                 <h3 className="school-head">
                   🏫 {school}
                   <span className="school-head__count">{schoolItems.length}</span>
                 </h3>
-                <div className="grid stagger" key={`${year}|${school}|${filterSignature}`}>
-                  {schoolItems.map((item, i) => (
-                    <Card
-                      key={item.a.id ?? `${item.a.full_name}-${i}`}
-                      item={item}
-                      onExpand={() => setExpanded(item)}
-                    />
-                  ))}
-                </div>
+                <PagedGrid
+                  items={schoolItems}
+                  signature={`${year}|${school}|${filterSignature}`}
+                  onExpand={setExpanded}
+                />
               </div>
             ))}
-          </div>
+          </GroupSection>
         ))
       ) : lens === 'college' ? (
         <>
-          <div className="stagger">
-            {explorerColleges.map((college) => (
-              <CollegeExplorerCard
-                key={college.key}
-                college={college}
-                timelines={timelines}
-                onOpen={(a) => {
-                  const hit = filtered.find((x) => x.a.id === a.id);
-                  if (hit) setExpanded(hit);
-                }}
-              />
-            ))}
-          </div>
+          <PagedColleges
+            colleges={explorerColleges}
+            signature={filterSignature}
+            onOpen={(a) => {
+              const hit = filtered.find((x) => x.a.id === a.id);
+              if (hit) setExpanded(hit);
+            }}
+          />
           {/* Said plainly rather than silently dropping them: someone reading
               for CA has no college, and a count that quietly shrinks would
               make the directory look like it lost people. */}
@@ -578,23 +581,16 @@ export default function DirectoryPage() {
           )}
         </>
       ) : (
-        lensGroups.map((g) => (
-          <div key={g.key} style={{ marginBottom: 36 }}>
-            <div className="group-head">
-              <h2 className="group-head__title">{g.title}</h2>
-              <div className="year-head__rule" />
-              <span className="year-head__count">{g.count} {g.count === 1 ? 'alum' : 'alumni'}</span>
-            </div>
-            <div className="grid stagger" key={`${g.key}|${filterSignature}`}>
-              {g.items.map((item, i) => (
-                <Card
-                  key={item.a.id ?? `${item.a.full_name}-${i}`}
-                  item={item}
-                  onExpand={() => setExpanded(item)}
-                />
-              ))}
-            </div>
-          </div>
+        lensGroups.map((g, gi) => (
+          <GroupSection
+            key={g.key}
+            title={g.title}
+            count={g.count}
+            defaultOpen={gi < OPEN_GROUPS}
+            signature={filterSignature}
+          >
+            <PagedGrid items={g.items} signature={`${g.key}|${filterSignature}`} onExpand={setExpanded} />
+          </GroupSection>
         ))
       )}
 
@@ -642,18 +638,121 @@ function FilterSelect({
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
+   Groups that fold, and grids that grow
+───────────────────────────────────────────────────────────────────────── */
+
+/** Show `step` at a time, and start over whenever the filters change. */
+function useShowMore(signature: string, step: number) {
+  const [shown, setShown] = useState(step);
+  useEffect(() => { setShown(step); }, [signature, step]);
+  return { shown, more: () => setShown((n) => n + step) };
+}
+
+function ShowMore({ remaining, total, step, one, many, onClick }: {
+  remaining: number; total: number; step: number; one: string; many: string; onClick: () => void;
+}) {
+  const next = Math.min(step, remaining);
+  return (
+    <button type="button" className="show-more" onClick={onClick}>
+      Show {next} more {next === 1 ? one : many} <span className="show-more__of">of {total}</span>
+    </button>
+  );
+}
+
+/**
+ * A batch, a route or an area, with a header you can fold.
+ *
+ * `signature` is the current search and filters: when those change the group
+ * returns to its default state, so narrowing to one batch does not leave you
+ * looking at a collapsed header.
+ */
+function GroupSection({ title, count, defaultOpen, signature, children }: {
+  title: string; count: number; defaultOpen: boolean; signature: string; children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  useEffect(() => { setOpen(defaultOpen); }, [defaultOpen, signature]);
+
+  return (
+    <section className={`dgroup${open ? ' dgroup--open' : ''}`}>
+      <button type="button" className="dgroup__head" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+        <span className="dgroup__chev" aria-hidden>▾</span>
+        <span className="dgroup__title">{title}</span>
+        <span className="dgroup__rule" aria-hidden />
+        <span className="dgroup__count">{count} {count === 1 ? 'alum' : 'alumni'}</span>
+      </button>
+      {open && <div className="dgroup__body">{children}</div>}
+    </section>
+  );
+}
+
+function PagedGrid({ items, signature, onExpand }: {
+  items: EnrichedAlumnus[]; signature: string; onExpand: (item: EnrichedAlumnus) => void;
+}) {
+  const { shown, more } = useShowMore(signature, PAGE);
+  return (
+    <>
+      {/* Keyed on the filters only: growing the list appends new cards without
+          remounting - and so re-animating - the ones already on screen. */}
+      <div className="grid stagger" key={signature}>
+        {items.slice(0, shown).map((item, i) => (
+          <Card
+            key={item.a.id ?? `${item.a.full_name}-${i}`}
+            item={item}
+            onExpand={() => onExpand(item)}
+          />
+        ))}
+      </div>
+      {items.length > shown && (
+        <ShowMore
+          remaining={items.length - shown} total={items.length} step={PAGE}
+          one="senior" many="seniors" onClick={more}
+        />
+      )}
+    </>
+  );
+}
+
+function PagedColleges({ colleges, signature, onOpen }: {
+  colleges: ExplorerCollege[]; signature: string; onOpen: (a: Alumnus) => void;
+}) {
+  const { shown, more } = useShowMore(signature, COLLEGE_PAGE);
+  return (
+    <>
+      <div className="stagger" key={signature}>
+        {colleges.slice(0, shown).map((college) => (
+          <CollegeExplorerCard key={college.key} college={college} onOpen={onOpen} />
+        ))}
+      </div>
+      {colleges.length > shown && (
+        <ShowMore
+          remaining={colleges.length - shown} total={colleges.length} step={COLLEGE_PAGE}
+          one="college" many="colleges" onClick={more}
+        />
+      )}
+    </>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
    College Explorer Card
 ───────────────────────────────────────────────────────────────────────── */
+/**
+ * One college, and the seniors who are there.
+ *
+ * It used to be a mostly empty panel with one full-width button at the bottom
+ * hiding everyone behind it, which answered the question ("who from my school
+ * is at this college?") only after a click. Now the faces are the card: a
+ * thumbnail, the facts as chips, and a row of seniors you can open straight
+ * into their profile.
+ */
 function CollegeExplorerCard({
   college,
-  timelines,
   onOpen,
 }: {
   college: ExplorerCollege;
-  timelines: Timelines;
   onOpen: (a: Alumnus) => void;
 }) {
-  const [showSeniors, setShowSeniors] = useState(false);
+  const [showAll, setShowAll] = useState(false);
   const det = college.details;
   const website = det?.website;
 
@@ -661,14 +760,14 @@ function CollegeExplorerCard({
   // "Charak Institute of Pharmacy, Choli Road, Mandleshwar Block, Khargone 451221".
   // The part before the first comma is the actual name; the rest belongs on the
   // location line. Measured at 375px, headings were running to 5-6 lines.
-  const [shortName, ...restOfName] = college.name.split(',');
-  const nameTail = restOfName.join(',').trim();
+  const [head, ...restOfName] = college.name.split(',');
+  const name = head.trim();
+  const place = [restOfName.join(',').trim(), det?.district, det?.state].filter(Boolean).join(', ');
 
-  // B2b - the span of ranks that got Veveaham students in here. This is the
-  // single most useful line on the page for a student choosing where to aim,
-  // and it is non-personal by construction: no rank is attributed to anyone.
-  // A wide span is the encouraging case - it shows the door is not only open
-  // to toppers - so it is worth showing even from a handful of data points.
+  // The span of ranks that got Veveaham students in here. This is the single
+  // most useful line on the page for a student choosing where to aim, and it is
+  // non-personal by construction: no rank is attributed to anyone. A wide span
+  // is the encouraging case - it shows the door is not only open to toppers.
   const rankSpan = formatRankSpan(college.seniors.map((x) => x.admission_rank));
   const routes = Array.from(
     new Set(
@@ -677,85 +776,87 @@ function CollegeExplorerCard({
         .filter(Boolean) as string[],
     ),
   );
+  const seniors = showAll ? college.seniors : college.seniors.slice(0, SENIOR_PREVIEW);
 
   return (
-    <div className="card" style={{ marginBottom: 16 }}>
-      {det?.banner_url && (
-        <img className="college-banner" src={det.banner_url} alt="" loading="lazy" />
-      )}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
-        <div style={{ flex: 1 }}>
-          <h3 style={{ margin: '0 0 4px 0', fontSize: '1.05rem' }} title={college.name}>
-            {shortName.trim()}
-          </h3>
-          <p className="subtitle" style={{ margin: 0, fontSize: '0.83rem' }}>
-            {[nameTail, det?.district, det?.state].filter(Boolean).join(', ')}
-            {det?.university_name && det.university_name !== college.name && (
-              <> · <span style={{ color: 'var(--text-faint)' }}>{det.university_name}</span></>
-            )}
-          </p>
+    <article className="xcollege">
+      <div className="xcollege__top">
+        <span className="xcollege__thumb" aria-hidden>
+          {det?.banner_url
+            ? <img src={det.banner_url} alt="" loading="lazy" decoding="async" />
+            : <span className="xcollege__initials">{instituteInitials(name)}</span>}
+        </span>
+
+        <div className="xcollege__head">
+          <h3 className="xcollege__name" title={college.name}>{name}</h3>
+          {(place || det?.university_name) && (
+            <p className="xcollege__place">
+              {place}
+              {det?.university_name && det.university_name !== college.name && (
+                <> · <span className="xcollege__univ">{det.university_name}</span></>
+              )}
+            </p>
+          )}
+          <div className="xcollege__chips">
+            <span className="badge badge--sm badge--ok">
+              {college.seniors.length} Veveaham {college.seniors.length === 1 ? 'senior' : 'seniors'}
+            </span>
+            {routes.map((r) => <span key={r} className="badge badge--sm">via {r}</span>)}
+            {rankSpan && <span className="badge badge--sm">ranks {rankSpan}</span>}
+            {det?.management_type && <span className="badge badge--sm">{det.management_type}</span>}
+            {det?.established_year && <span className="badge badge--sm">Est. {det.established_year}</span>}
+          </div>
         </div>
+
         {website && (
           <a
             href={website.startsWith('http') ? website : `https://${website}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="btn btn--ghost"
-            style={{ padding: '6px 14px', fontSize: '0.82rem', whiteSpace: 'nowrap' }}
+            className="btn btn--ghost xcollege__site"
           >
-            Know More ↗
+            <span className="btn__inner">Website ↗</span>
           </a>
         )}
       </div>
 
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
-        {det?.management_type && <span className="badge badge--sm">{det.management_type}</span>}
-        {det?.established_year && <span className="badge badge--sm">Est. {det.established_year}</span>}
-        <span className="badge badge--sm badge--ok">
-          {college.seniors.length} Veveaham {college.seniors.length === 1 ? 'senior' : 'seniors'} here
-        </span>
-      </div>
+      {det?.description && <p className="college-desc">{det.description}</p>}
 
-      {det?.description && (
-        <p className="college-desc">{det.description}</p>
-      )}
+      <div className="xcollege__seniors">
+        {seniors.map((a, i) => (
+          <button
+            type="button"
+            key={a.id ?? `${a.full_name}-${i}`}
+            className="senior-chip"
+            onClick={() => onOpen(a)}
+          >
+            <span className="avatar avatar--xs" aria-hidden>
+              {a.show_photo && a.photo_url
+                ? <img src={a.photo_url} alt="" loading="lazy" decoding="async" width={34} height={34} />
+                : initialsOf(a.full_name)}
+            </span>
+            <span className="senior-chip__text">
+              <span className="senior-chip__name">{a.full_name}</span>
+              <span className="senior-chip__meta">
+                {[a.class_of ? `Class of ${a.class_of}` : null, a.degree, publicRouteLabel(a.admission_route)]
+                  .filter(Boolean).join(' · ')}
+              </span>
+            </span>
+          </button>
+        ))}
 
-      {(rankSpan || routes.length > 0) && (
-        <p className="college-span">
-          {routes.length > 0 && (
-            <>Seniors got in through <strong>{routes.join(', ')}</strong></>
-          )}
-          {rankSpan && routes.length > 0 && ', with '}
-          {rankSpan && !routes.length && 'Seniors got in with '}
-          {rankSpan && (
-            <>ranks {rankSpan}</>
-          )}
-          .
-        </p>
-      )}
-
-      <div style={{ marginTop: 14 }}>
-        <button
-          type="button"
-          onClick={() => setShowSeniors((v) => !v)}
-          className="btn btn--plain btn--plain-neutral"
-          style={{ fontSize: '0.85rem', width: '100%' }}
-          aria-expanded={showSeniors}
-        >
-          {showSeniors
-            ? '▲ Hide seniors'
-            : `▼ See ${college.seniors.length} senior${college.seniors.length === 1 ? '' : 's'} who got in`}
-        </button>
-
-        {showSeniors && (
-          <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {college.seniors.map((a, i) => (
-              <SeniorMiniCard key={a.id ?? i} a={a} timelines={timelines} onOpen={() => onOpen(a)} />
-            ))}
-          </div>
+        {college.seniors.length > SENIOR_PREVIEW && (
+          <button
+            type="button"
+            className="senior-chip senior-chip--more"
+            aria-expanded={showAll}
+            onClick={() => setShowAll((v) => !v)}
+          >
+            {showAll ? 'Show fewer' : `+${college.seniors.length - SENIOR_PREVIEW} more`}
+          </button>
         )}
       </div>
-    </div>
+    </article>
   );
 }
 
@@ -788,67 +889,6 @@ function AdmissionBadges({ a, showStatus = false }: { a: Alumnus; showStatus?: b
   );
 }
 
-function SeniorMiniCard({ a, timelines, onOpen }: { a: Alumnus; timelines: Timelines; onOpen?: () => void }) {
-  const studies = a.id ? sortHigherStudies(timelines.studies[a.id] ?? []) : [];
-  const work = a.id ? sortWorkExperience(timelines.work[a.id] ?? []) : [];
-
-  return (
-    <div className="senior-mini">
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-        <div className="avatar avatar--sm">
-          {a.show_photo && a.photo_url ? <img src={a.photo_url} alt="" /> : initialsOf(a.full_name)}
-        </div>
-        <div>
-          <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>{a.full_name}</div>
-          <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-            Class of {a.class_of ?? '–'}
-            {a.degree ? ` · ${a.degree}` : ''}
-            {a.branch ? ` in ${a.branch}` : ''}
-            {professionalLabel(a) ? ` · ${professionalLabel(a)}` : ''}
-          </div>
-        </div>
-        {a.linkedin_url && (
-          <a
-            href={a.linkedin_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="a-link"
-            style={{ marginLeft: 'auto', fontSize: '0.78rem' }}
-          >
-            LinkedIn ↗
-          </a>
-        )}
-      </div>
-
-      {/* How they got in - the part juniors are actually here for. */}
-      <AdmissionBadges a={a} showStatus />
-
-      {(studies.length > 0 || work.length > 0) && (
-        <div className="senior-mini__timeline">
-          {studies.map((s) => (
-            <div key={s.id}>🎓 {s.degree_name}{s.institution ? ` — ${s.institution}` : ''} {yearRange(s.start_year, s.finish_year)}</div>
-          ))}
-          {work.map((w) => (
-            <div key={w.id}>💼 {w.role ? `${w.role}, ` : ''}{w.company} {yearRange(w.start_year, w.end_year, w.is_current)}</div>
-          ))}
-        </div>
-      )}
-
-      {a.college_thoughts
-        ? <p className="senior-mini__quote">&ldquo;{a.college_thoughts}&rdquo;</p>
-        : a.message_1 && <p className="senior-mini__quote">&ldquo;{a.message_1}&rdquo;</p>}
-
-      {/* The College lens used to be a dead end: you could read the mini-card
-          but not reach the full profile without switching lens and hunting. */}
-      {onOpen && (
-        <button type="button" className="link-btn senior-mini__more" onClick={onOpen}>
-          View full profile →
-        </button>
-      )}
-    </div>
-  );
-}
-
 /* ─────────────────────────────────────────────────────────────────────────
    Alumnus Card (Directory tab)
 ───────────────────────────────────────────────────────────────────────── */
@@ -865,7 +905,9 @@ function Card({ item, onExpand }: { item: EnrichedAlumnus; onExpand: () => void 
     <article className="a-card" style={{ '--cat': cat.accent } as React.CSSProperties}>
       <div className="a-card__head">
         <div className="avatar">
-          {showImg ? <img src={a.photo_url!} alt="" /> : initialsOf(a.full_name)}
+          {showImg
+            ? <img src={a.photo_url!} alt="" loading="lazy" decoding="async" width={52} height={52} />
+            : initialsOf(a.full_name)}
         </div>
         <div>
           <div className="a-card__name">{a.full_name}</div>

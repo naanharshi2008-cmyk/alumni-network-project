@@ -3,10 +3,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Alumnus } from '../lib/types';
-import { fetchApprovedAlumni } from '../lib/publicData';
+import { Alumnus, HigherStudy } from '../lib/types';
+import { fetchApprovedAlumni, fetchTimelines } from '../lib/publicData';
 import {
-  featuredLineup, heroFaces, heroQuote, popularSearches, rotationWindow,
+  featuredLineup, heroFaces, popularSearches, quoteCandidates, rotationWindow,
 } from '../lib/showcase';
 import HeroCollage from './HeroCollage';
 import FeaturedAlumni from './FeaturedAlumni';
@@ -14,6 +14,8 @@ import HomeStats from './HomeStats';
 import HomeGalleries from './HomeGalleries';
 
 const FEATURED_COUNT = 4;
+// The hero shows four at a time and rotates through the rest of this pool.
+const HERO_POOL = 12;
 
 /**
  * The landing page: who our seniors are, shown with their own faces and words.
@@ -26,6 +28,7 @@ const FEATURED_COUNT = 4;
 export default function Home() {
   const router = useRouter();
   const [rows, setRows] = useState<Alumnus[] | null>(null);
+  const [studies, setStudies] = useState<Record<string, HigherStudy[]>>({});
   const [search, setSearch] = useState('');
 
   useEffect(() => {
@@ -44,11 +47,29 @@ export default function Home() {
     const featured = lineup.slice(0, FEATURED_COUNT);
     return {
       featured,
-      faces: heroFaces(lineup, featured.length),
-      quote: heroQuote(rows, slot),
+      faces: heroFaces(lineup, featured.length, HERO_POOL),
+      quotes: quoteCandidates(rows, slot),
       popular: popularSearches(rows),
     };
   }, [rows]);
+
+  // Second courses, for the people actually on screen: a card can then say both
+  // where someone did their degree and where they went afterwards.
+  useEffect(() => {
+    if (!showcase) return undefined;
+    const ids = [...new Set(
+      [...showcase.faces, ...showcase.quotes.map((q) => q.person)]
+        .map((a) => a.id)
+        .filter((id): id is string => !!id),
+    )];
+    if (ids.length === 0) return undefined;
+    let cancelled = false;
+    (async () => {
+      const t = await fetchTimelines(ids);
+      if (!cancelled) setStudies(t.studies);
+    })();
+    return () => { cancelled = true; };
+  }, [showcase]);
 
   function submitSearch(e: React.FormEvent) {
     e.preventDefault();
@@ -112,7 +133,7 @@ export default function Home() {
           )}
         </div>
 
-        <HeroCollage faces={showcase?.faces ?? null} quote={showcase?.quote ?? null} />
+        <HeroCollage faces={showcase?.faces ?? null} quotes={showcase?.quotes ?? []} studies={studies} />
         <div className="hero__glow" aria-hidden />
       </section>
 
