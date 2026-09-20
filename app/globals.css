@@ -2157,3 +2157,25 @@ a.xcollege__thumb:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--rin
 }
 .diff-unknown li span { opacity: 0.85; overflow-wrap: anywhere; }
 .diff-unknown__note { margin: 8px 0 0; font-size: 0.8rem; opacity: 0.85; }
+
+/* ── Admin: the three areas ──────────────────────────────────────────────── */
+.admin-nav {
+  display: flex; gap: 6px; flex-wrap: wrap;
+  margin: 0 0 24px; padding: 4px;
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: 14px; width: fit-content; max-width: 100%;
+}
+.admin-nav__link {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 8px 16px; border-radius: 10px;
+  font-size: 0.92rem; font-weight: 500; color: var(--text-muted);
+  text-decoration: none; transition: background 0.15s ease, color 0.15s ease;
+}
+.admin-nav__link:hover { color: var(--text); background: rgba(255, 255, 255, 0.04); }
+.admin-nav__link--on { background: var(--surface); color: var(--text); box-shadow: var(--shadow-sm); }
+.admin-nav__link:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--ring); }
+.admin-nav__badge {
+  min-width: 20px; padding: 1px 6px; border-radius: 999px;
+  background: var(--gold); color: #12100c;
+  font-size: 0.72rem; font-weight: 700; text-align: center;
+}

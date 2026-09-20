@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import { SCHOOLS, STREAMS, COUNTRY_CODES } from '../../lib/options';
+import { TempPassword } from './ui';
 
 /**
  * The school adding someone itself.
@@ -24,7 +25,6 @@ export default function AddAlumnus({ onAdded, setError }: { onAdded: () => Promi
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [done, setDone] = useState<Result | null>(null);
-  const [copied, setCopied] = useState(false);
 
   const [fullName, setFullName] = useState('');
   const [classOf, setClassOf] = useState('');
@@ -85,24 +85,10 @@ export default function AddAlumnus({ onAdded, setError }: { onAdded: () => Promi
             <p style={{ margin: '0 0 8px' }}>
               They sign in with <strong>{done.signInWith}</strong> and this temporary password:
             </p>
-            <div className="account-help__temp">
-              <code>{done.temporaryPassword}</code>
-              <button
-                type="button" className="btn btn--ghost"
-                onClick={async () => {
-                  try {
-                    await navigator.clipboard.writeText(done.temporaryPassword ?? '');
-                    setCopied(true); setTimeout(() => setCopied(false), 2000);
-                  } catch { /* select it by hand */ }
-                }}
-              >
-                <span className="btn__inner">{copied ? '✓ Copied' : 'Copy'}</span>
-              </button>
-            </div>
-            <p className="hint" style={{ display: 'block', margin: '8px 0 0' }}>
+            <TempPassword password={done.temporaryPassword}>
               Send it to them privately. They will be asked to choose their own password, then fill in
               the rest of their profile — approve it once they have. This is shown only now.
-            </p>
+            </TempPassword>
           </>
         ) : done.loginError ? (
           <p className="field__error field__error--static">
