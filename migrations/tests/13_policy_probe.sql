@@ -49,11 +49,21 @@ BEGIN
   EXCEPTION WHEN insufficient_privilege THEN r := r || 'PASS  refused: cannot self-approve' || E'\n';
             WHEN OTHERS THEN r := r || 'PASS? refused (' || SQLERRM || ')' || E'\n'; END;
 
+  -- Row-level security answers an unauthorised UPDATE by matching no rows
+  -- rather than raising, so the test is whether the row actually changed.
   BEGIN
     UPDATE public.college_photos SET status = 'approved' WHERE id = pid;
-    r := r || 'FAIL  alumnus approved their own pending photo' || E'\n';
+    GET DIAGNOSTICS n = ROW_COUNT;
+    IF n = 0 THEN
+      r := r || 'PASS  their own photo cannot be self-approved (0 rows matched)' || E'\n';
+    ELSE
+      r := r || 'FAIL  alumnus approved their own pending photo' || E'\n';
+    END IF;
   EXCEPTION WHEN insufficient_privilege THEN r := r || 'PASS  refused: no update rights' || E'\n';
             WHEN OTHERS THEN r := r || 'PASS? refused (' || SQLERRM || ')' || E'\n'; END;
+
+  SELECT count(*) INTO n FROM public.college_photos WHERE id = pid AND status = 'pending';
+  r := r || CASE WHEN n = 1 THEN 'PASS  it is still pending afterwards' ELSE 'FAIL  status changed' END || E'\n';
 
   SELECT count(*) INTO n FROM public.college_photos WHERE id = pid;
   r := r || CASE WHEN n = 1 THEN 'PASS  they can see their own photo waiting' ELSE 'FAIL  own pending photo invisible' END || E'\n';

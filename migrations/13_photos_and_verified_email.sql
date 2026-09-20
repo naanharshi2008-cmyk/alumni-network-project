@@ -73,10 +73,13 @@ CREATE INDEX IF NOT EXISTS college_photos_college_idx ON public.college_photos (
 CREATE INDEX IF NOT EXISTS college_photos_queue_idx ON public.college_photos (created_at) WHERE status = 'pending';
 
 ALTER TABLE public.college_photos ENABLE ROW LEVEL SECURITY;
-GRANT SELECT ON public.college_photos TO anon, authenticated;
--- No UPDATE for anyone but an admin: approving a photo is the school's call,
--- and without the grant a student cannot flip their own row to 'approved'.
-GRANT INSERT, DELETE ON public.college_photos TO authenticated;
+-- Supabase grants every new table in `public` to anon and authenticated by
+-- default, so a GRANT here only ever adds. Anonymous visitors get reads back
+-- and nothing else; for signed-in people the policies below are the gate,
+-- because an admin is `authenticated` too and has to be able to approve.
+REVOKE ALL ON public.college_photos FROM anon;
+GRANT SELECT ON public.college_photos TO anon;
+GRANT SELECT, INSERT, DELETE, UPDATE ON public.college_photos TO authenticated;
 
 -- Two policies rather than one, because a policy's expression runs with the
 -- caller's own rights: anonymous visitors have no SELECT on `alumni` at all
