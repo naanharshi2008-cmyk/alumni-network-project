@@ -102,6 +102,8 @@ export interface CollegeDetails {
   is_engineering: boolean | null;
   /** Campus banner, admin-uploaded to the college-banners bucket. */
   banner_url: string | null;
+  /** Small mark shown over the banner. Present from migration 13. */
+  logo_url?: string | null;
   /** Admin-written paragraph about the college. */
   description: string | null;
   /** Other names it goes by ("IITM", "IIT Madras"). Present from migration 10. */

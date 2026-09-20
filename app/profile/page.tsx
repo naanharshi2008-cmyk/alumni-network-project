@@ -52,6 +52,7 @@ interface AlumnusData {
   modification_status: string;
   last_updated: string | null;
   last_confirmed_at: string | null;
+  email_verified_at: string | null;
   college_thoughts: string;
 }
 
@@ -111,6 +112,7 @@ function normalizeProfile(raw: any): AlumnusData {
     modification_status: str(raw.modification_status),
     last_updated: raw.last_updated ?? null,
     last_confirmed_at: raw.last_confirmed_at ?? null,
+    email_verified_at: raw.email_verified_at ?? null,
     college_thoughts: str(raw.college_thoughts),
   };
 }
@@ -544,6 +546,8 @@ export default function ProfilePage() {
           photoPending={!!photoFile}
         />
 
+        {!profile.email_verified_at && <ConfirmEmail email={profile.personal_email} />}
+
         {/* Freshness, shown plainly to the owner (public surfaces keep it
             subtle). The one-tap confirm exists so an unchanged-but-accurate
             profile never has to look stale. */}
@@ -755,7 +759,7 @@ export default function ProfilePage() {
           </button>
 
           <Divider />
-          <h3>Contact <span className="hint">never shown publicly</span></h3>
+          <h3 id="profile-contact">Contact <span className="hint">never shown publicly</span></h3>
 
           <div id="profile-linkedin" />
           <FloatingField label="LinkedIn profile URL" hint="optional, shown publicly" type="url" value={profile.linkedin_url} onChange={(v) => updateField('linkedin_url', v)} />
@@ -925,6 +929,60 @@ function Chips({ options, value, onChange }: {
    What a junior would miss on this profile, in the order it matters to them,
    each with a jump to the field. Hidden once everything is done.
 ───────────────────────────────────────────────────────────────────────── */
+/**
+ * "Is this the right address?" - shown until it has been proved once.
+ *
+ * Deliberately not an alarm: the profile works either way, and the school
+ * approves it either way. It matters for the day they need a password reset.
+ */
+function ConfirmEmail({ email }: { email: string }) {
+  const [state, setState] = useState<'idle' | 'sending' | 'sent' | 'failed'>('idle');
+  const [note, setNote] = useState('');
+
+  async function send() {
+    setState('sending');
+    try {
+      const { data } = await supabase.auth.getSession();
+      const token = data.session?.access_token;
+      const res = await fetch('/api/auth/send-verification', {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
+      const body = (await res.json()) as { sent?: boolean; reason?: string; message?: string };
+      if (body.sent) {
+        setState('sent');
+        setNote(`Sent to ${email}. It can take a minute, and it sometimes lands in spam.`);
+      } else if (body.reason === 'already-verified') {
+        setState('sent');
+        setNote('This address is already confirmed.');
+      } else if (body.reason === 'throttled') {
+        setState('sent');
+        setNote(body.message ?? 'We have just sent one — please check your inbox.');
+      } else {
+        setState('failed');
+        setNote('The school is still setting up email. Nothing is wrong with your profile — this can wait.');
+      }
+    } catch {
+      setState('failed');
+      setNote('We could not reach the server. Please try again in a moment.');
+    }
+  }
+
+  return (
+    <div className="status-banner status-banner--warn" style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center' }}>
+      <span style={{ flex: '1 1 260px' }}>
+        <strong>Confirm your email.</strong>{' '}
+        {note || `We sent a link to ${email} when you registered. Confirming it means a password reset would actually reach you.`}
+      </span>
+      {state !== 'sent' && (
+        <button type="button" className="btn btn--ghost" disabled={state === 'sending'} onClick={send}>
+          <span className="btn__inner">{state === 'sending' ? 'Sending…' : 'Send it again'}</span>
+        </button>
+      )}
+    </div>
+  );
+}
+
 function ProfileChecklist({
   profile, hasHigherStudies, hasWork, photoPending,
 }: {
@@ -936,6 +994,7 @@ function ProfileChecklist({
   const confirmedRecently = !!profile.last_confirmed_at
     && Date.now() - new Date(profile.last_confirmed_at).getTime() < 365 * 24 * 3600 * 1000;
   const items = [
+    { done: !!profile.email_verified_at, label: 'Confirm your email', why: 'so a password reset reaches you', href: '#profile-contact' },
     { done: !!profile.photo_url || photoPending, label: 'Add a photo', why: 'what juniors notice first', href: '#profile-photo' },
     { done: !!profile.message_1.trim(), label: 'A line of advice for your junior self', why: 'the part juniors read most', href: '#profile-advice' },
     { done: !!profile.college_thoughts.trim(), label: 'What your college is really like', why: 'helps someone choosing it', href: '#profile-college-thoughts' },

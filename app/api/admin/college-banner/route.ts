@@ -34,6 +34,15 @@ const EXT_BY_TYPE: Record<string, string> = {
 };
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+// The same route handles both pictures a college has: the wide banner behind
+// its name, and the small logo shown on top of it. They differ only in which
+// column they land in.
+type Kind = 'banner' | 'logo';
+const COLUMN: Record<Kind, 'banner_url' | 'logo_url'> = { banner: 'banner_url', logo: 'logo_url' };
+function kindOf(form: FormData): Kind {
+  return String(form.get('kind') ?? 'banner') === 'logo' ? 'logo' : 'banner';
+}
+
 export async function POST(request: Request) {
   const auth = await requireAdmin(request);
   if (!auth.ok) return NextResponse.json({ error: auth.message }, { status: auth.status });
@@ -54,9 +63,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Missing or invalid college id.' }, { status: 400 });
   }
 
+  const kind = kindOf(form);
+  const column = COLUMN[kind];
+
   const { data: college, error: readErr } = await admin
     .from('colleges')
-    .select('id, name, banner_url')
+    .select('id, name, banner_url, logo_url')
     .eq('id', collegeId)
     .maybeSingle();
   if (readErr) {
@@ -83,12 +95,13 @@ export async function POST(request: Request) {
   }
 
   const file = form.get('file');
-  let bannerUrl: string | null = college.banner_url;
+  const current = (college as Record<string, string | null>)[column] ?? null;
+  let imageUrl: string | null = current;
 
   if (file instanceof File && file.size > 0) {
     const ext = EXT_BY_TYPE[file.type];
     if (!ext) {
-      return NextResponse.json({ error: 'Banners must be JPG, PNG or WEBP images.' }, { status: 400 });
+      return NextResponse.json({ error: 'Images must be JPG, PNG or WEBP.' }, { status: 400 });
     }
     if (file.size > MAX_BYTES) {
       return NextResponse.json({ error: 'That image is over 4MB — please use a smaller one.' }, { status: 413 });
@@ -96,7 +109,7 @@ export async function POST(request: Request) {
 
     // Timestamped name rather than a fixed per-college one: public objects are
     // CDN-cached, so overwriting in place would keep serving the stale banner.
-    const path = `${collegeId}-${Date.now()}.${ext}`;
+    const path = `${kind === 'logo' ? 'logo-' : ''}${collegeId}-${Date.now()}.${ext}`;
     const bytes = new Uint8Array(await file.arrayBuffer());
     const { error: upErr } = await admin.storage.from(BUCKET).upload(path, bytes, {
       contentType: file.type,
@@ -109,24 +122,24 @@ export async function POST(request: Request) {
     const { data: pub } = admin.storage.from(BUCKET).getPublicUrl(path);
     const { error: dbErr } = await admin
       .from('colleges')
-      .update({ banner_url: pub.publicUrl })
+      .update({ [column]: pub.publicUrl })
       .eq('id', collegeId);
     if (dbErr) {
       // Don't leave an orphan object behind a failed pointer update.
       await admin.storage.from(BUCKET).remove([path]).catch(() => undefined);
-      return NextResponse.json({ error: `Could not save the banner: ${safeErrorMessage(dbErr)}` }, { status: 500 });
+      return NextResponse.json({ error: `Could not save the ${kind}: ${safeErrorMessage(dbErr)}` }, { status: 500 });
     }
 
     // Best-effort cleanup of the file being replaced.
-    const oldPath = storagePathFromPublicUrl(college.banner_url, BUCKET);
+    const oldPath = storagePathFromPublicUrl(current, BUCKET);
     if (oldPath) {
       const { error: rmErr } = await admin.storage.from(BUCKET).remove([oldPath]);
-      if (rmErr) warnings.push(`The previous banner file could not be removed (${safeErrorMessage(rmErr)}).`);
+      if (rmErr) warnings.push(`The previous ${kind} file could not be removed (${safeErrorMessage(rmErr)}).`);
     }
-    bannerUrl = pub.publicUrl;
+    imageUrl = pub.publicUrl;
   }
 
-  return NextResponse.json({ banner_url: bannerUrl, warnings });
+  return NextResponse.json({ banner_url: kind === 'banner' ? imageUrl : college.banner_url, logo_url: kind === 'logo' ? imageUrl : college.logo_url, warnings });
 }
 
 export async function DELETE(request: Request) {
@@ -138,9 +151,11 @@ export async function DELETE(request: Request) {
   }
 
   let collegeId = '';
+  let kind: Kind = 'banner';
   try {
-    const body = (await request.json()) as { college_id?: string };
+    const body = (await request.json()) as { college_id?: string; kind?: string };
     collegeId = String(body.college_id ?? '');
+    kind = body.kind === 'logo' ? 'logo' : 'banner';
   } catch {
     return NextResponse.json({ error: 'Malformed request.' }, { status: 400 });
   }
@@ -148,9 +163,10 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ error: 'Missing or invalid college id.' }, { status: 400 });
   }
 
+  const column = COLUMN[kind];
   const { data: college, error: readErr } = await admin
     .from('colleges')
-    .select('id, banner_url')
+    .select('id, banner_url, logo_url')
     .eq('id', collegeId)
     .maybeSingle();
   if (readErr) {
@@ -159,18 +175,18 @@ export async function DELETE(request: Request) {
   if (!college) return NextResponse.json({ error: 'That college no longer exists.' }, { status: 404 });
 
   const warnings: string[] = [];
-  const oldPath = storagePathFromPublicUrl(college.banner_url, BUCKET);
+  const oldPath = storagePathFromPublicUrl((college as Record<string, string | null>)[column] ?? null, BUCKET);
   if (oldPath) {
     const { error: rmErr } = await admin.storage.from(BUCKET).remove([oldPath]);
-    if (rmErr) warnings.push(`The banner file could not be removed (${safeErrorMessage(rmErr)}).`);
+    if (rmErr) warnings.push(`The ${kind} file could not be removed (${safeErrorMessage(rmErr)}).`);
   }
 
   const { error: dbErr } = await admin
     .from('colleges')
-    .update({ banner_url: null })
+    .update({ [column]: null })
     .eq('id', collegeId);
   if (dbErr) {
-    return NextResponse.json({ error: `Could not clear the banner: ${safeErrorMessage(dbErr)}` }, { status: 500 });
+    return NextResponse.json({ error: `Could not clear the ${kind}: ${safeErrorMessage(dbErr)}` }, { status: 500 });
   }
 
   return NextResponse.json({ removed: true, warnings });

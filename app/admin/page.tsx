@@ -54,6 +54,7 @@ type AlumniRow = {
   school_note: string | null;
   college_thoughts: string | null;
   featured?: boolean | null;
+  email_verified_at?: string | null;
 };
 
 type HigherStudyRow = {
@@ -74,11 +75,21 @@ type CollegeInfoRow = {
   state: string | null;
   district: string | null;
   banner_url: string | null;
+  logo_url: string | null;
   description: string | null;
   students: { id: string; full_name: string; class_of: number | null; school_note: string | null }[];
 };
 
-type Tab = 'registrations' | 'edits' | 'directory' | 'options' | 'colleges' | 'companies' | 'colleges_info';
+type PendingPhoto = {
+  id: string;
+  url: string;
+  caption: string | null;
+  created_at: string;
+  college: { name: string } | { name: string }[] | null;
+  alumni: { full_name: string; class_of: number | null } | { full_name: string; class_of: number | null }[] | null;
+};
+
+type Tab = 'registrations' | 'edits' | 'directory' | 'options' | 'colleges' | 'companies' | 'colleges_info' | 'photos';
 
 // Fields the profile editor may change, and how to label them in the diff.
 const FIELD_LABELS: Record<string, string> = {
@@ -123,6 +134,7 @@ export default function AdminPage() {
   // The "Colleges" tab: every matched college that has alumni, with its banner
   // and description, plus the students there (for the school's per-alumnus note).
   const [collegesInfo, setCollegesInfo] = useState<CollegeInfoRow[]>([]);
+  const [pendingPhotos, setPendingPhotos] = useState<PendingPhoto[]>([]);
 
   const [mailHealth, setMailHealth] = useState<{ domainStatus: string; apiKeySet: boolean; hint: string } | null>(null);
 
@@ -224,7 +236,7 @@ export default function AdminPage() {
     if (byCollege.size > 0) {
       const { data: collegeRows } = await supabase
         .from('colleges')
-        .select('id, name, state, district, banner_url, description')
+        .select('id, name, state, district, banner_url, logo_url, description')
         .in('id', [...byCollege.keys()])
         .order('name');
       setCollegesInfo(
@@ -236,6 +248,17 @@ export default function AdminPage() {
     } else {
       setCollegesInfo([]);
     }
+
+    // Campus photos waiting for a decision.
+    const { data: photoRows } = await supabase
+      .from('college_photos')
+      .select('id, url, caption, created_at, colleges(name), alumni(full_name, class_of)')
+      .eq('status', 'pending')
+      .order('created_at', { ascending: true });
+    setPendingPhotos(((photoRows ?? []) as any[]).map((r) => ({
+      id: r.id, url: r.url, caption: r.caption, created_at: r.created_at,
+      college: r.colleges, alumni: r.alumni,
+    })));
 
     // Timelines for everyone currently on screen.
     const allIds = [...((regRes.data as AlumniRow[]) ?? []), ...((editRes.data as AlumniRow[]) ?? [])].map((p) => p.id);
@@ -412,6 +435,44 @@ export default function AdminPage() {
       : `${person.full_name} is no longer featured; the home page fills the place automatically.`);
   }
 
+  /* ── Campus photos ─────────────────────────────────────────────────────── */
+  // A photo is a picture of a real place published under a student's name, so
+  // it gets the same two answers as everything else here: publish it, or don't.
+  async function handlePhoto(photo: PendingPhoto, decision: 'approved' | 'rejected') {
+    setActionError('');
+    setActionNote('');
+    const { data, error } = await supabase
+      .from('college_photos')
+      .update({ status: decision, reviewed_at: new Date().toISOString() })
+      .eq('id', photo.id)
+      .select('id');
+    if (error || !data?.length) {
+      setActionError('Could not update that photo: ' + (error?.message ?? 'no row changed.'));
+      return;
+    }
+    setPendingPhotos((prev) => prev.filter((p) => p.id !== photo.id));
+    setActionNote(decision === 'approved'
+      ? 'Published — it is on the college page now.'
+      : 'Hidden. The file stays until you delete it.');
+  }
+
+  async function handleDeletePhoto(photo: PendingPhoto) {
+    setActionError('');
+    const { data: session } = await supabase.auth.getSession();
+    const res = await fetch('/api/college-photo', {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(session.session ? { Authorization: `Bearer ${session.session.access_token}` } : {}),
+      },
+      body: JSON.stringify({ id: photo.id }),
+    });
+    const out = await res.json().catch(() => ({}));
+    if (!res.ok) { setActionError(out.error ?? 'Could not delete that photo.'); return; }
+    setPendingPhotos((prev) => prev.filter((p) => p.id !== photo.id));
+    setActionNote('Deleted, file and all.');
+  }
+
   /* ── Edit-review actions ───────────────────────────────────────────────── */
   async function handleApproveEdit(person: AlumniRow) {
     setActionError('');
@@ -547,6 +608,8 @@ export default function AdminPage() {
           label="🏢 Unmatched Companies" count={unmatchedCompanies.length} />
         <TabButton active={tab === 'colleges_info'} onClick={() => setTab('colleges_info')}
           label="🏛 Institutes" count={collegesInfo.length} />
+        <TabButton active={tab === 'photos'} onClick={() => setTab('photos')}
+          label="📷 Campus Photos" count={pendingPhotos.length} />
       </div>
 
       {mailHealth && mailHealth.domainStatus !== 'verified' && (
@@ -667,7 +730,13 @@ export default function AdminPage() {
                       </span>
                       {person.featured && <span className="badge badge--sm badge--star">★ Featured</span>}
                       <div className="subtitle" style={{ margin: '4px 0 0', fontSize: '0.84rem' }}>
-                        {person.personal_email || 'no email'}{person.user_id ? '' : ' · no login yet'}
+                        {person.personal_email || 'no email'}
+                        {person.personal_email && !person.email_verified_at && (
+                          <span className="badge badge--sm" style={{ marginLeft: 6 }} title="They have not opened the confirmation link yet">
+                            email unconfirmed
+                          </span>
+                        )}
+                        {person.user_id ? '' : ' · no login yet'}
                         {person.class_of ? ` · Class of ${person.class_of}` : ''}
                         {person.college_name_raw ? ` · ${person.college_name_raw}` : ''}
                       </div>
@@ -699,6 +768,51 @@ export default function AdminPage() {
                 </div>
               ))}
             </>
+          )}
+        </div>
+      )}
+
+      {tab === 'photos' && (
+        <div className="stagger">
+          <TabIntro title="Campus photos from students">
+            Photos offered by seniors studying at each college. Nothing is public until you
+            publish it, and each one appears with the name of whoever shared it.
+          </TabIntro>
+          {pendingPhotos.length === 0 ? (
+            <EmptyCard emoji="📷" text="No photos waiting." />
+          ) : (
+            pendingPhotos.map((p) => {
+              const college = Array.isArray(p.college) ? p.college[0] : p.college;
+              const who = Array.isArray(p.alumni) ? p.alumni[0] : p.alumni;
+              return (
+                <div key={p.id} className="card" style={{ marginBottom: 16 }}>
+                  <img
+                    src={p.url} alt={p.caption ?? ''} loading="lazy"
+                    style={{ width: '100%', maxHeight: 300, objectFit: 'cover', borderRadius: 'var(--r-sm)', marginBottom: 12 }}
+                  />
+                  <strong>{college?.name ?? 'Unknown college'}</strong>
+                  <p className="subtitle" style={{ margin: '4px 0 10px', fontSize: '0.86rem' }}>
+                    {p.caption || <em>No caption</em>}
+                    {who ? ` — shared by ${who.full_name}${who.class_of ? `, class of ${who.class_of}` : ''}` : ''}
+                  </p>
+                  <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                    <button type="button" className="btn btn--primary" onClick={() => handlePhoto(p, 'approved')}>
+                      <span className="btn__inner">✓ Publish</span>
+                    </button>
+                    <button type="button" className="btn btn--ghost" onClick={() => handlePhoto(p, 'rejected')}>
+                      <span className="btn__inner">Hide</span>
+                    </button>
+                    <ConfirmButton
+                      label="🗑 Delete"
+                      confirmLabel="Yes, delete it"
+                      busyLabel="Deleting…"
+                      question="Delete this photo and its file? This cannot be undone."
+                      onConfirm={() => handleDeletePhoto(p)}
+                    />
+                  </div>
+                </div>
+              );
+            })
           )}
         </div>
       )}
@@ -859,6 +973,7 @@ function CollegeInfoCard({
   const [busy, setBusy] = useState(false);
   const [showStudents, setShowStudents] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const logoRef = useRef<HTMLInputElement>(null);
 
   async function authed(): Promise<string | null> {
     const { data: { session } } = await supabase.auth.getSession();
@@ -885,7 +1000,7 @@ function CollegeInfoCard({
     }
   }
 
-  async function upload(file: File) {
+  async function upload(file: File, kind: 'banner' | 'logo' = 'banner') {
     if (!file.type.startsWith('image/')) { onError('Banners must be JPG, PNG or WEBP images.'); return; }
     const token = await authed();
     if (!token) return;
@@ -898,6 +1013,7 @@ function CollegeInfoCard({
       }
       const form = new FormData();
       form.set('college_id', college.id);
+      form.set('kind', kind);
       form.set('file', body, file.name.replace(/\.[^.]+$/, '') + (body.type === 'image/jpeg' ? '.jpg' : ''));
       const res = await fetch('/api/admin/college-banner', {
         method: 'POST',
@@ -906,15 +1022,15 @@ function CollegeInfoCard({
       });
       const out = await res.json().catch(() => ({}));
       if (!res.ok) { onError(out.error ?? 'Upload failed.'); return; }
-      onChanged({ banner_url: out.banner_url });
-      onNote(`Banner saved for ${college.name}.${out.warnings?.length ? ` Note: ${out.warnings.join('; ')}` : ''}`);
+      onChanged(kind === 'logo' ? { logo_url: out.logo_url } : { banner_url: out.banner_url });
+      onNote(`${kind === 'logo' ? 'Logo' : 'Banner'} saved for ${college.name}.${out.warnings?.length ? ` Note: ${out.warnings.join('; ')}` : ''}`);
     } finally {
       setBusy(false);
       if (fileRef.current) fileRef.current.value = '';
     }
   }
 
-  async function removeBanner() {
+  async function removeBanner(kind: 'banner' | 'logo' = 'banner') {
     const token = await authed();
     if (!token) return;
     setBusy(true);
@@ -922,12 +1038,12 @@ function CollegeInfoCard({
       const res = await fetch('/api/admin/college-banner', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ college_id: college.id }),
+        body: JSON.stringify({ college_id: college.id, kind }),
       });
       const out = await res.json().catch(() => ({}));
-      if (!res.ok) { onError(out.error ?? 'Could not remove the banner.'); return; }
-      onChanged({ banner_url: null });
-      onNote(`Banner removed for ${college.name}.`);
+      if (!res.ok) { onError(out.error ?? `Could not remove the ${kind}.`); return; }
+      onChanged(kind === 'logo' ? { logo_url: null } : { banner_url: null });
+      onNote(`${kind === 'logo' ? 'Logo' : 'Banner'} removed for ${college.name}.`);
     } finally {
       setBusy(false);
     }
@@ -996,7 +1112,33 @@ function CollegeInfoCard({
             confirmLabel="Yes, remove it"
             busyLabel="Removing…"
             question={`Remove the banner for ${college.name.split(',')[0]}? The image disappears from every page that shows it.`}
-            onConfirm={removeBanner}
+            onConfirm={() => removeBanner('banner')}
+            className="btn btn--ghost"
+          />
+        )}
+      </div>
+
+      {/* The logo sits on top of the banner on the college pages. */}
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginTop: 12 }}>
+        <span className="subtitle" style={{ fontSize: '0.82rem' }}>Logo:</span>
+        {college.logo_url
+          ? <img src={college.logo_url} alt="" style={{ width: 40, height: 40, objectFit: 'contain', borderRadius: 8, background: '#fbf6ec', padding: 3 }} loading="lazy" />
+          : <span className="subtitle" style={{ fontSize: '0.82rem' }}>none yet</span>}
+        <input
+          ref={logoRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          disabled={busy}
+          onChange={(e) => { const f = e.target.files?.[0]; if (f) void upload(f, 'logo'); }}
+          style={{ fontSize: '0.82rem' }}
+        />
+        {college.logo_url && (
+          <ConfirmButton
+            label="🗑 Remove logo"
+            confirmLabel="Yes, remove it"
+            busyLabel="Removing…"
+            question={`Remove the logo for ${college.name.split(',')[0]}?`}
+            onConfirm={() => removeBanner('logo')}
             className="btn btn--ghost"
           />
         )}

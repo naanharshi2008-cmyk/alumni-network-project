@@ -676,6 +676,14 @@ export default function RegisterPage() {
           headers: { Authorization: `Bearer ${sessionData.session.access_token}` },
           keepalive: true,
         }).catch(() => undefined);
+        // And prove the address reaches them, so a future password reset
+        // actually arrives. Fire-and-forget: nothing here can fail a
+        // registration that has already been saved.
+        void fetch('/api/auth/send-verification', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${sessionData.session.access_token}` },
+          keepalive: true,
+        }).catch(() => undefined);
       }
 
       try { window.localStorage.removeItem(DRAFT_KEY); } catch { /* nothing to lose */ }

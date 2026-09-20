@@ -1997,3 +1997,71 @@ textarea { min-height: 84px; resize: vertical; }
   .senior-chip__meta { max-width: none; }
   .dgroup__head { padding: 12px 6px; gap: 8px; }
 }
+
+/* ═══ One college: its own page, and its gallery ═════════════════════════ */
+.crumb { margin: 0 0 14px; font-size: 0.86rem; }
+.crumb a { color: var(--text-muted); }
+.crumb a:hover { color: var(--gold); }
+
+.cpage__head { display: grid; grid-template-columns: minmax(0, 300px) minmax(0, 1fr); gap: 24px; align-items: start; }
+.cpage__banner {
+  position: relative; overflow: hidden; height: 190px;
+  border-radius: var(--r-lg); background: var(--surface-2); border: 1px solid var(--border);
+}
+.cpage__banner img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.cpage__banner-fallback {
+  display: grid; place-items: center; width: 100%; height: 100%; padding: 8px; text-align: center;
+  font-family: var(--font-sora), sans-serif; font-weight: 800; font-size: 2.4rem; letter-spacing: 0.02em;
+  color: rgba(11, 10, 12, 0.88); background: var(--grad);
+}
+/* The logo sits on the banner the way a crest sits on a gate. */
+.cpage__logo {
+  position: absolute; left: 14px; bottom: 14px;
+  width: 58px; height: 58px; border-radius: 14px; padding: 5px;
+  display: grid; place-items: center; background: #fbf6ec;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.16), var(--shadow);
+}
+.cpage__logo img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.cpage__title h1 { margin: 0 0 4px; font-size: clamp(1.5rem, 1rem + 1.6vw, 2.1rem); line-height: 1.15; }
+.cpage__about { margin-top: 20px; }
+.cpage__section { margin-top: 34px; }
+.cpage__section h2 { font-size: 1.12rem; margin: 0 0 14px; }
+
+.gallery-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 14px; }
+.shot {
+  margin: 0; overflow: hidden; border-radius: var(--r);
+  background: var(--surface); border: 1px solid var(--border);
+}
+.shot img { display: block; width: 100%; height: 170px; object-fit: cover; }
+.shot figcaption { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px 12px; }
+.shot__caption { font-size: 0.86rem; line-height: 1.4; }
+.shot__credit { font-size: 0.78rem; color: var(--text-faint); }
+.shot__credit a { color: var(--gold); }
+.shot--pending { border-style: dashed; border-color: var(--border-strong); }
+
+.waiting { margin-top: 18px; }
+.waiting__head { margin: 0 0 8px; font-size: 0.84rem; font-weight: 700; color: var(--gold); }
+
+.add-photo {
+  margin-top: 20px; padding: 18px 20px;
+  border: 1px dashed var(--border-strong); border-radius: var(--r);
+  background: rgba(255, 255, 255, 0.02);
+}
+.add-photo__head { margin: 0 0 2px; font-weight: 700; }
+.add-photo__ok { margin: 10px 0 0; color: var(--ok-ink); font-size: 0.88rem; }
+.add-photo input[type='file'] { display: block; font-size: 0.86rem; max-width: 100%; }
+
+/* A logo over the tile's banner on the colleges grid. */
+.college-tile__banner { position: relative; }
+.college-tile__logo {
+  position: absolute; left: 10px; bottom: 10px;
+  width: 38px; height: 38px; border-radius: 10px; padding: 4px;
+  display: grid; place-items: center; background: #fbf6ec;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.16);
+}
+.college-tile__logo img { max-width: 100%; max-height: 100%; object-fit: contain; }
+
+@media (max-width: 720px) {
+  .cpage__head { grid-template-columns: 1fr; }
+  .cpage__banner { height: 150px; }
+}

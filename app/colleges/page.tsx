@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { isSupabaseConfigured } from '../../lib/supabaseClient';
+import { isSupabaseConfigured, supabase } from '../../lib/supabaseClient';
 import { fetchApprovedAlumni } from '../../lib/publicData';
 import { publicRouteLabel } from '../../lib/options';
 import { buildSearchDoc, searchItems, type SearchDoc } from '../../lib/search';
@@ -55,6 +55,21 @@ export default function CollegesPage() {
   );
   const [shown, setShown] = useState(PAGE);
   useEffect(() => { setShown(PAGE); }, [query]);
+
+  // Logos live on the colleges table, not in the public_alumni projection, so
+  // they are fetched once for the colleges actually on this page.
+  const [logos, setLogos] = useState<Record<string, string>>({});
+  useEffect(() => {
+    const ids = colleges.map((c) => collegeIdOf(c)).filter((id): id is string => !!id);
+    if (ids.length === 0) return undefined;
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase.from('colleges').select('id, logo_url').in('id', ids).not('logo_url', 'is', null);
+      if (cancelled) return;
+      setLogos(Object.fromEntries(((data ?? []) as { id: string; logo_url: string }[]).map((r) => [r.id, r.logo_url])));
+    })();
+    return () => { cancelled = true; };
+  }, [colleges]);
 
   return (
     <main className="container container--wide">
@@ -112,7 +127,9 @@ export default function CollegesPage() {
           ) : (
             <>
               <div className="college-grid stagger">
-                {results.slice(0, shown).map((c) => <CollegeTile key={c.key} college={c} />)}
+                {results.slice(0, shown).map((c) => (
+                  <CollegeTile key={c.key} college={c} logo={logos[collegeIdOf(c) ?? '']} />
+                ))}
               </div>
               {results.length > shown && (
                 <button type="button" className="show-more" onClick={() => setShown((n) => n + PAGE)}>
@@ -134,14 +151,24 @@ export default function CollegesPage() {
   );
 }
 
-function CollegeTile({ college: c }: { college: CollegeCard }) {
+/** The linked college's id, when this group is a real row rather than typed text. */
+function collegeIdOf(c: CollegeCard): string | null {
+  return c.key.startsWith('id:') ? c.key.slice(3) : null;
+}
+
+function CollegeTile({ college: c, logo }: { college: CollegeCard; logo?: string }) {
   const place = [c.details?.district, c.details?.state].filter(Boolean).join(', ');
+  const id = collegeIdOf(c);
+  // A college we have a row for gets its own page, with photos and the seniors
+  // there. One that only exists as typed text still goes to the directory.
+  const href = id ? `/colleges/${id}` : `/directory?lens=college&q=${encodeURIComponent(c.label)}`;
   return (
-    <Link href={`/directory?lens=college&q=${encodeURIComponent(c.label)}`} className="college-tile">
+    <Link href={href} className="college-tile">
       <span className="college-tile__banner" aria-hidden>
         {c.details?.banner_url
           ? <img src={c.details.banner_url} alt="" loading="lazy" decoding="async" />
           : <span className="college-tile__initials">{instituteInitials(c.label)}</span>}
+        {logo && <span className="college-tile__logo"><img src={logo} alt="" loading="lazy" /></span>}
       </span>
       <span className="college-tile__body">
         <span className="college-tile__name">{c.name}</span>

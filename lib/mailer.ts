@@ -178,6 +178,25 @@ export function welcomeEmail(fullName: string | null) {
   };
 }
 
+export function verifyEmailMessage(fullName: string | null, link: string) {
+  const name = firstName(fullName);
+  return {
+    subject: 'Confirm your email for Veveaham Alumni',
+    html: layout({
+      preheader: 'One tap so the school knows this address reaches you.',
+      heading: 'Is this the right address?',
+      paragraphs: [
+        `Hi ${name},`,
+        'You used this address to register with the Veveaham alumni network. Confirming it means the school can reach you, and that a password reset will actually arrive if you ever need one.',
+        'The link works once and expires in an hour. Nothing bad happens if you ignore it — your profile is reviewed either way.',
+      ],
+      cta: { label: 'Confirm this address', url: link },
+      footnote: "Didn't register with us? Ignore this email and nothing will happen.",
+    }),
+    text: `Hi ${(fullName ?? '').trim().split(/\s+/)[0] || 'there'},\n\nYou used this address to register with the Veveaham alumni network. Confirm it so the school can reach you, and so a password reset would actually arrive:\n\n${link}\n\nThe link works once and expires in an hour. Ignoring it is fine - your profile is reviewed either way.`,
+  };
+}
+
 export function approvedEmail(fullName: string | null, profileUrl: string) {
   const name = firstName(fullName);
   return {
