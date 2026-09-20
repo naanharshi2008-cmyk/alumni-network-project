@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '../../../lib/supabaseClient';
 import {
-  loadReview, type AlumniRow, type HigherStudyRow, type PendingOption,
+  loadReview, logDecision, type AlumniRow, type HigherStudyRow, type PendingOption,
   type PendingPhoto, type ReviewData, type WorkExperienceRow,
 } from '../adminData';
 import { buildQueue, KIND_LABELS, waitedFor, type ReviewItem, type ReviewKind } from '../reviewModel';
@@ -133,6 +133,13 @@ export default function ReviewPage() {
     setBusy(false);
     if (error) { setActionError('Could not approve: ' + error.message); return; }
     if (!hit?.length) { setActionError('Nothing was approved — that profile may have been changed or removed. Reload and try again.'); return; }
+    logDecision({
+      kind: 'registration', subjectId: person.id, alumniId: person.id,
+      action: 'approve', summary: person.full_name,
+      before: { approval_status: person.approval_status, modification_status: person.modification_status },
+      after: { approval_status: 'approved', modification_status: 'none' },
+      undoable: true,
+    });
     void notifyApproved([person.id]);
     setActionNote(`Approved ${person.full_name} — they're live on the directory now.`);
     drop(`registration:${person.id}`, (d) => ({ ...d, pending: d.pending.filter((p) => p.id !== person.id) }));
@@ -146,6 +153,13 @@ export default function ReviewPage() {
     setBusy(false);
     if (error) { setActionError('Could not reject: ' + error.message); return; }
     if (!hit?.length) { setActionError('Nothing was rejected — reload and try again.'); return; }
+    logDecision({
+      kind: 'registration', subjectId: person.id, alumniId: person.id,
+      action: 'reject', summary: person.full_name, reason: reason.trim() || null,
+      before: { approval_status: person.approval_status, rejection_reason: person.rejection_reason ?? null },
+      after: { approval_status: 'rejected', rejection_reason: reason.trim() || null },
+      undoable: true,
+    });
     setActionNote(`Rejected ${person.full_name}.`);
     drop(`registration:${person.id}`, (d) => ({ ...d, pending: d.pending.filter((p) => p.id !== person.id) }));
   }
@@ -161,6 +175,12 @@ export default function ReviewPage() {
     });
     const body = await res.json().catch(() => ({}));
     if (!res.ok) { setActionError(body.error ?? 'Could not delete this profile.'); return; }
+    // Not undoable, and the log says so: the row, the photo and the login are
+    // all gone, and a log line claiming otherwise would be a lie in writing.
+    logDecision({
+      kind: 'profile', subjectId: person.id, alumniId: null,
+      action: 'delete', summary: body.name ?? person.full_name, undoable: false,
+    });
     setActionNote(
       `Deleted ${body.name ?? person.full_name}.` +
       (body.warnings?.length ? ` Note: ${body.warnings.join('; ')}.` : ''),
@@ -172,72 +192,72 @@ export default function ReviewPage() {
     }));
   }
 
-  async function publishEdit(person: AlumniRow) {
+  /**
+   * Publish the fields the school ticked, and only those.
+   *
+   * The whole of this used to live here: a spread of the staged blob into the
+   * live columns, followed by a delete-and-reinsert of two timeline tables.
+   * Three things were wrong with that. It was all-or-nothing, so one field
+   * worth querying meant discarding the lot and asking the alumnus to type it
+   * again. It was four statements with no transaction around them, and the
+   * delete ran first - which is how a failed insert once destroyed somebody's
+   * whole education and work history. And nothing recorded that it happened.
+   *
+   * admin_publish_changes does all of it in one statement, in the database,
+   * inside one transaction, and writes the log line itself.
+   */
+  async function publishEdit(person: AlumniRow, keys: string[], studies: boolean, work: boolean, note: string) {
     setActionError(''); setBusy(true);
-    const staged = person.pending_changes;
-    if (!staged) { setBusy(false); setActionError('Nothing staged for this person.'); return; }
+    const { data, error } = await supabase.rpc('admin_publish_changes', {
+      p_alumni_id: person.id,
+      p_keys: keys,
+      p_studies: studies,
+      p_work: work,
+      p_note: note.trim() || null,
+    });
+    setBusy(false);
+    if (error) { setActionError('Could not publish: ' + error.message); return; }
+    const out = (data ?? {}) as {
+      published?: string[]; refused?: string[]; studies?: boolean; work?: boolean; still_waiting?: boolean;
+    };
+    const n = (out.published?.length ?? 0) + (out.studies ? 1 : 0) + (out.work ? 1 : 0);
 
-    // Only the fields the profile editor can set. The blob is written by the
-    // alumnus and this update runs as the school, so spreading it whole
-    // published anything they cared to put in it - see editFields.ts.
-    const { higher_studies, work_experience } = staged;
-    const { columns, unknown } = splitStaged(staged);
+    setActionNote(
+      `Published ${n} change${n === 1 ? '' : 's'} for ${person.full_name}.`
+      + (out.refused?.length ? ` ${out.refused.length} value(s) the profile editor never sets were not published.` : '')
+      + (out.still_waiting ? ' The rest is still waiting — they stay in the queue.' : ''),
+    );
 
-    const { data: published, error } = await supabase.from('alumni')
-      // last_updated sits AFTER the spread on purpose: publishing is the
-      // moment the public content changes, so publish time always wins.
-      .update({ ...columns, modification_status: 'none', pending_changes: null, last_updated: new Date().toISOString() })
-      .eq('id', person.id).select('id');
-    if (error) { setBusy(false); setActionError('Could not publish: ' + error.message); return; }
-    if (!published?.length) { setBusy(false); setActionError('Nothing was published — reload and try again.'); return; }
-
-    // Timelines are stored whole, so replace rather than merge. Both errors are
-    // checked: the delete runs first, so a failed insert once destroyed a
-    // person's entire education and work history while the card still
-    // disappeared as though it had worked.
-    for (const [table, rowsRaw] of [
-      ['higher_studies', higher_studies],
-      ['work_experience', work_experience],
-    ] as const) {
-      if (!Array.isArray(rowsRaw)) continue;
-      const { error: delErr } = await supabase.from(table).delete().eq('alumni_id', person.id);
-      if (delErr) {
-        setBusy(false);
-        setActionError(`Published the profile details, but could not update ${table.replace('_', ' ')}: ${delErr.message}`);
+    if (out.still_waiting) {
+      // Something is still staged, so they have not been decided. Re-read the
+      // one row rather than the whole queue: a reload would re-sort the list
+      // under the cursor mid-decision.
+      const { data: fresh } = await supabase.from('alumni').select('*').eq('id', person.id).maybeSingle();
+      if (fresh) {
+        setData((d) => ({
+          ...d,
+          pendingEdits: d.pendingEdits.map((p) => (p.id === person.id ? (fresh as AlumniRow) : p)),
+        }));
+        refreshCounts();
         return;
       }
-      if (rowsRaw.length) {
-        const { error: insErr } = await supabase.from(table).insert(
-          rowsRaw.map((r: any) => ({ ...r, alumni_id: person.id })),
-        );
-        if (insErr) {
-          setBusy(false);
-          setActionError(
-            `Published the profile details, but their ${table.replace('_', ' ')} entries did not save (${insErr.message}). ` +
-            'Ask them to re-enter that section from their profile page.',
-          );
-          return;
-        }
-      }
     }
-    setBusy(false);
-    setActionNote(
-      `Published ${person.full_name}'s changes — the directory shows them now.` +
-      (unknown.length ? ` ${unknown.length} unrecognised value(s) were not published.` : ''),
-    );
     drop(`edit:${person.id}`, (d) => ({ ...d, pendingEdits: d.pendingEdits.filter((p) => p.id !== person.id) }));
   }
 
-  async function discardEdit(person: AlumniRow) {
+  async function discardEdit(person: AlumniRow, reason: string) {
     setActionError(''); setBusy(true);
     // The live columns were never touched, so discarding is just clearing the
-    // staging area - no restore step and nothing for the public to notice.
-    const { data: hit, error } = await supabase.from('alumni')
-      .update({ modification_status: 'rejected', pending_changes: null })
-      .eq('id', person.id).select('id');
+    // staging area. The difference now is that the blob survives in the log,
+    // so a discard is no longer the end of the only copy of what somebody
+    // wrote - and the reason reaches them instead of nothing at all.
+    const { error } = await supabase.rpc('admin_discard_changes', {
+      p_alumni_id: person.id,
+      p_keys: null,
+      p_reason: reason.trim() || null,
+    });
     setBusy(false);
     if (error) { setActionError('Could not discard the edits: ' + error.message); return; }
-    if (!hit?.length) { setActionError('Nothing was discarded — reload and try again.'); return; }
     setActionNote(`Discarded ${person.full_name}'s changes.`);
     drop(`edit:${person.id}`, (d) => ({ ...d, pendingEdits: d.pendingEdits.filter((p) => p.id !== person.id) }));
   }
@@ -252,6 +272,12 @@ export default function ReviewPage() {
       setActionError('Could not update that photo: ' + (error?.message ?? 'no row changed.'));
       return;
     }
+    logDecision({
+      kind: 'photo', subjectId: photo.id,
+      action: decision === 'approved' ? 'approve' : 'reject',
+      summary: `a campus photo of ${Array.isArray(photo.college) ? photo.college[0]?.name : photo.college?.name ?? 'a college'}`,
+      before: { status: 'pending' }, after: { status: decision }, undoable: true,
+    });
     setActionNote(decision === 'approved'
       ? 'Published — it is on the college page now.'
       : 'Hidden. The file stays until you delete it.');
@@ -271,6 +297,10 @@ export default function ReviewPage() {
     });
     const out = await res.json().catch(() => ({}));
     if (!res.ok) { setActionError(out.error ?? 'Could not delete that photo.'); return; }
+    logDecision({
+      kind: 'photo', subjectId: photo.id, action: 'delete',
+      summary: 'a campus photo, file and all', undoable: false,
+    });
     setActionNote('Deleted, file and all.');
     drop(`photo:${photo.id}`, (d) => ({ ...d, photos: d.photos.filter((p) => p.id !== photo.id) }));
   }
@@ -293,7 +323,16 @@ export default function ReviewPage() {
         case 'a':
           if (busy) return;
           if (current.kind === 'registration') { e.preventDefault(); void approveRegistration(current.person); }
-          else if (current.kind === 'edit') { e.preventDefault(); void publishEdit(current.person); }
+          else if (current.kind === 'edit') {
+            // The keyboard publishes the lot, which is what the ticks start as
+            // - anything less is a judgement the keyboard should not make.
+            e.preventDefault();
+            const staged = current.person.pending_changes ?? {};
+            void publishEdit(
+              current.person, Object.keys(splitStaged(staged).columns),
+              Array.isArray(staged.higher_studies), Array.isArray(staged.work_experience), '',
+            );
+          }
           else if (current.kind === 'photo') { e.preventDefault(); void decidePhoto(current.photo, 'approved'); }
           // A value or an unmatched name has no single right answer - which
           // name? merge into what? - so the keyboard does not pretend it does.
@@ -428,6 +467,138 @@ export default function ReviewPage() {
   );
 }
 
+/**
+ * One person, and what the school decides about them.
+ *
+ * Its own component because publishing is no longer one button: the ticks and
+ * the note are state, and state belongs to something that remounts when the
+ * queue moves to the next person. Keyed on the person's id below, so nobody
+ * ever publishes the previous card's ticks.
+ */
+function PersonDetail({
+  item, busy, studies, work, skip,
+  onApproveRegistration, onRejectRegistration, onDeleteAlumnus, onPublishEdit, onDiscardEdit,
+}: {
+  item: Extract<ReviewItem, { kind: 'registration' | 'edit' }>;
+  busy: boolean;
+  studies: Record<string, HigherStudyRow[]>;
+  work: Record<string, WorkExperienceRow[]>;
+  skip: React.ReactNode;
+  onApproveRegistration: (p: AlumniRow) => Promise<void>;
+  onRejectRegistration: (p: AlumniRow, reason: string) => Promise<void>;
+  onPublishEdit: (p: AlumniRow, keys: string[], studies: boolean, work: boolean, note: string) => Promise<void>;
+  onDiscardEdit: (p: AlumniRow, reason: string) => Promise<void>;
+  onDeleteAlumnus: (p: AlumniRow) => Promise<void>;
+}) {
+  const person = item.person;
+  const staged = item.kind === 'edit' ? person.pending_changes : null;
+
+  // Everything publishable starts ticked, so the common case - publish the
+  // lot - is still one click. Unticking is the deliberate act.
+  const publishable = useMemo(() => {
+    const { columns } = splitStaged(staged);
+    const keys = Object.keys(columns);
+    if (Array.isArray(staged?.higher_studies)) keys.push('higher_studies');
+    if (Array.isArray(staged?.work_experience)) keys.push('work_experience');
+    return keys;
+  }, [staged]);
+  const [picked, setPicked] = useState<Set<string>>(() => new Set(publishable));
+  const [note, setNote] = useState('');
+
+  const picks = item.kind === 'edit' ? {
+    has: (k: string) => picked.has(k),
+    toggle: (k: string) => setPicked((prev) => {
+      const next = new Set(prev);
+      if (next.has(k)) next.delete(k); else next.add(k);
+      return next;
+    }),
+  } : null;
+
+  const chosen = publishable.filter((k) => picked.has(k));
+  const held = publishable.length - chosen.length;
+  const columnKeys = chosen.filter((k) => k !== 'higher_studies' && k !== 'work_experience');
+
+  return (
+    <div className="card">
+      <ProfileReview
+        person={person}
+        studies={studies[person.id]}
+        work={work[person.id]}
+        staged={staged}
+        picks={picks}
+      />
+
+      {item.kind === 'edit' && held > 0 && (
+        <div className="field" style={{ marginTop: 14 }}>
+          <label htmlFor="review-note">
+            What to tell them about the {held} change{held === 1 ? '' : 's'} you are holding back
+            <span className="opt">optional — they see this on their profile</span>
+          </label>
+          <textarea
+            id="review-note" value={note} onChange={(e) => setNote(e.target.value)}
+            placeholder="e.g. “We’ll add the college once we can confirm the name.”"
+            style={{ minHeight: 56 }}
+          />
+        </div>
+      )}
+
+      <div className="queue__actions">
+        {item.kind === 'registration' ? (
+          <>
+            <button type="button" className="btn btn--primary" disabled={busy}
+              onClick={() => onApproveRegistration(person)}>
+              <span className="btn__inner">✓ Approve</span>
+            </button>
+            <ConfirmAction
+              label="✕ Reject" confirmLabel="Yes, reject" busyLabel="Rejecting…" wide
+              question={<>Reject <strong>{person.full_name}</strong>? They stay out of the directory.</>}
+              reason={{ placeholder: 'Reason (optional, for your records)' }}
+              onConfirm={(why) => onRejectRegistration(person, why)}
+            />
+            {skip}
+            <span style={{ marginLeft: 'auto' }}>
+              <ConfirmAction
+                label="🗑 Delete" confirmLabel="Yes, delete permanently" busyLabel="Deleting…" wide
+                question={<>Permanently delete <strong>{person.full_name}</strong>? Their profile, photo and login are removed. This cannot be undone.</>}
+                onConfirm={() => onDeleteAlumnus(person)}
+              />
+            </span>
+          </>
+        ) : (
+          <>
+            <button
+              type="button" className="btn btn--primary"
+              disabled={busy || chosen.length === 0}
+              onClick={() => onPublishEdit(
+                person, columnKeys,
+                picked.has('higher_studies'), picked.has('work_experience'), note,
+              )}
+            >
+              <span className="btn__inner">
+                {held === 0
+                  ? '✓ Publish changes'
+                  : `✓ Publish ${chosen.length} of ${publishable.length}`}
+              </span>
+            </button>
+            <ConfirmAction
+              label="↩ Discard changes" confirmLabel="Yes, discard them" busyLabel="Discarding…" wide
+              question={`Discard everything ${person.full_name} submitted? What they wrote is kept in the review log, so this can be looked up - but it leaves their profile.`}
+              reason={{ placeholder: 'Why — they see this on their profile' }}
+              onConfirm={(why) => onDiscardEdit(person, why)}
+            />
+            {skip}
+            {held > 0 && (
+              <span className="queue__held">
+                {held} change{held === 1 ? '' : 's'} stay{held === 1 ? 's' : ''} in the queue.
+              </span>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function Detail({
   item, data, busy, studies, work,
   onApproveRegistration, onRejectRegistration, onDeleteAlumnus,
@@ -442,8 +613,8 @@ function Detail({
   onApproveRegistration: (p: AlumniRow) => Promise<void>;
   onRejectRegistration: (p: AlumniRow, reason: string) => Promise<void>;
   onDeleteAlumnus: (p: AlumniRow) => Promise<void>;
-  onPublishEdit: (p: AlumniRow) => Promise<void>;
-  onDiscardEdit: (p: AlumniRow) => Promise<void>;
+  onPublishEdit: (p: AlumniRow, keys: string[], studies: boolean, work: boolean, note: string) => Promise<void>;
+  onDiscardEdit: (p: AlumniRow, reason: string) => Promise<void>;
   onDecidePhoto: (p: PendingPhoto, d: 'approved' | 'rejected') => Promise<void>;
   onDeletePhoto: (p: PendingPhoto) => Promise<void>;
   onSkip: () => void;
@@ -458,55 +629,22 @@ function Detail({
   );
 
   if (item.kind === 'registration' || item.kind === 'edit') {
-    const person = item.person;
     return (
-      <div className="card">
-        <ProfileReview
-          person={person}
-          studies={studies[person.id]}
-          work={work[person.id]}
-          staged={item.kind === 'edit' ? person.pending_changes : null}
-        />
-        <div className="queue__actions">
-          {item.kind === 'registration' ? (
-            <>
-              <button type="button" className="btn btn--primary" disabled={busy}
-                onClick={() => onApproveRegistration(person)}>
-                <span className="btn__inner">✓ Approve</span>
-              </button>
-              <ConfirmAction
-                label="✕ Reject" confirmLabel="Yes, reject" busyLabel="Rejecting…" wide
-                question={<>Reject <strong>{person.full_name}</strong>? They stay out of the directory.</>}
-                reason={{ placeholder: 'Reason (optional, for your records)' }}
-                onConfirm={(why) => onRejectRegistration(person, why)}
-              />
-              {skip}
-              <span style={{ marginLeft: 'auto' }}>
-                <ConfirmAction
-                  label="🗑 Delete" confirmLabel="Yes, delete permanently" busyLabel="Deleting…" wide
-                  question={<>Permanently delete <strong>{person.full_name}</strong>? Their profile, photo and login are removed. This cannot be undone.</>}
-                  onConfirm={() => onDeleteAlumnus(person)}
-                />
-              </span>
-            </>
-          ) : (
-            <>
-              <button type="button" className="btn btn--primary" disabled={busy}
-                onClick={() => onPublishEdit(person)}>
-                <span className="btn__inner">✓ Publish changes</span>
-              </button>
-              <ConfirmAction
-                label="↩ Discard changes" confirmLabel="Yes, discard them" busyLabel="Discarding…" wide
-                question={`Discard the changes ${person.full_name} submitted? They will have to type them again, and nothing tells them it happened.`}
-                onConfirm={() => onDiscardEdit(person)}
-              />
-              {skip}
-            </>
-          )}
-        </div>
-      </div>
+      <PersonDetail
+        // Keyed, so the ticks and the note belong to this person and nobody
+        // ever publishes the previous card's choices.
+        key={item.person.id}
+        item={item} busy={busy} studies={studies} work={work}
+        onApproveRegistration={onApproveRegistration}
+        onRejectRegistration={onRejectRegistration}
+        onDeleteAlumnus={onDeleteAlumnus}
+        onPublishEdit={onPublishEdit}
+        onDiscardEdit={onDiscardEdit}
+        skip={skip}
+      />
     );
   }
+
 
   if (item.kind === 'photo') {
     const photo = item.photo;

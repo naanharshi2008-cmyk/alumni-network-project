@@ -85,10 +85,12 @@ export function buildQueue(data: ReviewData): ReviewItem[] {
     items.push({
       key: `edit:${person.id}`,
       kind: 'edit',
-      // Stamped when they staged the edit. It also moves when someone confirms
-      // their profile is still correct, so it is a fair proxy and not a record
-      // - migration 15 adds edits_staged_at for the honest answer.
-      waitingSince: person.last_confirmed_at ?? person.created_at,
+      // Stamped by a trigger the moment the edit entered the queue. This used
+      // to fall back to last_confirmed_at, which also moves when somebody
+      // presses "this is still correct" - so the queue could not tell an edit
+      // that had waited three weeks from a profile confirmed this morning.
+      // The fallbacks are for rows staged before migration 15.
+      waitingSince: person.edits_staged_at ?? person.last_confirmed_at ?? person.created_at,
       title: person.full_name,
       summary: `Changed ${summary}`,
       person,

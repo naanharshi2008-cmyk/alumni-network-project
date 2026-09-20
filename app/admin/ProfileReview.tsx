@@ -23,12 +23,27 @@ import { splitStaged } from './editFields';
  * in its own field, not in a separate table somewhere above.
  */
 
+/**
+ * Which staged fields the school has ticked to publish.
+ *
+ * Publishing used to be all-or-nothing: one button took the whole blob, so an
+ * edit with one good change and one the office wanted to query had to be
+ * discarded entirely and re-typed by the alumnus. Ticking happens on the field
+ * itself, where the change is shown, rather than in a list somewhere else.
+ */
+export type Picks = {
+  has: (key: string) => boolean;
+  toggle: (key: string) => void;
+};
+
 type Props = {
   person: AlumniRow;
   studies?: HigherStudyRow[];
   work?: WorkExperienceRow[];
   /** Present for an edit: what they want it to become. */
   staged?: Record<string, any> | null;
+  /** Present for an edit the school is about to publish some of. */
+  picks?: Picks | null;
 };
 
 function show(value: unknown): string {
@@ -39,17 +54,26 @@ function show(value: unknown): string {
 
 /** One field: what is live, and underneath it what they want instead. */
 function Field({
-  label, live, staged, has, wide, photo, note,
+  label, live, staged, has, wide, photo, note, picks,
 }: {
   label: string; live: unknown; staged?: Record<string, any> | null;
   has: string; wide?: boolean; photo?: boolean; note?: string | null;
+  picks?: Picks | null;
 }) {
   const proposed = staged && has in staged ? staged[has] : undefined;
   const changed = proposed !== undefined && proposed !== live && !(!proposed && !live);
+  const ticked = !!picks && picks.has(has);
 
   return (
-    <div className={`pr-field${wide ? ' pr-field--wide' : ''}${changed ? ' pr-field--changed' : ''}`}>
-      <span className="pr-field__label">{label}</span>
+    <div className={`pr-field${wide ? ' pr-field--wide' : ''}${changed ? ' pr-field--changed' : ''}${changed && picks && !ticked ? ' pr-field--held' : ''}`}>
+      <span className="pr-field__label">
+        {changed && picks ? (
+          <label className="pr-tick">
+            <input type="checkbox" checked={ticked} onChange={() => picks.toggle(has)} />
+            <span>{label}</span>
+          </label>
+        ) : label}
+      </span>
       {photo ? (
         <span className="pr-field__photos">
           <span className="pr-photo">
@@ -99,7 +123,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-export default function ProfileReview({ person, studies, work, staged }: Props) {
+export default function ProfileReview({ person, studies, work, staged, picks }: Props) {
   const unknown = staged ? splitStaged(staged).unknown : [];
   const stagedStudies = staged && Array.isArray(staged.higher_studies) ? staged.higher_studies : null;
   const stagedWork = staged && Array.isArray(staged.work_experience) ? staged.work_experience : null;
@@ -150,39 +174,39 @@ export default function ProfileReview({ person, studies, work, staged }: Props) 
       )}
 
       <Section title="What they would tell a junior">
-        <Field label={FIELD_LABELS.message_1} live={person.message_1} staged={staged} has="message_1" wide />
-        <Field label={FIELD_LABELS.message_2} live={person.message_2} staged={staged} has="message_2" wide />
-        <Field label={FIELD_LABELS.college_thoughts} live={person.college_thoughts} staged={staged} has="college_thoughts" wide />
+        <Field label={FIELD_LABELS.message_1} live={person.message_1} staged={staged} has="message_1" wide picks={picks} />
+        <Field label={FIELD_LABELS.message_2} live={person.message_2} staged={staged} has="message_2" wide picks={picks} />
+        <Field label={FIELD_LABELS.college_thoughts} live={person.college_thoughts} staged={staged} has="college_thoughts" wide picks={picks} />
       </Section>
 
       <Section title="Where they went, and how">
-        <Field label="College" live={person.college_name_raw} staged={staged} has="college_name_raw" />
-        <Field label="Degree" live={person.degree} staged={staged} has="degree" />
-        <Field label="Branch" live={person.branch} staged={staged} has="branch" />
+        <Field label="College" live={person.college_name_raw} staged={staged} has="college_name_raw" picks={picks} />
+        <Field label="Degree" live={person.degree} staged={staged} has="degree" picks={picks} />
+        <Field label="Branch" live={person.branch} staged={staged} has="branch" picks={picks} />
         {/* The area of study is worked out from the degree unless somebody
             disagreed with it, so recomputing the guess here tells you which
             one this is. No column and no migration: the answer is already in
             the row. */}
-        <Field label="Field" live={person.field} staged={staged} has="field" note={correctedFrom(person)} />
-        <Field label="Admission route" live={person.admission_route} staged={staged} has="admission_route" />
-        <Field label="Rank" live={person.admission_rank} staged={staged} has="admission_rank" />
-        <Field label="Board marks" live={person.board_marks} staged={staged} has="board_marks" />
-        <Field label="Cutoff" live={person.board_cutoff} staged={staged} has="board_cutoff" />
+        <Field label="Field" live={person.field} staged={staged} has="field" note={correctedFrom(person)} picks={picks} />
+        <Field label="Admission route" live={person.admission_route} staged={staged} has="admission_route" picks={picks} />
+        <Field label="Rank" live={person.admission_rank} staged={staged} has="admission_rank" picks={picks} />
+        <Field label="Board marks" live={person.board_marks} staged={staged} has="board_marks" picks={picks} />
+        <Field label="Cutoff" live={person.board_cutoff} staged={staged} has="board_cutoff" picks={picks} />
       </Section>
 
       {(person.professional_course || staged?.professional_course) && (
         <Section title="Professional qualification">
-          <Field label="Course" live={person.professional_course} staged={staged} has="professional_course" />
-          <Field label="Stage" live={person.professional_stage} staged={staged} has="professional_stage" />
-          <Field label="Articling / studying at" live={person.professional_org} staged={staged} has="professional_org" />
+          <Field label="Course" live={person.professional_course} staged={staged} has="professional_course" picks={picks} />
+          <Field label="Stage" live={person.professional_stage} staged={staged} has="professional_stage" picks={picks} />
+          <Field label="Articling / studying at" live={person.professional_org} staged={staged} has="professional_org" picks={picks} />
         </Section>
       )}
 
       <Section title="What they are doing now">
-        <Field label="Status" live={person.current_status} staged={staged} has="current_status" />
-        <Field label="Expected to finish" live={person.expected_finish_year} staged={staged} has="expected_finish_year" />
-        <Field label="Currently at" live={person.currently_at} staged={staged} has="currently_at" />
-        <Field label="Role" live={person.designation} staged={staged} has="designation" />
+        <Field label="Status" live={person.current_status} staged={staged} has="current_status" picks={picks} />
+        <Field label="Expected to finish" live={person.expected_finish_year} staged={staged} has="expected_finish_year" picks={picks} />
+        <Field label="Currently at" live={person.currently_at} staged={staged} has="currently_at" picks={picks} />
+        <Field label="Role" live={person.designation} staged={staged} has="designation" picks={picks} />
       </Section>
 
       {(studies?.length || work?.length || stagedStudies || stagedWork) ? (
@@ -191,29 +215,31 @@ export default function ProfileReview({ person, studies, work, staged }: Props) 
             label="Higher studies" wide
             rows={(studies ?? []).map((s) => `🎓 ${s.degree_name}${s.institution ? ` — ${s.institution}` : ''}${(s.start_year || s.finish_year) ? ` (${s.start_year || '?'}–${s.finish_year || '?'})` : ''}`)}
             proposed={stagedStudies?.map((s: any) => `🎓 ${s.degree_name}${s.institution ? ` — ${s.institution}` : ''}${(s.start_year || s.finish_year) ? ` (${s.start_year || '?'}–${s.finish_year || '?'})` : ''}`)}
+            picks={picks} has="higher_studies"
           />
           <Timeline
             label="Work" wide
             rows={(work ?? []).map((w) => `💼 ${w.role ? `${w.role} — ` : ''}${w.company}${(w.start_year || w.end_year) ? ` (${w.start_year || '?'}–${w.is_current ? 'now' : (w.end_year || '?')})` : ''}`)}
             proposed={stagedWork?.map((w: any) => `💼 ${w.role ? `${w.role} — ` : ''}${w.company}${(w.start_year || w.end_year) ? ` (${w.start_year || '?'}–${w.is_current ? 'now' : (w.end_year || '?')})` : ''}`)}
+            picks={picks} has="work_experience"
           />
         </Section>
       ) : null}
 
       <Section title="Picture and links">
-        <Field label="Photo" live={person.photo_url} staged={staged} has="photo_url" wide photo />
-        <Field label="LinkedIn" live={person.linkedin_url} staged={staged} has="linkedin_url" wide />
+        <Field label="Photo" live={person.photo_url} staged={staged} has="photo_url" wide photo picks={picks} />
+        <Field label="LinkedIn" live={person.linkedin_url} staged={staged} has="linkedin_url" wide picks={picks} />
       </Section>
 
       <Section title="Private — the office only">
-        <Field label="Email" live={person.personal_email} staged={staged} has="personal_email" />
+        <Field label="Email" live={person.personal_email} staged={staged} has="personal_email" picks={picks} />
         <Field
           label="Phone"
           live={person.phone_number ? `${person.phone_country_code ?? ''} ${person.phone_number}`.trim() : null}
-          staged={staged} has="phone_number"
+          staged={staged} has="phone_number" picks={picks}
         />
-        <Field label="Admission number" live={person.admission_number} staged={staged} has="admission_number" />
-        <Field label="School" live={person.school_name ? officialSchoolName(person.school_name) : null} staged={staged} has="school_name" />
+        <Field label="Admission number" live={person.admission_number} staged={staged} has="admission_number" picks={picks} />
+        <Field label="School" live={person.school_name ? officialSchoolName(person.school_name) : null} staged={staged} has="school_name" picks={picks} />
       </Section>
     </div>
   );
@@ -225,14 +251,25 @@ export default function ProfileReview({ person, studies, work, staged }: Props) 
  * added, dropped or untouched marked line by line.
  */
 function Timeline({
-  label, rows, proposed, wide,
-}: { label: string; rows: string[]; proposed?: string[]; wide?: boolean }) {
+  label, rows, proposed, wide, picks, has,
+}: {
+  label: string; rows: string[]; proposed?: string[]; wide?: boolean;
+  picks?: Picks | null; has?: string;
+}) {
   const changing = !!proposed && (proposed.length !== rows.length || proposed.some((p, i) => p !== rows[i]));
   if (!rows.length && !proposed?.length) return null;
+  const ticked = !!picks && !!has && picks.has(has);
 
   return (
-    <div className={`pr-field${wide ? ' pr-field--wide' : ''}${changing ? ' pr-field--changed' : ''}`}>
-      <span className="pr-field__label">{label}</span>
+    <div className={`pr-field${wide ? ' pr-field--wide' : ''}${changing ? ' pr-field--changed' : ''}${changing && picks && !ticked ? ' pr-field--held' : ''}`}>
+      <span className="pr-field__label">
+        {changing && picks && has ? (
+          <label className="pr-tick">
+            <input type="checkbox" checked={ticked} onChange={() => picks.toggle(has)} />
+            <span>{label}</span>
+          </label>
+        ) : label}
+      </span>
       {rows.length === 0 ? <span className="pr-field__value">—</span> : (
         <ul className="pr-list">
           {rows.map((r) => (

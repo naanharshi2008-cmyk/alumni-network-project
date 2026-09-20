@@ -64,6 +64,12 @@ export type AlumniRow = {
   college_thoughts: string | null;
   featured?: boolean | null;
   email_verified_at?: string | null;
+  rejection_reason?: string | null;
+  /** What the school told them about an edit it held back. From migration 15. */
+  review_note?: string | null;
+  review_note_at?: string | null;
+  /** When the staged edit entered the queue. Derived by a trigger, never sent. */
+  edits_staged_at?: string | null;
   // False on a row the school entered itself: nobody has agreed to anything
   // yet, and the profile is a stub until they sign in and fill it in.
   consent_given?: boolean | null;
@@ -148,6 +154,56 @@ export function groupByTypedName(rows: any[], column: string): TypedNameGroup[] 
 }
 
 
+export type ReviewEventRow = {
+  id: number;
+  occurred_at: string;
+  actor_email: string;
+  subject_kind: string;
+  subject_id: string;
+  alumni_id: string | null;
+  action: string;
+  summary: string;
+  reason: string | null;
+  undoable: boolean;
+  undone_at: string | null;
+};
+
+/**
+ * Write a decision to the log.
+ *
+ * Fire-and-forget, deliberately: the decision itself has already been made and
+ * saved by the time this runs, and failing an approval because a log line
+ * could not be written would be the wrong trade every time. A failure goes to
+ * the console, where we will see it, rather than to the person approving, who
+ * could do nothing about it.
+ *
+ * The actor is never passed - admin_log_event reads it from the caller's own
+ * token, so an event cannot be written in somebody else's name.
+ */
+export function logDecision(e: {
+  kind: 'registration' | 'profile_edit' | 'profile' | 'photo' | 'option' | 'institute';
+  subjectId: string;
+  alumniId?: string | null;
+  action: string;
+  summary: string;
+  reason?: string | null;
+  before?: unknown;
+  after?: unknown;
+  undoable?: boolean;
+}) {
+  void supabase.rpc('admin_log_event', {
+    p_subject_kind: e.kind,
+    p_subject_id: e.subjectId,
+    p_alumni_id: e.alumniId ?? null,
+    p_action: e.action,
+    p_summary: e.summary,
+    p_reason: e.reason ?? null,
+    p_before: e.before ?? null,
+    p_after: e.after ?? null,
+    p_undoable: e.undoable ?? false,
+  }).then(({ error }) => { if (error) console.error('review log', error.message); });
+}
+
 export type Counts = { registrations: number; edits: number; photos: number; options: number };
 
 /** The nav badges. Four head-only requests, no rows over the wire. */
@@ -172,6 +228,8 @@ export type TodayData = {
   waiting: { registrations: Waiting; edits: Waiting; photos: Waiting; options: Waiting };
   health: PeopleFacets;
   arrivals: { id: string; full_name: string; created_at: string }[];
+  /** Real decisions, from migration 15's log. Empty before anything is decided. */
+  decisions: ReviewEventRow[];
   newSinceLastVisit: number;
 };
 
@@ -187,7 +245,7 @@ export type TodayData = {
 export async function loadToday(lastVisit: number | null): Promise<TodayData> {
   const pendingBase = () => supabase.from('alumni').select('id', { head: true, count: 'exact' });
 
-  const [counts, health, oldestReg, oldestEdit, oldestPhoto, oldestOption, arrivals, since] =
+  const [counts, health, oldestReg, oldestEdit, oldestPhoto, oldestOption, arrivals, decisions, since] =
     await Promise.all([
       loadCounts(),
       loadPeopleFacets(),
@@ -202,6 +260,9 @@ export async function loadToday(lastVisit: number | null): Promise<TodayData> {
         .eq('status', 'pending').order('created_at').limit(1).maybeSingle(),
       supabase.from('alumni').select('id, full_name, created_at')
         .eq('approval_status', 'approved').order('created_at', { ascending: false }).limit(5),
+      supabase.from('review_events')
+        .select('id, occurred_at, actor_email, subject_kind, subject_id, alumni_id, action, summary, reason, undoable, undone_at')
+        .order('occurred_at', { ascending: false }).limit(6),
       lastVisit
         ? pendingBase().gt('created_at', new Date(lastVisit).toISOString())
         : Promise.resolve({ count: 0 } as { count: number | null }),
@@ -224,6 +285,7 @@ export async function loadToday(lastVisit: number | null): Promise<TodayData> {
     arrivals: ((arrivals.data ?? []) as any[]).map((r) => ({
       id: r.id, full_name: r.full_name, created_at: r.created_at,
     })),
+    decisions: (decisions.data ?? []) as ReviewEventRow[],
     newSinceLastVisit: (since as any).count ?? 0,
   };
 }

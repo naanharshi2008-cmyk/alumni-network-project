@@ -29,7 +29,23 @@ const FALLBACK: TodayData = {
     starred: 0, stale: 0, 'never-confirmed': 0, 'no-college': 0,
   },
   arrivals: [],
+  decisions: [],
   newSinceLastVisit: 0,
+};
+
+/** "Approved", "Published 2 changes" — the log's verb, in the office's words. */
+const ACTION_WORDS: Record<string, string> = {
+  approve: 'Approved',
+  reject: 'Rejected',
+  publish: 'Published changes to',
+  discard: 'Discarded changes to',
+  delete: 'Deleted',
+  hide: 'Hid',
+  restore: 'Restored',
+  feature: 'Featured',
+  unfeature: 'Unfeatured',
+  merge: 'Merged',
+  undo: 'Undid a decision on',
 };
 
 export default function TodayPage() {
@@ -37,6 +53,9 @@ export default function TodayPage() {
   const [data, setData] = useState<TodayData>(FALLBACK);
   const [loading, setLoading] = useState(true);
   const [mail, setMail] = useState<{ domainStatus: string; hint: string } | null>(null);
+
+  const [undoing, setUndoing] = useState<number | null>(null);
+  const [undoError, setUndoError] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -46,6 +65,23 @@ export default function TodayPage() {
   }, [lastVisit, refreshCounts]);
 
   useEffect(() => { void load(); }, [load]);
+
+  /**
+   * Take a decision back.
+   *
+   * admin_undo puts the columns, the timelines and the staging area back as
+   * the event recorded them - and refuses outright if the profile has moved on
+   * since, rather than overwriting whatever the person has done in the
+   * meantime. The log keeps the undone event and marks it undone: a log you
+   * can erase is not a log.
+   */
+  async function undo(eventId: number) {
+    setUndoError(''); setUndoing(eventId);
+    const { error } = await supabase.rpc('admin_undo', { p_event_id: eventId });
+    setUndoing(null);
+    if (error) { setUndoError(error.message); return; }
+    await load();
+  }
 
   useEffect(() => {
     void (async () => {
@@ -104,20 +140,52 @@ export default function TodayPage() {
       )}
 
       <h2 className="today__h">Recently</h2>
+      {undoError && <div className="alert alert--error">Could not undo that: {undoError}</div>}
       <div className="card today__recent">
         {data.newSinceLastVisit > 0 && (
           <p className="today__new">
             <strong>{data.newSinceLastVisit}</strong> new registration{data.newSinceLastVisit === 1 ? '' : 's'} since you last opened this dashboard.
           </p>
         )}
+
+        {/* Decisions, at last. This band showed arrivals and said so, because
+            the database recorded no decisions at all until migration 15 - a
+            registration was approved by overwriting one column, and nothing
+            remembered who did it. Arrivals stay underneath, because on a quiet
+            week they are the only thing here. */}
+        {data.decisions.length > 0 && (
+          <>
+            <p className="today__recent-head">Decisions</p>
+            <ul className="today__list">
+              {data.decisions.map((e) => (
+                <li key={e.id} className={e.undone_at ? 'today__undone' : undefined}>
+                  <span>
+                    {ACTION_WORDS[e.action] ?? e.action} {e.summary}
+                    {e.undone_at && <span className="badge badge--sm" style={{ marginLeft: 6 }}>undone</span>}
+                    {e.reason && <span className="today__reason">“{e.reason}”</span>}
+                  </span>
+                  <span className="today__when">
+                    {e.actor_email.split('@')[0]} · {waitedFor(e.occurred_at)} ago
+                    {/* Undo refuses if the profile has moved on since, so this
+                        cannot quietly overwrite somebody's newer work - it
+                        says so and does nothing. */}
+                    {e.undoable && !e.undone_at && (
+                      <button type="button" className="link-btn" style={{ marginLeft: 8 }}
+                        disabled={undoing === e.id} onClick={() => void undo(e.id)}>
+                        {undoing === e.id ? 'undoing…' : 'undo'}
+                      </button>
+                    )}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+
         {data.arrivals.length === 0 ? (
           <p className="subtitle" style={{ margin: 0, fontSize: '0.88rem' }}>Nobody has joined the directory yet.</p>
         ) : (
           <>
-            {/* Arrivals, not decisions. The database records no decisions at
-                all yet - migration 15 is what turns this into "who approved
-                what, and when" - and saying "recently" over a list of joins
-                would be pretending otherwise. */}
             <p className="today__recent-head">Newest in the directory</p>
             <ul className="today__list">
               {data.arrivals.map((a) => (

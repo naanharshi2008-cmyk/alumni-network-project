@@ -1214,6 +1214,30 @@ textarea { min-height: 84px; resize: vertical; }
   margin-bottom: 10px; font-size: 0.82rem; color: var(--text-faint); cursor: pointer;
 }
 
+/* What the school actually said, under the status it said it about. */
+.status-banner__said {
+  margin: 8px 0 0; padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  font-size: 0.88rem; line-height: 1.5;
+}
+
+/* Ticking a staged change, on the change itself rather than in a list
+   somewhere else. Publishing used to be all-or-nothing, so one field worth
+   querying meant discarding the lot. */
+.pr-tick { display: inline-flex; align-items: center; gap: 7px; cursor: pointer; }
+.pr-tick input { width: 15px; height: 15px; accent-color: var(--gold); }
+.pr-field--held { opacity: 0.62; }
+.pr-field--held .pr-field__new { text-decoration: line-through; }
+.queue__held { align-self: center; font-size: 0.82rem; color: var(--text-muted); }
+
+/* An undone decision stays in the log - that is the point of a log - but it
+   should not read like something that still stands. */
+.today__undone > span:first-child { text-decoration: line-through; color: var(--text-faint); }
+.today__reason {
+  display: block; margin-top: 2px;
+  font-size: 0.82rem; font-style: italic; color: var(--text-muted);
+}
+
 /* ── The institutes bench ──────────────────────────────────────────────
    Eighteen colleges used to render eighteen textareas and thirty-six file
    inputs at once, in one scroll with no way to ask which of them still

@@ -52,6 +52,12 @@ interface AlumnusData {
   photo_url: string | null;
   approval_status: string;
   modification_status: string;
+  /* What the school said. rejection_reason has existed since migration 07 and
+     has never been shown to the one person it was written for; review_note
+     arrives with migration 15, for an edit held back rather than a
+     registration turned down. */
+  rejection_reason: string;
+  review_note: string;
   last_updated: string | null;
   last_confirmed_at: string | null;
   email_verified_at: string | null;
@@ -119,6 +125,8 @@ function normalizeProfile(raw: any): AlumnusData {
     photo_url: raw.photo_url ?? null,
     approval_status: str(raw.approval_status),
     modification_status: str(raw.modification_status),
+    rejection_reason: str(raw.rejection_reason),
+    review_note: str(raw.review_note),
     last_updated: raw.last_updated ?? null,
     last_confirmed_at: raw.last_confirmed_at ?? null,
     email_verified_at: raw.email_verified_at ?? null,
@@ -544,7 +552,11 @@ export default function ProfilePage() {
           </button>
         </div>
 
-        <StatusBanner approval={profile.approval_status} pendingReview={pendingReview} />
+        <StatusBanner
+          approval={profile.approval_status}
+          pendingReview={pendingReview}
+          reason={profile.approval_status === 'rejected' ? profile.rejection_reason : profile.review_note}
+        />
 
         {profile.seeded_by_school && profile.approval_status !== 'approved' && (
           <div className="welcome-card">
@@ -886,17 +898,38 @@ export default function ProfilePage() {
 
 /* ----- Small pieces ------------------------------------------------------- */
 
-function StatusBanner({ approval, pendingReview }: { approval: string; pendingReview: boolean }) {
+/**
+ * What the school has decided, and - at last - why.
+ *
+ * "Please contact the school office" was all anyone was ever told, while the
+ * reason the office had typed sat unread in the row. A person who is told what
+ * to fix can fix it; a person told to ring up mostly does not.
+ */
+function StatusBanner({ approval, pendingReview, reason }: {
+  approval: string; pendingReview: boolean; reason?: string;
+}) {
+  const said = (reason ?? '').trim();
   const [tone, text] =
     approval === 'pending'
       ? ['warn', 'Pending verification — an administrator is reviewing your profile.']
       : approval === 'rejected'
-        ? ['danger', 'This profile was not approved. Please contact the school office.']
+        ? ['danger', said
+          ? 'This profile was not approved.'
+          : 'This profile was not approved. Please contact the school office.']
         : pendingReview
           ? ['warn', 'Edits under review — the directory shows your last approved version until staff publish the changes.']
           : ['ok', 'Verified and live on the directory ✨'];
 
-  return <div className={`status-banner status-banner--${tone}`}><strong>Profile status: </strong>{text}</div>;
+  return (
+    <div className={`status-banner status-banner--${tone}`}>
+      <strong>Profile status: </strong>{text}
+      {said && (approval === 'rejected' || approval === 'approved') && (
+        <p className="status-banner__said">
+          <strong>From the school:</strong> {said}
+        </p>
+      )}
+    </div>
+  );
 }
 
 function Divider() {
