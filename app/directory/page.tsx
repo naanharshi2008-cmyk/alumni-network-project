@@ -742,11 +742,9 @@ function CollegeExplorerCard({
           style={{ fontSize: '0.85rem', width: '100%' }}
           aria-expanded={showSeniors}
         >
-          <span className="btn__inner">
-            {showSeniors
-              ? '▲ Hide seniors'
-              : `▼ See ${college.seniors.length} senior${college.seniors.length === 1 ? '' : 's'} who got in`}
-          </span>
+          {showSeniors
+            ? '▲ Hide seniors'
+            : `▼ See ${college.seniors.length} senior${college.seniors.length === 1 ? '' : 's'} who got in`}
         </button>
 
         {showSeniors && (

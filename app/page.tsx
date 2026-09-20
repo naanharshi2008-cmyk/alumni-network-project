@@ -75,7 +75,7 @@ export default function Home() {
           </p>
           <div className="hero2__cta">
             <Link href="/directory" className="btn btn--primary btn--lg">
-              <span className="btn__inner">Browse the directory →</span>
+              <span className="btn__inner">Explore alumni →</span>
             </Link>
             <Link href="/register" className="btn btn--ghost btn--lg">
               <span className="btn__inner">I&apos;m an alumnus</span>

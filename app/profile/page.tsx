@@ -788,7 +788,7 @@ export default function ProfilePage() {
 
           <button type="submit" disabled={saving} className="btn btn--neutral btn--lg btn--block" style={{ marginTop: 24 }}>
             <span className="btn__inner">
-              {saving ? <span className="spinner" /> : isApproved ? 'Submit changes for review 💾' : 'Save changes 💾'}
+              {saving ? <span className="spinner spinner--neutral" /> : isApproved ? 'Submit changes for review 💾' : 'Save changes 💾'}
             </span>
           </button>
         </form>
