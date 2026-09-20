@@ -31,10 +31,14 @@ export default function AboutPage() {
         <div className="card about__card">
           <h2>What it&apos;s for</h2>
           <p>
-            A class 11 student deciding between engineering and medicine, or wondering whether a
-            rank is good enough, learns most from someone who sat in the same classrooms. Here
-            they can find that senior, see the exam or marks that opened the door, and read
-            their advice.
+            Whatever a student is weighing up — the sciences, engineering, medicine, commerce and
+            CA, law, design, defence, teaching, the arts, a university abroad — someone from these
+            same classrooms has already walked some of it. This is where you find them.
+          </p>
+          <p>
+            Not every door opens with an entrance exam either: board marks, a portfolio, an
+            audition, an application. Seniors say which one they used, and what they would do
+            differently.
           </p>
         </div>
 
@@ -86,7 +90,7 @@ export default function AboutPage() {
         </div>
         <div className="about__cta">
           <Link href="/register" className="btn btn--primary btn--lg"><span className="btn__inner">Add your journey →</span></Link>
-          <Link href="/directory" className="btn btn--ghost btn--lg"><span className="btn__inner">Browse the directory</span></Link>
+          <Link href="/directory" className="btn btn--ghost btn--lg"><span className="btn__inner">Explore alumni</span></Link>
         </div>
       </section>
     </main>

@@ -5,6 +5,11 @@
    ========================================================================== */
 
 :root {
+  /* Native widgets - select popups, scrollbars, date pickers - are painted by
+     the browser, not by us. Without this it paints them light: every dropdown
+     opened as a white popup with our near-white text inside it. */
+  color-scheme: dark;
+
   --bg: #060608;
   --bg-blob-1: #1c1408;
   --bg-blob-2: #130a1e;
@@ -14,9 +19,14 @@
   --surface-glass: rgba(15, 13, 20, 0.72);
   --text: #f3efe6;
   --text-muted: #b7b2c4;
-  --text-faint: #7d7890;
+  /* Small print (0.72-0.85rem) all over the app, so this must clear 4.5:1 on
+     --surface. The old #7d7890 was 4.3:1 - just under, everywhere at once. */
+  --text-faint: #9a94ab;
   --border: rgba(255, 255, 255, 0.09);
   --border-strong: rgba(255, 255, 255, 0.18);
+  /* A field's outline is how you find the field: it is UI, and needs 3:1
+     against the field's own --surface-2 fill. --border-strong gives 1.6:1. */
+  --border-field: rgba(255, 255, 255, 0.36);
 
   --gold: #f2c34e;
   --emerald: #34d399;
@@ -28,7 +38,9 @@
   --grad: linear-gradient(120deg, #f2c34e 0%, #34d399 48%, #a855f7 100%);
   --grad-soft: linear-gradient(135deg, rgba(242, 195, 78, 0.14) 0%, rgba(52, 211, 153, 0.1) 50%, rgba(168, 85, 247, 0.14) 100%);
   --grad-text: linear-gradient(100deg, #f7d989 0%, #4ee6ac 45%, #c084fc 100%);
-  --ring: rgba(242, 195, 78, 0.35);
+  /* The focus ring is the only thing a keyboard user has to go on: 0.35 alpha
+     composited to 2.3:1, under the 3:1 floor. */
+  --ring: rgba(242, 195, 78, 0.6);
 
   --danger-bg: #2a1414;
   --danger-border: #5b2626;
@@ -242,13 +254,20 @@ button:focus-visible,
 .btn--block { width: 100%; }
 .btn--block .btn__inner { width: 100%; }
 .btn--lg .btn__inner { padding: 15px 32px; font-size: 1.04rem; }
-.btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
+/* 0.5 dropped the busy label ("Submitting...", "Sign in") to 3.9:1, and that
+   is exactly the moment someone is staring at the button. */
+.btn:disabled { opacity: 0.65; cursor: not-allowed; transform: none; box-shadow: none; }
 
 /* Legacy shorthand: plain-colour share buttons still use .btn without .btn__inner. */
 .btn--plain { padding: 12px 22px; border-radius: var(--r-full); border: none; font-weight: 700; box-shadow: 0 8px 20px -10px rgba(0,0,0,0.5); }
 .btn--plain:hover { transform: translateY(-2px); filter: brightness(1.08); }
 .btn--plain-neutral { background: var(--surface-2); color: var(--text); border: 1.5px solid var(--border-strong); }
 .btn--plain-neutral:hover { border-color: var(--text-muted); filter: none; }
+/* .btn__inner carries --primary-ink for the gradient fill. On a plain button
+   that fill is gone, so the label has to be given the text colour back - as
+   --ghost and --neutral below already do. Without this the directory's
+   "See N seniors" toggle was #10090a ink on a #17141d panel: 1.06:1. */
+.btn--plain-neutral .btn__inner { color: var(--text); font-weight: 700; }
 
 /* Neutral button: same shape/motion as .btn but without the gold/emerald/
    violet gradient fill, used where we want the surrounding UI (registration
@@ -260,7 +279,7 @@ button:focus-visible,
 }
 .btn--neutral .btn__inner { color: var(--text); }
 .btn--neutral:hover { border-color: var(--text-muted); box-shadow: 0 14px 30px -14px rgba(0, 0, 0, 0.6); filter: none; }
-.btn--neutral:disabled { opacity: 0.5; }
+.btn--neutral:disabled { opacity: 0.65; }
 
 /* ---------- Upload button (photo) ------------------------------------------ */
 
@@ -317,11 +336,14 @@ select, textarea {
   font: inherit; font-size: 1rem;
   color: var(--text);
   background: var(--surface-2);
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--border-field);
   border-radius: var(--r-sm);
   transition: border-color 0.18s, box-shadow 0.18s, background 0.18s;
 }
 input::placeholder, textarea::placeholder { color: var(--text-faint); }
+/* color-scheme above already makes the popup dark; this keeps the options
+   readable on the browsers that ignore it. */
+option { background: var(--surface); color: var(--text); }
 input:focus, select:focus, textarea:focus {
   outline: none;
   border-color: var(--gold);
@@ -339,7 +361,7 @@ textarea { min-height: 84px; resize: vertical; }
 .f-field input {
   background: var(--surface-2);
   border: 0;
-  border-bottom: 2px solid var(--border-strong);
+  border-bottom: 2px solid var(--border-field);
   border-radius: var(--r-sm) var(--r-sm) 0 0;
   display: block;
   width: 100%;
@@ -359,7 +381,7 @@ textarea { min-height: 84px; resize: vertical; }
 .f-field select {
   background: var(--surface-2);
   border: 0;
-  border-bottom: 2px solid var(--border-strong);
+  border-bottom: 2px solid var(--border-field);
   border-radius: var(--r-sm) var(--r-sm) 0 0;
   display: block;
   width: 100%;
@@ -516,11 +538,11 @@ textarea { min-height: 84px; resize: vertical; }
 
 .entry-card {
   position: relative;
-  background: var(--grad-soft);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--r-lg);
-  padding: 18px;
-  margin-bottom: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 14px;
+  margin-bottom: 12px;
   box-shadow: var(--shadow-sm);
   transition: box-shadow 0.2s var(--ease), border-color 0.2s var(--ease);
 }
@@ -801,89 +823,15 @@ textarea { min-height: 84px; resize: vertical; }
 @media (max-width: 560px) {
   .a-modal { padding: 24px; max-height: 90vh; }
 }
-.success-icon{
-  width:72px;
-  height:72px;
-  margin:0 auto 20px;
-  border-radius:50%;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  background:linear-gradient(135deg,#55d66b,#47cfa4);
-  color:#fff;
-  font-size:34px;
-  font-weight:700;
-  box-shadow:0 12px 30px rgba(71,207,164,.35);
-}
-
-.success-title{
-  font-size:2.4rem;
-  font-weight:800;
-  margin-bottom:8px;
-}
-
-.success-subtitle{
-  color: var(--text-muted);
-  margin-bottom:18px;
-}
-
-.success-next{
-  margin:28px 0;
-  padding:20px;
-  border:1px solid var(--border);
-  border-radius:16px;
-  background:rgba(255,255,255,.03);
-  text-align:left;
-}
-
-.success-next h3{
-  margin-bottom:16px;
-}
-
-.next-item{
-  display:flex;
-  align-items:center;
-  gap:12px;
-  margin-bottom:14px;
-}
-
-.next-item:last-child{
-  margin-bottom:0;
-}
-
-.next-number{
-  width:28px;
-  height:28px;
-  border-radius:50%;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  background:linear-gradient(135deg,#6dd5ed,#8f94fb);
-  color:#fff;
-  font-weight:700;
-  flex-shrink:0;
-}
-.share-row{
-    display:flex;
-    justify-content:space-between;
-    align-items:center;
-    gap:12px;
-    margin-bottom:18px;
-}
-
-.share-link{
-    color: var(--text-muted);
-    font-weight:600;
-}
 /* ---------- Admin: "+ Add as option" tag button ---------------------------- */
 
 .tag-add-btn {
   display: inline-flex; align-items: center; gap: 5px;
-  margin-left: 8px; padding: 2px 10px;
-  font-size: 0.72rem; font-weight: 700; font-family: inherit;
+  margin-left: 8px; padding: 4px 10px;
+  font-size: 0.76rem; font-weight: 650; font-family: inherit;
   border-radius: var(--r-full);
   border: 1.5px dashed var(--border-strong);
-  background: transparent; color: var(--text-faint);
+  background: transparent; color: var(--text-muted);
   cursor: pointer; transition: all 0.18s var(--ease);
   vertical-align: middle;
 }
@@ -891,27 +839,9 @@ textarea { min-height: 84px; resize: vertical; }
   border-color: var(--gold); border-style: solid; color: var(--gold);
   background: rgba(242, 195, 78, 0.08);
 }
-.tag-add-btn:disabled { cursor: default; }
-.tag-add-btn--done { border-style: solid; border-color: var(--emerald); color: var(--emerald); opacity: 0.9; }
-.icon-share-btn {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 46px; height: 46px;
-  border-radius: 50%;
-  border: 1.5px solid var(--border-strong);
-  background: var(--surface-2);
-  color: var(--text-muted);
-  transition: all 0.2s var(--ease);
-}
-.icon-share-btn:hover {
-  transform: translateY(-3px);
-  border-color: var(--gold);
-  color: var(--gold);
-  box-shadow: 0 10px 24px -10px var(--ring);
-}
-.icon-share-btn svg {
-  width: 22px;
-  height: 22px;
-}
+/* "Approving...", "Merging...", "Removing..." are read while disabled. */
+.tag-add-btn:disabled { cursor: default; opacity: 0.65; }
+.tag-add-btn--done { border-style: solid; border-color: var(--ok-border); color: var(--ok-ink); }
 .footer__credits {
   display: flex;
   flex-direction: column;
@@ -919,12 +849,14 @@ textarea { min-height: 84px; resize: vertical; }
   text-align: right;
   gap: 4px;
 }
+/* Opacity on top of --text-faint took the credits line to 2.9:1. Colour it
+   outright instead. */
 .footer__special {
   font-size: 0.78rem;
-  opacity: 0.9;
+  color: var(--text-muted);
 }
 .footer__built {
-  opacity: 0.7;
+  color: var(--text-faint);
 }
 
 
@@ -947,7 +879,7 @@ textarea { min-height: 84px; resize: vertical; }
   margin: 0 0 12px 0; font-size: 0.92rem; font-weight: 700; color: var(--text-muted);
   letter-spacing: 0.01em;
 }
-.school-head__count { opacity: 0.65; margin-left: 8px; font-weight: 600; }
+.school-head__count { color: var(--text-faint); margin-left: 8px; font-weight: 600; }
 
 /* ==========================================================================
    Badge size + tone variants
@@ -965,13 +897,7 @@ textarea { min-height: 84px; resize: vertical; }
 /* ==========================================================================
    College Explorer
    ========================================================================== */
-.explorer-intro {
-  background: var(--grad-soft); border: 1px solid var(--border);
-  border-radius: var(--r); padding: 20px 24px; margin-bottom: 28px;
-}
-.explorer-intro h2 { margin: 0 0 6px 0; font-size: 1.2rem; }
-
-.chip__sub { opacity: 0.7; font-size: 0.8em; margin-left: 6px; }
+.chip__sub { opacity: 0.85; font-size: 0.8em; margin-left: 6px; }
 
 .senior-mini {
   background: var(--surface); border: 1px solid var(--border);
@@ -1021,7 +947,7 @@ textarea { min-height: 84px; resize: vertical; }
 }
 .college-facts__grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 14px; }
 .college-facts__label {
-  margin: 0; font-size: 0.72rem; color: var(--text-faint);
+  margin: 0; font-size: 0.78rem; color: var(--text-faint);
   text-transform: uppercase; letter-spacing: 0.05em;
 }
 .college-facts__value { margin: 0; font-size: 0.88rem; }
@@ -1091,17 +1017,6 @@ textarea { min-height: 84px; resize: vertical; }
 }
 .option-row__hint { margin: 8px 0 0; font-size: 0.78rem; color: var(--text-faint); }
 
-.tag-add-btn {
-  display: inline-flex; align-items: center; gap: 4px;
-  font-size: 0.76rem; font-weight: 600; padding: 4px 10px;
-  border-radius: var(--r-full); cursor: pointer;
-  background: transparent; color: var(--text-muted);
-  border: 1px dashed var(--border-strong);
-}
-.tag-add-btn:hover { color: var(--text); border-color: var(--gold); }
-.tag-add-btn:disabled { opacity: 0.5; cursor: default; }
-.tag-add-btn--done { border-style: solid; color: var(--ok-ink); border-color: var(--ok-border); }
-
 /* ==========================================================================
    Profile: status banner, required marks, repeated entry cards
    ========================================================================== */
@@ -1114,13 +1029,6 @@ textarea { min-height: 84px; resize: vertical; }
 .status-banner--danger { background: var(--danger-bg); border: 1px solid var(--danger-border); color: var(--danger-ink); }
 
 .req { color: var(--gold); font-weight: 700; }
-
-.entry-card {
-  border: 1px solid var(--border); border-radius: var(--r-sm);
-  padding: 14px; margin-bottom: 12px; background: var(--surface);
-}
-
-.cbox-row { display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 0.9rem; }
 
 /* ==========================================================================
    Registration form: validation feedback, optional sections, step headers
@@ -1411,7 +1319,7 @@ textarea { min-height: 84px; resize: vertical; }
 }
 .filter-select--on { border-color: var(--primary); background: rgba(242, 195, 78, 0.08); }
 .filter-select__label {
-  display: block; font-size: 0.68rem; letter-spacing: 0.04em;
+  display: block; font-size: 0.76rem; letter-spacing: 0.04em;
   text-transform: uppercase; color: var(--text-faint);
 }
 .filter-select select {
@@ -1430,7 +1338,7 @@ textarea { min-height: 84px; resize: vertical; }
 
 .lens-switch { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .lens-switch__label {
-  font-size: 0.72rem; letter-spacing: 0.05em; text-transform: uppercase;
+  font-size: 0.78rem; letter-spacing: 0.05em; text-transform: uppercase;
   color: var(--text-faint); margin-right: 2px;
 }
 .lens-btn {
