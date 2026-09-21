@@ -173,7 +173,7 @@ export default function ProfileReview({ person, studies, work, staged, picks }: 
         </div>
       )}
 
-      <Section title="What they would tell a junior">
+      <Section title="In their words">
         <Field label={FIELD_LABELS.message_1} live={person.message_1} staged={staged} has="message_1" wide picks={picks} />
         <Field label={FIELD_LABELS.message_2} live={person.message_2} staged={staged} has="message_2" wide picks={picks} />
         <Field label={FIELD_LABELS.college_thoughts} live={person.college_thoughts} staged={staged} has="college_thoughts" wide picks={picks} />

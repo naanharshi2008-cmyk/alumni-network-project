@@ -6,8 +6,9 @@ import { useParams } from 'next/navigation';
 import { supabase } from '../../../lib/supabaseClient';
 import { fetchApprovedAlumni } from '../../../lib/publicData';
 import { publicRouteLabel } from '../../../lib/options';
-import { instituteInitials, instituteTint, profileHref, shortInstituteName } from '../../../lib/showcase';
-import { Alumnus, collegeKeyer, initialsOf } from '../../../lib/types';
+import { instituteInitials, instituteTint, shortInstituteName } from '../../../lib/showcase';
+import { Alumnus, collegeDetailsOf, collegeKeyer } from '../../../lib/types';
+import PersonCard from '../../../lib/PersonCard';
 
 type College = {
   id: string; name: string; state: string | null; district: string | null;
@@ -32,6 +33,9 @@ type MyPhoto = { id: string; url: string; caption: string | null; status: string
  * from this school is living there. Every photo waits for the school before it
  * appears, and carries the name of whoever shared it.
  */
+/** Enough to fill a screen; the rest is one click away. */
+const SENIORS_SHOWN = 12;
+
 export default function CollegePage() {
   const collegeId = String(useParams().id ?? '');
   const [college, setCollege] = useState<College | null>(null);
@@ -45,11 +49,13 @@ export default function CollegePage() {
   // real.
   const [state, setState] = useState<'loading' | 'ready' | 'missing' | 'error'>('loading');
   const [seniorsError, setSeniorsError] = useState('');
+  const [allSeniors, setAllSeniors] = useState(false);
+  const [photosError, setPhotosError] = useState('');
 
   const load = useCallback(async () => {
     if (!collegeId) { setState('missing'); return; }
 
-    const [{ data: row, error: rowErr }, alumniRes, { data: pics }] = await Promise.all([
+    const [{ data: row, error: rowErr }, alumniRes, { data: pics, error: picsErr }] = await Promise.all([
       supabase.from('colleges')
         .select('id, name, state, district, website, university_name, management_type, established_year, banner_url, logo_url, description')
         .eq('id', collegeId).maybeSingle(),
@@ -71,6 +77,9 @@ export default function CollegePage() {
     const keyOf = collegeKeyer(all);
     setSeniorsError(alumniRes.error);
     setSeniors(all.filter((a) => keyOf(a) === `id:${collegeId}`));
+    // A gallery that failed to load and a gallery with nothing in it looked
+    // identical - both said "No photos yet", which invites nobody to fix it.
+    setPhotosError(picsErr?.message ?? '');
     setPhotos((pics ?? []) as Photo[]);
     setState('ready');
 
@@ -91,7 +100,15 @@ export default function CollegePage() {
 
   useEffect(() => { void load(); }, [load]);
 
-  const label = useMemo(() => (college ? shortInstituteName(college.name, []) : ''), [college]);
+  // The aliases come from the seniors' own rows - the view carries them, and
+  // the colleges table query does not. Passing [] meant shortInstituteName
+  // could never shorten anything, which is the whole reason it exists.
+  const label = useMemo(() => {
+    if (!college) return '';
+    const aliases = seniors.map((a) => collegeDetailsOf(a)?.aliases ?? []).find((x) => x.length) ?? [];
+    return shortInstituteName(college.name, aliases);
+  }, [college, seniors]);
+  const shownSeniors = allSeniors ? seniors : seniors.slice(0, SENIORS_SHOWN);
   const place = college ? [college.district, college.state].filter(Boolean).join(', ') : '';
   const routes = useMemo(
     () => Array.from(new Set(seniors.map((s) => publicRouteLabel(s.admission_route)).filter(Boolean) as string[])),
@@ -150,19 +167,25 @@ export default function CollegePage() {
         <div className="cpage__title">
           <h1>{college.name}</h1>
           <p className="subtitle">
-            {[place, college.university_name !== college.name ? college.university_name : null].filter(Boolean).join(' · ')}
+            {[place, college.university_name !== college.name ? college.university_name : null]
+              .filter(Boolean).join(' · ')}
           </p>
-          <div className="xcollege__chips" style={{ marginTop: 10 }}>
-            <span className="badge badge--sm badge--ok">
-              {seniors.length} Veveaham {seniors.length === 1 ? 'senior' : 'seniors'}
-            </span>
-            {routes.map((r) => <span key={r} className="badge badge--sm">via {r}</span>)}
-            {college.management_type && <span className="badge badge--sm">{college.management_type}</span>}
-            {college.established_year && <span className="badge badge--sm">Est. {college.established_year}</span>}
-          </div>
+          {routes.length > 0 && (
+            <div className="xcollege__chips" style={{ marginTop: 10 }}>
+              {routes.map((r) => <span key={r} className="badge badge--sm">via {r}</span>)}
+            </div>
+          )}
+          {/* Founded-in and who runs it are worth knowing and not worth a
+              badge each, level with how many of our seniors are here. */}
+          {(college.management_type || college.established_year) && (
+            <p className="cpage__trivia">
+              {[college.management_type, college.established_year && `established ${college.established_year}`]
+                .filter(Boolean).join(' · ')}
+            </p>
+          )}
           <div className="cpage__actions">
             {seniors.length > 0 && (
-              <Link href={`/directory?q=${encodeURIComponent(label)}`} className="btn btn--ghost">
+              <Link href={`/directory?lens=college&q=${encodeURIComponent(label)}`} className="btn btn--ghost">
                 <span className="btn__inner">See them in the directory →</span>
               </Link>
             )}
@@ -178,38 +201,41 @@ export default function CollegePage() {
         </div>
       </header>
 
-      {college.description && <p className="college-desc cpage__about">{college.description}</p>}
-
+      {/* The people first. This page exists to answer "who from my school is
+          here?", and they used to be 0.86rem chips below the college's own
+          facts - the smallest thing on the page. */}
       <section className="cpage__section">
-        <h2>Seniors here</h2>
+        <h2>{seniors.length > 0 ? `${seniors.length} Veveaham ${seniors.length === 1 ? 'senior' : 'seniors'} here` : 'Seniors here'}</h2>
         {seniorsError ? (
           <p className="lens-note">We couldn&apos;t load the seniors just now — the rest of this page is fine.</p>
         ) : seniors.length === 0 ? (
           <p className="lens-note">No approved profiles at this college yet.</p>
         ) : (
-          <div className="xcollege__seniors">
-            {seniors.map((a) => (
-              <Link key={a.id} href={profileHref(a)} className="senior-chip">
-                <span className="avatar avatar--xs" aria-hidden>
-                  {a.photo_url
-                    ? <img src={a.photo_url} alt="" loading="lazy" decoding="async" width={34} height={34} />
-                    : initialsOf(a.full_name)}
-                </span>
-                <span className="senior-chip__text">
-                  <span className="senior-chip__name">{a.full_name}</span>
-                  <span className="senior-chip__meta">
-                    {[a.class_of ? `Class of ${a.class_of}` : null, a.degree].filter(Boolean).join(' · ')}
-                  </span>
-                </span>
-              </Link>
-            ))}
-          </div>
+          <>
+            <div className="cpage__seniors">
+              {shownSeniors.map((a) => <PersonCard key={a.id} a={a} size="md" />)}
+            </div>
+            {seniors.length > SENIORS_SHOWN && !allSeniors && (
+              <button type="button" className="btn btn--ghost" style={{ marginTop: 14 }} onClick={() => setAllSeniors(true)}>
+                <span className="btn__inner">Show all {seniors.length} →</span>
+              </button>
+            )}
+          </>
         )}
       </section>
 
+      {college.description && (
+        <section className="cpage__section">
+          <h2>About {label}</h2>
+          <p className="college-desc cpage__about">{college.description}</p>
+        </section>
+      )}
+
       <section className="cpage__section">
         <h2>Photos from our seniors</h2>
-        {photos.length === 0 ? (
+        {photosError ? (
+          <p className="lens-note">We couldn&apos;t load the photos just now — the rest of this page is fine.</p>
+        ) : photos.length === 0 ? (
           <p className="lens-note">
             No photos yet.{canContribute ? ' Yours would be the first.' : ' Seniors studying here can add the first one.'}
           </p>

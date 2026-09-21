@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { SCHOOLS, SCHOOL_BOARD_BY_SCHOOL } from '../../lib/options';
+import { SCHOOL_GROUP_NAME } from '../../lib/types';
 
 export const metadata: Metadata = {
   title: 'About',
@@ -20,9 +21,9 @@ export default function AboutPage() {
           <p className="about__kicker">About the network</p>
           <h1>Seniors showing juniors the way.</h1>
           <p className="about__lead">
-            Veveaham Alumni is a record of where students from the Veveaham group of schools went
-            after class 12: the colleges they got into, how they got in, and what they would tell
-            a junior standing where they once stood.
+            Veveaham Alumni is a record of where students from {SCHOOL_GROUP_NAME} went after
+            class 12: the colleges and courses they went on to, how they got there, and what they
+            have to say to a junior standing where they once stood.
           </p>
         </div>
       </section>

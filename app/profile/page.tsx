@@ -21,6 +21,10 @@ import { CATEGORIES } from '../../lib/types';
 
 interface AlumnusData {
   id: string;
+  /* The address of their public page. Loaded with the row all along and
+     thrown away by the normaliser, so the one person who most wanted to see
+     that page had no link to it. */
+  public_slug: string;
   full_name: string;
   school_name: string;
   admission_number: string;
@@ -94,6 +98,7 @@ function normalizeProfile(raw: any): AlumnusData {
   const str = (v: unknown) => (v === null || v === undefined ? '' : String(v));
   return {
     ...raw,
+    public_slug: str(raw.public_slug),
     full_name: str(raw.full_name),
     school_name: officialSchoolName(raw.school_name),
     admission_number: str(raw.admission_number),
@@ -546,6 +551,13 @@ export default function ProfilePage() {
           <div>
             <h1 style={{ fontSize: '1.6rem', margin: 0 }}>My Profile</h1>
             <p className="subtitle" style={{ margin: 0 }}>Keep your journey up to date for the juniors.</p>
+            {/* Only once approved: before that the page does not exist for
+                anyone else, and a link to a "not found" would read as broken. */}
+            {profile.approval_status === 'approved' && profile.public_slug && (
+              <a href={`/alumni/${encodeURIComponent(profile.public_slug)}`} className="profile-public-link">
+                See your public page, as juniors see it →
+              </a>
+            )}
           </div>
           <button type="button" onClick={handleLogout} className="btn btn--ghost">
             <span className="btn__inner">Log Out</span>
@@ -882,7 +894,7 @@ export default function ProfilePage() {
               onChange={(e) => updateField('college_thoughts', e.target.value)}
               placeholder="What is it actually like there? Hostel, teachers, workload, the thing brochures don't say…"
             />
-            <span className="hint">Shown with your college in the College Explorer — juniors choosing a college read this.</span>
+            <span className="hint">Shown on your page, with what you have to say — juniors choosing a college read this.</span>
           </div>
 
           <button type="submit" disabled={saving} className="btn btn--neutral btn--lg btn--block" style={{ marginTop: 24 }}>

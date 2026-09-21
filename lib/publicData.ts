@@ -8,8 +8,9 @@
 
 import { supabase, isSupabaseConfigured } from './supabaseClient';
 import type { Alumnus, HigherStudy, WorkExperience } from './types';
-import { collegeNameOf } from './types';
+import { collegeDetailsOf } from './types';
 import { normaliseOptionValue, publicRouteLabel } from './options';
+import { collegeLabel } from './showcase';
 
 /**
  * Columns pulled for the directory and home galleries. Listed explicitly rather than
@@ -86,7 +87,13 @@ export async function fetchAlumnusBySlug(slug: string): Promise<{ person: Alumnu
   return { person: null, canonical: null };
 }
 
-export type RelatedRail = { title: string; href: string; people: Alumnus[] };
+export type RelatedRail = {
+  title: string;
+  href: string;
+  people: Alumnus[];
+  /** The college's mark, on the college rail - the page's one link to it. */
+  logo?: string | null;
+};
 
 /**
  * Others like this person: their batch, their college, their exam.
@@ -94,24 +101,26 @@ export type RelatedRail = { title: string; href: string; people: Alumnus[] };
  * Three narrow reads rather than fetching the whole directory and filtering
  * in memory - a profile page should not cost what the directory costs.
  */
-export async function fetchRelatedAlumni(a: Alumnus, limit = 8): Promise<RelatedRail[]> {
+/**
+ * Others like this person, three ways.
+ *
+ * In a junior's order: the same college first (the question they came with),
+ * then the same way in, then the same batch - which is the order they would
+ * ask it in, not the order the columns sit in. Six a rail: three rails of
+ * eight was twenty-four chips in a 680px column, a wall rather than a list.
+ */
+export async function fetchRelatedAlumni(a: Alumnus, limit = 6): Promise<RelatedRail[]> {
   if (!isSupabaseConfigured || !a.id) return [];
 
   const base = () => supabase.from('public_alumni').select(PUBLIC_ALUMNI_CARD_SELECT).neq('id', a.id).limit(limit);
-  const wanted: { title: string; href: string; run: any }[] = [];
+  const wanted: { title: string; href: string; run: any; logo?: string | null }[] = [];
 
-  if (a.class_of) {
-    wanted.push({
-      title: `Others from the Class of ${a.class_of}`,
-      href: `/directory?batch=${a.class_of}`,
-      run: base().eq('class_of', a.class_of),
-    });
-  }
   if (a.college_id) {
     wanted.push({
-      title: `Others at ${collegeNameOf(a) ?? 'the same college'}`,
+      title: `Others at ${collegeLabel(a) ?? 'the same college'}`,
       href: `/colleges/${a.college_id}`,
       run: base().eq('college_id', a.college_id),
+      logo: collegeDetailsOf(a)?.logo_url ?? null,
     });
   }
   if (a.admission_route) {
@@ -121,10 +130,17 @@ export async function fetchRelatedAlumni(a: Alumnus, limit = 8): Promise<Related
       run: base().eq('admission_route', a.admission_route),
     });
   }
+  if (a.class_of) {
+    wanted.push({
+      title: `Others from the Class of ${a.class_of}`,
+      href: `/directory?batch=${a.class_of}`,
+      run: base().eq('class_of', a.class_of),
+    });
+  }
 
   const results = await Promise.all(wanted.map((w) => w.run));
   return wanted
-    .map((w, i) => ({ title: w.title, href: w.href, people: (results[i]?.data ?? []) as Alumnus[] }))
+    .map((w, i) => ({ title: w.title, href: w.href, logo: w.logo, people: (results[i]?.data ?? []) as Alumnus[] }))
     .filter((rail) => rail.people.length > 0);
 }
 

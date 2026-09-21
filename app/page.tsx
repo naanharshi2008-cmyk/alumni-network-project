@@ -12,6 +12,7 @@ import HeroCollage from './HeroCollage';
 import FeaturedAlumni from './FeaturedAlumni';
 import HomeStats from './HomeStats';
 import HomeGalleries from './HomeGalleries';
+import { useViewer } from './Viewer';
 
 const FEATURED_COUNT = 4;
 // The hero shows four at a time and rotates through the rest of this pool.
@@ -27,6 +28,7 @@ const HERO_POOL = 12;
  */
 export default function Home() {
   const router = useRouter();
+  const who = useViewer();
   const [rows, setRows] = useState<Alumnus[] | null>(null);
   const [error, setError] = useState('');
   const [studies, setStudies] = useState<Record<string, HigherStudy[]>>({});
@@ -89,24 +91,26 @@ export default function Home() {
         <div className="hero2__text fade-up">
           <span className="hero__eyebrow">
             <img className="hero__eyebrow-crest" src="/brand/crest-96.png" alt="" width={96} height={96} />
-            Veveaham alumni · real paths, real ranks
+            Veveaham alumni · where our seniors went next
           </span>
           <h1 className="hero2__title">
             Where our seniors are,
             <br />
             <span className="hero__grad">and how they got there.</span>
           </h1>
+          {/* Where they went, not what they scored. This line used to lead
+              with the exam or marks they got in with, and the eyebrow promised
+              ranks - which put a number in front of every junior before a
+              single senior. The routes are still on every card. */}
           <p className="hero2__sub">
-            See which colleges seniors from your school got into, the exam or marks
-            they got in with, and what they would tell you to do differently.
+            See the colleges and courses seniors from your school went on to, how
+            they got there, and what they say about it.
           </p>
           <div className="hero2__cta">
             <Link href="/directory" className="btn btn--primary btn--lg">
               <span className="btn__inner">Explore alumni →</span>
             </Link>
-            <Link href="/register" className="btn btn--ghost btn--lg">
-              <span className="btn__inner">I&apos;m an alumnus</span>
-            </Link>
+            <AlumnusDoor who={who} />
           </div>
 
           {/* One search, straight into the directory. It understands college
@@ -153,5 +157,36 @@ export default function Home() {
       {rows && <HomeStats alumni={rows} />}
       <HomeGalleries alumni={rows} />
     </div>
+  );
+}
+
+/**
+ * The hero's second button: the way in for someone who studied here.
+ *
+ * It used to go straight to registration, which is the wrong door for anyone
+ * who already has an account - including every alumnus the school set up a
+ * login for. Sign-in is the door for both, and it offers "create your account"
+ * to anyone who turns out not to have one. Once signed in, the button stops
+ * being a question and becomes the thing they would click it for.
+ *
+ * While the session is still resolving it renders the guest button hidden, so
+ * the hero keeps its width and does not jump when the answer arrives - the
+ * same reason the nav and footer hold a placeholder.
+ */
+function AlumnusDoor({ who }: { who: ReturnType<typeof useViewer> }) {
+  const door =
+    who === 'alumnus' ? { href: '/profile', label: 'My profile' }
+      : who === 'admin' ? { href: '/admin', label: 'Dashboard' }
+        : { href: '/login', label: 'I’m an alumnus' };
+  return (
+    <Link
+      href={door.href}
+      className="btn btn--ghost btn--lg"
+      style={who === 'unknown' ? { visibility: 'hidden' } : undefined}
+      aria-hidden={who === 'unknown' || undefined}
+      tabIndex={who === 'unknown' ? -1 : undefined}
+    >
+      <span className="btn__inner">{door.label}</span>
+    </Link>
   );
 }

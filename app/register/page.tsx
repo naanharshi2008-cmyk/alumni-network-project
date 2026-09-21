@@ -775,6 +775,13 @@ export default function RegisterPage() {
           <p className="step-label">Step {step + 1} of {STEPS.length}</p>
           <h1 className="step-title" ref={headingRef} tabIndex={-1}>{STEPS[step].title}</h1>
           <p className="step-sub">{STEPS[step].blurb}</p>
+          {/* The way back to sign-in, before they type anything. It was only
+              ever offered after a duplicate email had already been caught. */}
+          {step === 0 && (
+            <p className="step-sub step-sub--alt">
+              Already registered, or did the school set you up? <a href="/login">Sign in</a>
+            </p>
+          )}
         </div>
 
         {restored && step === 0 && !error && (

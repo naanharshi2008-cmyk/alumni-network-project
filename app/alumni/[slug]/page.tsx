@@ -2,14 +2,15 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound, permanentRedirect } from 'next/navigation';
 import { fetchAlumnusBySlug, fetchRelatedAlumni, fetchTimelines } from '../../../lib/publicData';
-import { AdmissionBadges, Fact, Row } from '../../../lib/profileParts';
-import { boardForSchool, officialSchoolName } from '../../../lib/options';
+import { admissionFacts } from '../../../lib/admission';
+import { nowOf, pathIsWorthDrawing, pathSteps, shortSchoolName } from '../../../lib/profilePath';
 import {
-  collegeLabel, collegeTintKey, instituteInitials, instituteTint, profileHref, profileSummary, shortName,
+  FALLBACK_TINT, collegeLabel, collegeTintKey, instituteTint, looksLikeWords, profileHref, profileSummary, shortName,
 } from '../../../lib/showcase';
+import { formatMonthYear } from '../../../lib/text';
 import {
-  Alumnus, SCHOOL_GROUP_NAME, collegeDetailsOf, initialsOf, professionalLabel,
-  sortHigherStudies, sortWorkExperience, yearRange,
+  SCHOOL_GROUP_NAME, collegeDetailsOf, initialsOf, professionalLabel,
+  sortHigherStudies, sortWorkExperience,
 } from '../../../lib/types';
 import ShareButton from './ShareButton';
 
@@ -73,201 +74,156 @@ export default async function AlumnusPage({ params }: Props) {
   const a = person;
   const det = collegeDetailsOf(a);
   const college = collegeLabel(a);
-  const tint = collegeTintKey(a);
-  const dept = [a.degree, a.branch].filter(Boolean).join(' · ');
-  const now = [a.currently_at, a.designation].filter(Boolean).join(' · ');
-  const board = boardForSchool(a.school_name);
+  const tintKey = collegeTintKey(a);
+  const facts = admissionFacts(a);
+  const steps = pathSteps(a, studies, work);
+  const now = nowOf(a, studies, work);
+
+  // The one line that says where they went. First match wins; with none of
+  // these there is simply no line, rather than a placeholder.
+  const course = a.degree || '';
+  const prof = professionalLabel(a);
+  const strong =
+    course && college ? `${course} at ${college}`
+      : college ? college
+        : course && a.branch ? `${course} in ${a.branch}`
+          : course ? course
+            : prof ? [prof, a.professional_org ? `at ${a.professional_org}` : null].filter(Boolean).join(' ')
+              : '';
+
+  // Their own words. The first one they wrote leads; the rest follow smaller,
+  // each labelled, so three quotes do not read as three equal boxes.
+  const words = [
+    { key: 'm1', label: null, text: a.message_1 },
+    { key: 'm2', label: 'Looking back', text: a.message_2 },
+    { key: 'ct', label: college ? `About ${college}` : 'About their college', text: a.college_thoughts },
+  ].filter((w) => (w.text ?? '').trim());
+
+  const dates = [
+    formatMonthYear(a.last_updated) && `Profile updated ${formatMonthYear(a.last_updated)}`,
+    formatMonthYear(a.last_confirmed_at) && `confirmed ${formatMonthYear(a.last_confirmed_at)}`,
+  ].filter(Boolean).join(' · ');
 
   return (
-    <div className="container container--wide">
+    // Narrow on purpose: this is a page of reading, and at the wide width a
+    // quote ran to 115 characters a line.
+    <div className="container container--narrow apage">
       <p className="crumb"><Link href="/directory">← All alumni</Link></p>
 
+      {/* ── Who they are, and where they went ──────────────────────────
+          The person leads. A campus photo used to open this page at 190px -
+          the largest thing on a page about somebody else. It belongs on the
+          college's own page. */}
       <header className="apage__head">
-        <div
-          className="apage__banner"
-          style={tint ? ({ '--tint': instituteTint(tint) } as React.CSSProperties) : undefined}
+        <span
+          className="avatar apage__avatar" aria-hidden
+          style={{ '--tint': tintKey ? instituteTint(tintKey) : FALLBACK_TINT } as React.CSSProperties}
         >
-          {det?.banner_url && <img src={det.banner_url} alt="" />}
-        </div>
-
-        <div className="apage__intro">
-          <span className="avatar apage__avatar" aria-hidden>
-            {a.show_photo && a.photo_url
-              ? <img src={a.photo_url} alt="" width={96} height={96} />
-              : initialsOf(a.full_name)}
-          </span>
-          <div className="apage__who">
-            <h1 className="apage__name">{a.full_name}</h1>
-            <p className="apage__meta">
-              {[
-                a.class_of ? `Class of ${a.class_of}` : null,
-                a.stream,
-                officialSchoolName(a.school_name) || null,
-              ].filter(Boolean).join(' · ')}
-              {board && <span className="apage__board"> · {board}</span>}
-            </p>
-            <div className="apage__actions">
-              <ShareButton name={shortName(a.full_name)} />
-              {a.linkedin_url && (
-                <a className="btn btn--ghost" href={a.linkedin_url} target="_blank" rel="noopener noreferrer">
-                  <span className="btn__inner">LinkedIn ↗</span>
-                </a>
+          {a.show_photo && a.photo_url
+            ? <img src={a.photo_url} alt="" width={128} height={128} />
+            : initialsOf(a.full_name)}
+        </span>
+        <div className="apage__who">
+          <h1 className="apage__name">{a.full_name}</h1>
+          {strong && (
+            <p className="apage__lead">
+              {det?.logo_url && college && (
+                <span className="apage__crest" aria-hidden><img src={det.logo_url} alt="" /></span>
               )}
-            </div>
+              {a.college_id && college
+                ? <Link href={`/colleges/${a.college_id}`}>{strong}</Link>
+                : strong}
+              {/* On the first screen, where a phone visitor will see it. The
+                  score stays in the path below: the route is what says the
+                  door exists. */}
+              {facts.route && <span className="apage__via">via {facts.route}</span>}
+            </p>
+          )}
+          {now && (
+            <p className="apage__now"><span className="timeline__now">Now</span>{now}</p>
+          )}
+          <p className="apage__meta">
+            {[
+              a.class_of ? `Class of ${a.class_of}` : null,
+              a.stream,
+              shortSchoolName(a.school_name) || null,
+            ].filter(Boolean).join(' · ')}
+          </p>
+          <div className="apage__actions">
+            <ShareButton name={shortName(a.full_name)} />
+            {a.linkedin_url && (
+              <a className="btn btn--ghost" href={a.linkedin_url} target="_blank" rel="noopener noreferrer">
+                <span className="btn__inner">LinkedIn ↗</span>
+              </a>
+            )}
           </div>
         </div>
       </header>
 
-      <section className="apage__section">
-        <h2>How they got in</h2>
-        <AdmissionBadges a={a} />
-        {a.board_cutoff && <p className="modal-note">Cutoff {a.board_cutoff}</p>}
-        {!a.admission_route && !a.admission_rank && !a.board_marks && (
-          <p className="lens-note">They haven&apos;t said yet.</p>
-        )}
-      </section>
-
-      {(a.message_1 || a.message_2) && (
+      {/* ── What they have to say ─────────────────────────────────────── */}
+      {words.length > 0 && (
         <section className="apage__section">
-          <h2>What they would tell a junior</h2>
-          {a.message_1 && <blockquote className="apage__quote">{a.message_1}</blockquote>}
-          {a.message_2 && <blockquote className="apage__quote">{a.message_2}</blockquote>}
+          <h2>In their words</h2>
+          <div className="apage__words">
+            {words.map((w, i) => (
+              <figure key={w.key}>
+                {w.label && <figcaption className="apage__quote-label">{w.label}</figcaption>}
+                <blockquote
+                  className={`apage__quote${i === 0 && looksLikeWords(w.text) ? ' apage__quote--lead' : ''}`}
+                >
+                  {w.text}
+                </blockquote>
+              </figure>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* ── Their path ────────────────────────────────────────────────
+          One timeline where there used to be four sections, several of which
+          rendered a heading over a single line or over nothing. Every step
+          here exists only because there is something to say in it. */}
+      {pathIsWorthDrawing(steps) && (
+        <section className="apage__section">
+          <h2>Their path</h2>
+          <ol className="timeline">
+            {steps.map((st) => (
+              <li
+                key={st.key}
+                className={`timeline__item timeline__item--${st.kind}${st.now ? ' timeline__item--now' : ''}`}
+              >
+                <span className="timeline__dot" aria-hidden>{st.icon}</span>
+                <div className="timeline__body">
+                  <div className="timeline__title">
+                    {st.href ? <Link href={st.href}>{st.title}</Link> : st.title}
+                    {st.now && <span className="timeline__now">Now</span>}
+                  </div>
+                  {st.sub && <div className="timeline__sub">{st.sub}</div>}
+                  {st.meta && <div className="timeline__meta">{st.meta}</div>}
+                </div>
+              </li>
+            ))}
+          </ol>
         </section>
       )}
 
       {a.school_note && (
-        <section className="apage__section">
+        <section className="apage__section apage__section--minor">
           <h2>A note from Veveaham</h2>
           <blockquote className="apage__quote apage__quote--school">{a.school_note}</blockquote>
         </section>
       )}
 
-      <section className="apage__section">
-        <h2>Where they studied</h2>
-        <div className="a-card__rows">
-          <Row icon="🏫" label="School">
-            {officialSchoolName(a.school_name) || '—'}
-            {board && <span style={{ color: 'var(--text-faint)' }}> · {board}</span>}
-          </Row>
-          {college && (
-            <Row icon="🏛️" label="College">
-              {a.college_id
-                ? <Link className="a-link" href={`/colleges/${a.college_id}`}>{college}</Link>
-                : college}
-              {det?.state ? ` · ${det.state}` : ''}
-            </Row>
-          )}
-          {dept && <Row icon="🎓" label="Studied">{dept}</Row>}
-          {professionalLabel(a) && (
-            <Row icon="📜" label={a.degree ? 'Also pursuing' : 'Pursuing'}>
-              {professionalLabel(a)}
-              {a.professional_org && (
-                <span style={{ color: 'var(--text-faint)' }}> · at {a.professional_org}</span>
-              )}
-            </Row>
-          )}
-          {a.expected_finish_year && <Row icon="📅" label="Expected to finish">{a.expected_finish_year}</Row>}
-        </div>
-
-        {det && (det.description || a.college_thoughts || det.website || det.university_name) && (
-          <div className="apage__college">
-            {det.description && <p className="college-desc">{det.description}</p>}
-            {a.college_thoughts && (
-              <blockquote className="apage__quote">In their words: &ldquo;{a.college_thoughts}&rdquo;</blockquote>
-            )}
-            <div className="college-facts">
-              <div className="college-facts__grid">
-                {det.university_name && det.university_name !== college && (
-                  <Fact label="University" value={det.university_name} />
-                )}
-                {det.management_type && <Fact label="Management" value={det.management_type} />}
-                {det.established_year && <Fact label="Established" value={String(det.established_year)} />}
-                {det.district && (
-                  <Fact label="Location" value={[det.district, det.state].filter(Boolean).join(', ')} />
-                )}
-              </div>
-              <div className="apage__college-links">
-                {a.college_id && (
-                  <Link href={`/colleges/${a.college_id}`} className="btn btn--primary" style={{ fontSize: '0.85rem' }}>
-                    <span className="btn__inner">See this college and everyone from Veveaham there →</span>
-                  </Link>
-                )}
-                {det.website && (
-                  <a
-                    href={det.website.startsWith('http') ? det.website : `https://${det.website}`}
-                    target="_blank" rel="noopener noreferrer" className="btn btn--ghost"
-                    style={{ fontSize: '0.85rem' }}
-                  >
-                    <span className="btn__inner">Their own website ↗</span>
-                  </a>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-      </section>
-
-      {(studies.length > 0 || work.length > 0) && (
-        <section className="apage__section">
-          <h2>Their journey since</h2>
-          {studies.length > 0 && (
-            <>
-              <h3 className="apage__band">Studies</h3>
-              <ol className="timeline">
-                {studies.map((s) => (
-                  <li key={s.id} className="timeline__item">
-                    <span className="timeline__dot" aria-hidden>🎓</span>
-                    <div>
-                      <div className="timeline__title">{s.degree_name}</div>
-                      {s.institution && <div className="timeline__sub">{s.institution}</div>}
-                      {yearRange(s.start_year, s.finish_year) && (
-                        <div className="timeline__years">{yearRange(s.start_year, s.finish_year)}</div>
-                      )}
-                    </div>
-                  </li>
-                ))}
-              </ol>
-            </>
-          )}
-          {work.length > 0 && (
-            <>
-              <h3 className="apage__band">Work</h3>
-              <ol className="timeline">
-                {work.map((w) => (
-                  <li key={w.id} className="timeline__item">
-                    <span className="timeline__dot" aria-hidden>💼</span>
-                    <div>
-                      <div className="timeline__title">
-                        {w.role ? `${w.role} · ` : ''}{w.company}
-                        {w.is_current && <span className="timeline__now">Present</span>}
-                      </div>
-                      {yearRange(w.start_year, w.end_year, w.is_current) && (
-                        <div className="timeline__years">{yearRange(w.start_year, w.end_year, w.is_current)}</div>
-                      )}
-                    </div>
-                  </li>
-                ))}
-              </ol>
-            </>
-          )}
-        </section>
-      )}
-
-      <section className="apage__section">
-        <h2>Right now</h2>
-        <div className="a-card__rows">
-          <Row icon="📌" label="Status">{a.current_status ?? 'Alumnus'}</Row>
-          {now && <Row icon="💼" label="At">{now}</Row>}
-        </div>
-      </section>
-
       {rails.length > 0 && (
-        <section className="apage__section">
+        <section className="apage__section apage__section--minor apage__section--others">
           <h2>Others like them</h2>
           {rails.map((rail) => (
             <div key={rail.title} className="apage__rail">
               <div className="apage__rail-head">
-                <h3 className="apage__band">{rail.title}</h3>
+                <h3 className="apage__band">
+                  {rail.logo && <span className="apage__crest apage__crest--sm" aria-hidden><img src={rail.logo} alt="" /></span>}
+                  {rail.title}
+                </h3>
                 <Link href={rail.href} className="link-btn">See all →</Link>
               </div>
               <div className="xcollege__seniors">
@@ -292,15 +248,11 @@ export default async function AlumnusPage({ params }: Props) {
         </section>
       )}
 
-      <p className="apage__foot">
-        {a.last_updated && `Profile updated ${new Date(a.last_updated).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}`}
-        {a.last_confirmed_at && ` · confirmed ${new Date(a.last_confirmed_at).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}`}
-      </p>
+      {dates && <p className="apage__foot">{dates}</p>}
 
       <div className="apage__cta">
-        <Link href="/directory" className="btn btn--ghost"><span className="btn__inner">All alumni</span></Link>
-        <Link href="/colleges" className="btn btn--ghost"><span className="btn__inner">All colleges</span></Link>
         <Link href="/register" className="btn btn--primary"><span className="btn__inner">Add your journey</span></Link>
+        <Link href="/colleges" className="btn btn--ghost"><span className="btn__inner">All colleges</span></Link>
       </div>
 
       <script

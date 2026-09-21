@@ -928,41 +928,35 @@ textarea { min-height: 84px; resize: vertical; }
 .chip__sub { opacity: 0.85; font-size: 0.8em; margin-left: 6px; }
 
 
-.timeline__item { display: flex; gap: 12px; align-items: flex-start; position: relative; }
+/* The list itself had no rule at all, so it took the browser's 40px indent
+   and gave its items no spacing - while the connector below assumed one. */
+.timeline { list-style: none; margin: 0; padding: 0; display: grid; gap: 20px; }
+.timeline__item { display: flex; gap: 14px; align-items: flex-start; position: relative; }
 /* Connecting line between consecutive entries. */
 .timeline__item:not(:last-child)::before {
-  content: ''; position: absolute; left: 13px; top: 30px; bottom: -14px;
-  width: 1px; background: var(--border-strong);
+  content: ''; position: absolute; left: 13px; top: 32px; bottom: -22px;
+  width: 2px; background: var(--border-strong);
 }
 .timeline__dot {
-  flex: 0 0 auto; width: 27px; height: 27px; border-radius: var(--r-full);
+  flex: 0 0 auto; width: 28px; height: 28px; border-radius: var(--r-full);
   display: grid; place-items: center; font-size: 0.85rem;
   background: var(--surface-2); border: 1px solid var(--border-strong);
 }
-.timeline__title { font-weight: 650; font-size: 0.92rem; line-height: 1.35; }
-.timeline__sub { font-size: 0.84rem; color: var(--text-muted); margin-top: 1px; }
-.timeline__years { font-size: 0.78rem; color: var(--text-faint); margin-top: 2px; }
+.timeline__body { min-width: 0; padding-top: 2px; }
+.timeline__title { font-weight: 650; font-size: 1rem; line-height: 1.35; }
+.timeline__title a { color: inherit; text-decoration: underline; text-decoration-color: var(--border-strong); text-underline-offset: 3px; }
+.timeline__title a:hover { color: var(--gold); }
+.timeline__sub { font-size: 0.9rem; color: var(--text-muted); margin-top: 2px; }
+.timeline__meta { font-size: 0.8rem; color: var(--text-faint); margin-top: 3px; }
+/* Where the story starts: present, but plainly not an achievement. */
+.timeline__item--origin .timeline__dot { background: transparent; border-style: dashed; }
+.timeline__item--now .timeline__dot { border-color: var(--ok-border); background: var(--ok-bg); }
 .timeline__now {
   margin-left: 8px; font-size: 0.68rem; font-weight: 700; text-transform: uppercase;
   letter-spacing: 0.04em; color: var(--ok-ink);
   background: var(--ok-bg); border: 1px solid var(--ok-border);
   border-radius: var(--r-full); padding: 2px 8px; vertical-align: middle;
 }
-
-/* ==========================================================================
-   Modal: college facts block
-   ========================================================================== */
-.college-facts {
-  background: var(--grad-soft); border: 1px solid var(--border);
-  border-radius: var(--r-sm); padding: 14px 16px;
-}
-.college-facts__grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 14px; }
-.college-facts__label {
-  margin: 0; font-size: 0.78rem; color: var(--text-faint);
-  text-transform: uppercase; letter-spacing: 0.05em;
-}
-.college-facts__value { margin: 0; font-size: 0.88rem; }
-@media (max-width: 560px) { .college-facts__grid { grid-template-columns: 1fr; } }
 
 /* ==========================================================================
    Shared type-ahead (college / organisation search)
@@ -1116,14 +1110,13 @@ textarea { min-height: 84px; resize: vertical; }
 
 /* ---------- "How they got in" ---------------------------------------------- */
 
-/* The route/rank/marks badge row. Deliberately the same shape on the directory
-   card, in the profile modal and on the Explorer mini-card - it is the answer a
-   visiting student came for, so it should look the same wherever they meet it. */
+/* How they got in, on a card: the route as a badge, the score as a quiet line
+   beneath it - never two equal badges, which put a number first. */
 .admission-row {
-  display: flex; flex-wrap: wrap; gap: 6px;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 4px;
   margin-bottom: 12px;
 }
-.modal-note { margin: 8px 0 0; font-size: 0.84rem; color: var(--text-muted); }
+.admission-row__score { font-size: 0.76rem; color: var(--text-faint); }
 
 /* The span of ranks that got seniors into one college. Stated as a sentence
    rather than a badge because a WIDE span is the encouraging case - it shows
@@ -1167,6 +1160,25 @@ textarea { min-height: 84px; resize: vertical; }
 }
 .derived__value { color: var(--text); font-weight: 650; }
 .derived .link-btn { margin-left: auto; font-size: 0.8rem; font-weight: 600; }
+
+.profile-public-link {
+  display: inline-block; margin-top: 6px;
+  font-size: 0.86rem; font-weight: 600; color: var(--gold);
+}
+.step-sub--alt { margin-top: 6px; font-size: 0.86rem; }
+.step-sub--alt a { color: var(--gold); font-weight: 600; }
+
+/* Sign-in's second path: an "or" rule, then creating an account. */
+.login-or {
+  display: flex; align-items: center; gap: 12px;
+  margin: 22px 0 14px; color: var(--text-faint); font-size: 0.8rem;
+}
+.login-or::before, .login-or::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+.login-new { margin: 0 0 10px; text-align: center; font-size: 0.88rem; color: var(--text-muted); }
+.login-note {
+  margin: 18px 0 0; padding-top: 14px; border-top: 1px solid var(--border);
+  font-size: 0.8rem; line-height: 1.5; color: var(--text-faint);
+}
 
 /* An inline action that reads as a link but is genuinely a button. */
 .link-btn {
@@ -1859,41 +1871,49 @@ span.a-card__banner { background: var(--tint, var(--grad)); opacity: 0.55; }
 .featured__all:hover { border-color: var(--gold); }
 .featured__row { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 14px; }
 
-.f-card {
-  display: flex; gap: 14px; min-width: 0; padding: 8px;
+/* One senior as a card: the face and the name first, then where they went.
+   See lib/PersonCard.tsx for why it is this way round. */
+.pcard {
+  display: flex; gap: 14px; align-items: center; min-width: 0; padding: 12px;
   border-radius: 18px; background: rgba(255, 255, 255, 0.035); border: 1px solid var(--border);
   color: var(--text); text-decoration: none;
   transition: border-color 0.2s var(--ease), transform 0.2s var(--ease), background 0.2s var(--ease);
 }
-.f-card:hover { transform: translateY(-3px); border-color: var(--border-strong); background: rgba(255, 255, 255, 0.055); }
-.f-card:focus-visible { outline: none; box-shadow: 0 0 0 4px var(--ring); }
-.f-card__thumb { flex: 0 0 94px; height: 120px; border-radius: 12px; overflow: hidden; background: var(--surface); }
-.f-card__thumb img { display: block; width: 100%; height: 100%; object-fit: cover; }
-.f-card__tile {
-  width: 100%; height: 100%; display: grid; place-items: center; padding: 6px; text-align: center;
-  font-family: var(--font-sora), sans-serif; font-weight: 800; font-size: 1.2rem; letter-spacing: 0.02em;
-  color: #0b0a0c; background: var(--tint, var(--grad));
+.pcard:hover { transform: translateY(-3px); border-color: var(--border-strong); background: rgba(255, 255, 255, 0.055); }
+.pcard:focus-visible { outline: none; box-shadow: 0 0 0 4px var(--ring); }
+.pcard__face {
+  flex: none; display: grid; place-items: center; overflow: hidden;
+  width: 88px; height: 88px; border-radius: 20px;
+  background: var(--tint, var(--grad));
 }
-.f-card__body { display: flex; flex-direction: column; flex: 1; min-width: 0; padding: 6px 4px 4px 0; }
-.f-card__title {
-  font-weight: 700; font-size: 0.95rem; line-height: 1.25;
+.pcard__face img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.pcard__initials {
+  font-family: var(--font-sora), sans-serif; font-weight: 800; font-size: 1.6rem;
+  letter-spacing: 0.02em; color: rgba(11, 10, 12, 0.88);
+}
+.pcard__body { display: flex; flex-direction: column; gap: 5px; flex: 1; min-width: 0; }
+.pcard__name { font-size: 1.05rem; font-weight: 700; line-height: 1.25; overflow-wrap: anywhere; }
+.pcard__year { color: var(--text-faint); font-weight: 500; }
+/* What they joined: a real line, not a caption. Two lines at most - the old
+   single-line ellipsis cut the college's name off on a phone. */
+.pcard__where {
+  font-size: 0.92rem; font-weight: 600; line-height: 1.35; color: var(--text);
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
-.f-card__path { margin-top: 5px; color: var(--text-muted); font-size: 0.8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.f-card__foot { display: flex; align-items: center; gap: 8px; margin-top: auto; padding-top: 10px; }
-.f-card__avatar {
-  flex: none; width: 26px; height: 26px; border-radius: 50%; overflow: hidden;
-  display: grid; place-items: center; font-size: 0.64rem; font-weight: 700;
-  background: var(--surface-2); border: 1px solid var(--border-strong);
+.pcard__logo {
+  display: inline-grid; place-items: center; vertical-align: -5px;
+  width: 20px; height: 20px; margin-right: 6px; padding: 2px; border-radius: 6px;
+  background: #fbf6ec; box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.16);
 }
-.f-card__avatar img { width: 100%; height: 100%; object-fit: cover; }
-.f-card__name { min-width: 0; font-size: 0.84rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.f-card__year { color: var(--text-faint); font-weight: 500; }
-.f-card__go {
-  flex: none; margin-left: auto; width: 24px; height: 24px; border-radius: 50%;
-  display: grid; place-items: center; line-height: 1; font-size: 1rem;
-  border: 1px solid var(--border-strong); color: var(--text-muted);
-}
+.pcard__logo img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.pcard__how { font-size: 0.8rem; color: var(--text-muted); }
+
+/* On a college's own page: a little smaller, and the college is implied. */
+.pcard--md { padding: 10px; gap: 12px; }
+.pcard--md .pcard__face { width: 64px; height: 64px; border-radius: 16px; }
+.pcard--md .pcard__initials { font-size: 1.2rem; }
+.pcard--md .pcard__name { font-size: 1rem; }
+.pcard--md .pcard__where { font-size: 0.86rem; font-weight: 500; color: var(--text-muted); }
 
 @media (max-width: 640px) {
   .featured { padding: 16px; }
@@ -1904,8 +1924,11 @@ span.a-card__banner { background: var(--tint, var(--grad)); opacity: 0.55; }
     margin: 0 -16px; padding: 0 16px 4px;
   }
   .featured__row::-webkit-scrollbar { display: none; }
-  .f-card { flex: 0 0 86%; scroll-snap-align: start; gap: 12px; }
-  .f-card__thumb { flex-basis: 74px; height: 104px; }
+  .pcard--lg { flex: 0 0 88%; scroll-snap-align: start; gap: 12px; padding: 10px; }
+  .pcard--lg .pcard__face { width: 68px; height: 68px; border-radius: 16px; }
+  /* A phone leaves ~165px for this line. Three lines of a college's name
+     beat two lines and an ellipsis where the name should be. */
+  .pcard--lg .pcard__where { -webkit-line-clamp: 3; }
 }
 
 /* ═══ Home: stats row ═══ */
@@ -2090,6 +2113,7 @@ span.a-card__banner { background: var(--tint, var(--grad)); opacity: 0.55; }
 .xcollege__place { margin: 0 0 8px; font-size: 0.83rem; color: var(--text-muted); }
 .xcollege__univ { color: var(--text-faint); }
 .xcollege__chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.xcollege__span { margin: 8px 0 0; font-size: 0.8rem; color: var(--text-faint); }
 .xcollege__site { flex: none; }
 .xcollege__site .btn__inner { padding: 8px 15px; font-size: 0.8rem; }
 .xcollege__seniors { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -2152,6 +2176,10 @@ span.a-card__banner { background: var(--tint, var(--grad)); opacity: 0.55; }
 .cpage__about { margin-top: 20px; }
 .cpage__section { margin-top: 34px; }
 .cpage__section h2 { font-size: 1.12rem; margin: 0 0 14px; }
+.cpage__trivia { margin: 8px 0 0; font-size: 0.82rem; color: var(--text-faint); }
+/* The seniors are the reason this page exists, so they get cards with faces
+   rather than the chips they used to be. */
+.cpage__seniors { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
 
 .gallery-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 14px; }
 .shot {
@@ -2398,61 +2426,86 @@ a.xcollege__thumb:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--rin
 .pr-photo__tag { font-size: 0.72rem; color: var(--text-faint); }
 .pr-photo--new .pr-photo__tag { color: var(--gold); }
 
-/* ── One senior, at an address of their own ──────────────────────────────── */
-.apage__head { margin-bottom: 28px; }
-.apage__banner {
-  height: clamp(120px, 20vw, 190px);
-  border-radius: var(--r-lg);
-  overflow: hidden;
-  background: var(--tint, var(--grad));
-}
-.apage__banner img { width: 100%; height: 100%; object-fit: cover; display: block; }
-/* Only the avatar laps over the banner. Pulling the whole intro up put the
-   name on top of a photograph, where a dark headline is unreadable. */
-.apage__intro {
-  display: flex; gap: 18px; align-items: flex-start;
-  padding: 0 clamp(4px, 2vw, 20px);
+/* ── One senior, at an address of their own ──────────────────────────────
+   Every section used to look the same: a 0.82rem uppercase faint heading with
+   the same rule under it and the same 30px gap, which is the fifth-largest
+   text on the page and the colour of the footer timestamp. Nothing was ranked
+   above anything else, so the page read as a pile. The scale below is the
+   ranking: name, then their words, then the path, then everything else. */
+.apage { --apage-gap: clamp(36px, 2rem + 2vw, 52px); }
+
+.apage__head {
+  display: grid; grid-template-columns: auto minmax(0, 1fr);
+  gap: 24px; align-items: center; margin: 0 0 var(--apage-gap);
 }
 .apage__avatar {
-  width: 96px; height: 96px; flex: none; font-size: 2rem;
-  margin-top: -44px;
-  border: 3px solid var(--bg); box-shadow: var(--shadow-sm);
+  width: 128px; height: 128px; flex: none; font-size: 2.4rem;
+  background: var(--tint, var(--grad));
+  box-shadow: 0 0 0 3px var(--bg), 0 0 0 5px rgba(212, 175, 55, 0.5);
 }
 .apage__avatar img { width: 100%; height: 100%; object-fit: cover; }
-.apage__who { flex: 1; min-width: 0; padding-top: 12px; }
-.apage__name { margin: 0 0 4px; font-size: clamp(1.5rem, 1.1rem + 1.6vw, 2.1rem); line-height: 1.15; }
-.apage__meta { margin: 0 0 12px; color: var(--text-muted); font-size: 0.92rem; }
-.apage__board { color: var(--text-faint); }
-.apage__actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.apage__who { min-width: 0; }
+.apage__name { margin: 0 0 8px; font-size: clamp(1.75rem, 1.25rem + 1.8vw, 2.4rem); line-height: 1.1; }
+/* Where they went, said once and said large. */
+.apage__lead { margin: 0 0 6px; font-size: clamp(1.05rem, 0.98rem + 0.35vw, 1.2rem); font-weight: 650; line-height: 1.4; }
+.apage__lead a { color: inherit; text-decoration: underline; text-decoration-color: rgba(212, 175, 55, 0.5); text-underline-offset: 3px; }
+.apage__lead a:hover { color: var(--gold); }
+.apage__via {
+  margin-left: 10px; padding: 3px 10px; white-space: nowrap;
+  border-radius: var(--r-full); border: 1px solid var(--border-strong);
+  font-size: 0.76rem; font-weight: 600; color: var(--text-muted); vertical-align: 2px;
+}
+.apage__crest {
+  display: inline-grid; place-items: center; width: 1.7em; height: 1.7em;
+  padding: 3px; margin-right: 8px; vertical-align: -0.45em;
+  border-radius: 8px; background: #fbf6ec; box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.16);
+}
+.apage__crest--sm { width: 1.4em; height: 1.4em; margin-right: 6px; vertical-align: -0.3em; }
+.apage__crest img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.apage__now { margin: 0 0 8px; font-size: 0.92rem; }
+.apage__now .timeline__now { margin: 0 8px 0 0; }
+.apage__meta { margin: 0; color: var(--text-muted); font-size: 0.92rem; line-height: 1.5; }
+.apage__actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
 
-.apage__section { margin-bottom: 30px; }
+.apage__section { margin: 0 0 var(--apage-gap); }
 .apage__section > h2 {
-  margin: 0 0 12px; font-size: 0.82rem; letter-spacing: 0.08em;
-  text-transform: uppercase; color: var(--text-faint);
-  padding-bottom: 7px; border-bottom: 1px solid var(--border);
+  margin: 0 0 16px; font-size: 1.12rem; font-weight: 650;
+  letter-spacing: -0.01em; color: var(--text);
 }
+.apage__section--minor { margin-bottom: 32px; }
+.apage__section--minor > h2 { font-size: 1rem; color: var(--text-muted); }
+.apage__section--others { padding-top: 32px; border-top: 1px solid var(--border); }
 .apage__band {
-  margin: 18px 0 8px; font-size: 0.88rem; font-weight: 650; color: var(--text-muted);
+  display: flex; align-items: center;
+  margin: 0 0 10px; font-size: 0.92rem; font-weight: 650; color: var(--text-muted);
 }
+
+.apage__words { display: grid; gap: 24px; }
+.apage__words figure { margin: 0; }
+.apage__quote-label { margin: 0 0 6px; font-size: 0.8rem; font-weight: 650; color: var(--text-faint); }
+/* A rule rather than a tinted box: at lead size the box became the thing you
+   saw, instead of the sentence inside it. */
 .apage__quote {
-  margin: 0 0 12px; padding: 14px 18px;
-  border-left: 3px solid var(--gold); border-radius: 0 var(--r-sm) var(--r-sm) 0;
-  background: rgba(212, 175, 55, 0.06);
-  font-size: 1.02rem; line-height: 1.65; overflow-wrap: anywhere;
+  margin: 0; padding: 2px 0 2px 18px; max-width: 62ch;
+  border-left: 3px solid rgba(212, 175, 55, 0.55);
+  font-size: 1rem; line-height: 1.65; overflow-wrap: anywhere;
 }
-.apage__quote--school { border-left-color: var(--emerald, var(--gold)); background: rgba(52, 211, 153, 0.06); }
-.apage__college { margin-top: 18px; }
-.apage__college-links { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+.apage__quote--lead { padding-left: 20px; border-left-width: 4px; border-left-color: var(--gold); font-size: clamp(1.15rem, 1.06rem + 0.4vw, 1.25rem); line-height: 1.55; font-weight: 500; }
+.apage__quote--school {
+  padding: 12px 16px; font-size: 0.95rem;
+  border-left-color: var(--emerald, var(--gold)); background: rgba(52, 211, 153, 0.06);
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+}
 .apage__rail { margin-bottom: 18px; }
 .apage__rail-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .apage__rail-head .apage__band { margin: 0 0 8px; }
-.apage__foot { margin: 0 0 18px; font-size: 0.8rem; color: var(--text-faint); }
-.apage__cta { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 40px; }
+.apage__foot { margin: 0 0 14px; font-size: 0.8rem; color: var(--text-faint); }
+.apage__cta { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 
 @media (max-width: 560px) {
-  .apage__intro { flex-direction: column; align-items: flex-start; gap: 4px; }
-  .apage__avatar { width: 76px; height: 76px; font-size: 1.6rem; margin-top: -36px; }
-  .apage__who { padding-top: 0; }
+  .apage__head { grid-template-columns: 1fr; gap: 16px; }
+  .apage__avatar { width: 104px; height: 104px; font-size: 1.9rem; }
+  .apage__via { display: inline-block; margin: 6px 0 0; }
 }
 
 /* A group header is both a heading and a button. The heading wraps the button

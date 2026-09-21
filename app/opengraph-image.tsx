@@ -33,7 +33,7 @@ export default async function Image() {
           and how they got there.
         </div>
         <div style={{ display: 'flex', fontFamily: 'Manrope', fontSize: 30, marginTop: 26, opacity: 0.8 }}>
-          Real colleges, real exams, real advice — from alumni of our school.
+          The colleges and courses our seniors went on to, in their own words.
         </div>
         <div style={{ display: 'flex', fontFamily: 'Manrope', fontSize: 24, marginTop: 34, opacity: 0.6 }}>
           {siteHost()}

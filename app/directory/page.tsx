@@ -6,8 +6,8 @@ import { isSupabaseConfigured } from '../../lib/supabaseClient';
 import { fetchApprovedAlumni, fetchTimelines } from '../../lib/publicData';
 import { useDebounced } from '../../lib/useDebounced';
 import { clearDirectoryView, readDirectoryView, rememberDirectoryView, type DirectorySnapshot } from './viewState';
-import { boardForSchool, officialSchoolName, publicRouteLabel, SCHOOLS } from '../../lib/options';
-import { AdmissionBadges, Fact, Row } from '../../lib/profileParts';
+import { asksForRank, boardForSchool, officialSchoolName, publicRouteLabel, SCHOOLS } from '../../lib/options';
+import { AdmissionBadges, Row } from '../../lib/profileParts';
 import { formatRankBand, formatMarksBand, formatRankSpan, formatMonthYear } from '../../lib/text';
 import { buildSearchDoc, searchItems, type SearchDoc } from '../../lib/search';
 import { collegeTintKey, instituteInitials, instituteTint, profileHref } from '../../lib/showcase';
@@ -469,8 +469,8 @@ export default function DirectoryPage() {
       <div className="fade-up">
         <h1>Alumni Network</h1>
         <p className="subtitle">
-          Real paths taken by Veveaham seniors — where they got in, how they got
-          in, and what they are doing now.
+          Veveaham seniors — where they studied, how they got there, and what
+          they are doing now.
         </p>
       </div>
 
@@ -835,7 +835,14 @@ function CollegeExplorerCard({
   // most useful line on the page for a student choosing where to aim, and it is
   // non-personal by construction: no rank is attributed to anyone. A wide span
   // is the encouraging case - it shows the door is not only open to toppers.
-  const rankSpan = formatRankSpan(college.seniors.map((x) => x.admission_rank));
+  //
+  // Only from routes that produce a rank. A rank typed by someone who then
+  // switched to Management Quota - shown publicly as "Board Marks" - is kept
+  // in their row but never displayed beside that label; the span honours the
+  // same rule the individual badges do.
+  const rankSpan = formatRankSpan(
+    college.seniors.filter((x) => asksForRank(x.admission_route)).map((x) => x.admission_rank),
+  );
   const routes = Array.from(
     new Set(
       college.seniors
@@ -887,10 +894,13 @@ function CollegeExplorerCard({
               {college.seniors.length} Veveaham {college.seniors.length === 1 ? 'senior' : 'seniors'}
             </span>
             {routes.map((r) => <span key={r} className="badge badge--sm">via {r}</span>)}
-            {rankSpan && <span className="badge badge--sm">ranks {rankSpan}</span>}
             {det?.management_type && <span className="badge badge--sm">{det.management_type}</span>}
             {det?.established_year && <span className="badge badge--sm">Est. {det.established_year}</span>}
           </div>
+          {/* The span stays - a wide one is the encouraging case - but as a
+              line of data under the facts, not a badge standing level with
+              how many seniors are here and how they got in. */}
+          {rankSpan && <p className="xcollege__span">Seniors here got in with ranks of {rankSpan}.</p>}
         </div>
 
         {pageHref ? (

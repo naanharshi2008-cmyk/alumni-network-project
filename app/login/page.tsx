@@ -81,10 +81,13 @@ export default function LoginPage() {
       <div className="card fade-up" style={{ width: '100%', maxWidth: 400 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 11, marginBottom: 6 }}>
           <Crest />
-          <h1 style={{ fontSize: '1.4rem', margin: 0 }}>Welcome back</h1>
+          <h1 style={{ fontSize: '1.4rem', margin: 0 }}>Sign in</h1>
         </div>
+        {/* Not "Welcome back": the home page's "I'm an alumnus" button sends
+            people here whether or not they have ever registered, and the
+            ones who haven't are the ones most likely to give up. */}
         <p className="subtitle" style={{ marginBottom: 24 }}>
-          Sign in with the email or phone number you registered with.
+          For Veveaham alumni. Use the email or phone number on your profile.
         </p>
 
         {error && <div className="alert alert--error" role="alert">{error}</div>}
@@ -134,9 +137,23 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <div style={{ textAlign: 'center', marginTop: 18, fontSize: '0.88rem', color: 'var(--text-muted)' }}>
-          New here? <Link href="/register" style={{ color: 'var(--gold)', fontWeight: 600 }}>Add your journey →</Link>
-        </div>
+        {/* The second way through this page, given the same weight as the
+            first. It used to be one small link under the button, and someone
+            arriving from "I'm an alumnus" without an account had to find it. */}
+        <div className="login-or" role="separator"><span>or</span></div>
+        <p className="login-new">First time here? It takes about five minutes.</p>
+        <Link href="/register" className="btn btn--ghost btn--block">
+          <span className="btn__inner">Create your account →</span>
+        </Link>
+
+        {/* Round 7 lets the school make a login for an alumnus and hand them a
+            temporary password. Those people land here with no idea whether
+            they "have an account" - so say it plainly. */}
+        <p className="login-note">
+          Did the school set up your login? Use the email or phone number they
+          have for you and the temporary password they gave you — you will
+          choose your own straight after.
+        </p>
       </div>
     </div>
   );

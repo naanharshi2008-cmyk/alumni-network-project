@@ -1,6 +1,6 @@
 import { fetchAlumnusBySlug } from '../../../lib/publicData';
 import { renderProfileCard, OG_SIZE } from '../../../lib/og/card';
-import { collegeLabel, collegeTintKey, instituteTint } from '../../../lib/showcase';
+import { FALLBACK_TINT, collegeLabel, collegeTintKey, instituteTint } from '../../../lib/showcase';
 import { initialsOf } from '../../../lib/types';
 import { publicRouteLabel } from '../../../lib/options';
 
@@ -25,7 +25,7 @@ export default async function Image({ params }: { params: Promise<{ slug: string
     return renderProfileCard({
       name: 'Veveaham Alumni',
       college: null, route: null, photoUrl: null,
-      initials: 'V', tint: 'linear-gradient(135deg, hsl(43 66% 74%), hsl(89 64% 72%))',
+      initials: 'V', tint: FALLBACK_TINT,
     });
   }
 
@@ -37,6 +37,6 @@ export default async function Image({ params }: { params: Promise<{ slug: string
     route: publicRouteLabel(person.admission_route),
     photoUrl: person.show_photo ? person.photo_url : null,
     initials: initialsOf(person.full_name),
-    tint: key ? instituteTint(key) : 'linear-gradient(135deg, hsl(43 66% 74%), hsl(89 64% 72%))',
+    tint: key ? instituteTint(key) : FALLBACK_TINT,
   });
 }

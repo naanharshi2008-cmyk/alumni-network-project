@@ -108,12 +108,25 @@ export function quoteCandidates(alumni: Alumnus[], slot = rotationWindow()): Quo
  * the school, and a half-finished row that says "nmmmmmmmm" must never land
  * there.
  */
+/**
+ * Does this read as something a person meant to say?
+ *
+ * The checks the home page's quote picker always made, pulled out so the
+ * profile page can make them too: it prints the advice as its lead, at the
+ * largest size on the page after the name, and a half-finished "nmmmmmm" at
+ * that size is loud.
+ */
+export function looksLikeWords(raw: string | null | undefined): boolean {
+  const text = (raw ?? '').replace(/\s+/g, ' ').trim();
+  if (text.length < 24) return false;
+  if (text.split(' ').length < 3) return false;          // a sentence, not a word
+  if (/(.)\1{4,}/.test(text)) return false;              // "nmmmmmmm", "aaaaaa"
+  return /[a-z\u0B80-\u0BFF]/i.test(text);               // some actual letters
+}
+
 function tidyQuote(raw: string | null | undefined): string | null {
   const text = (raw ?? '').replace(/\s+/g, ' ').trim();
-  if (text.length < 24) return null;
-  if (text.split(' ').length < 3) return null;         // a sentence, not a word
-  if (/(.)\1{4,}/.test(text)) return null;             // "nmmmmmmm", "aaaaaa"
-  if (!/[a-z\u0B80-\u0BFF]/i.test(text)) return null;  // some actual letters
+  if (!looksLikeWords(text)) return null;
   if (text.length <= 160) return text;
   const sentences = text.match(/[^.!?]+[.!?]+/g) ?? [];
   let out = '';
@@ -183,10 +196,19 @@ export function profileSummary(a: Alumnus): string {
   const who = a.class_of
     ? `Class of ${a.class_of} at ${SCHOOL_GROUP_NAME}.`
     : `An alumnus of ${SCHOOL_GROUP_NAME}.`;
-  return lead
-    ? `${lead}. ${who} See their advice for juniors.`
-    : `${who} See their path, and what they would tell a junior.`;
+  // Only offer their words when there are some. This ended "See their advice
+  // for juniors." whenever there was a college - so four of the first seven
+  // search snippets promised advice that was not on the page.
+  const words = looksLikeWords(a.message_1) ? ' In their own words.' : '';
+  return lead ? `${lead}. ${who}${words}` : `${who}${words}`;
 }
+
+/**
+ * The colour a person's initials sit on when there is no college to take one
+ * from. Was written out twice inside the share card; the profile page now
+ * needs it too, and the two must match.
+ */
+export const FALLBACK_TINT = 'linear-gradient(135deg, hsl(43 66% 74%), hsl(89 64% 72%))';
 
 /**
  * A card-sized college name: a readable alias ("IIT Madras") when the official
@@ -222,17 +244,36 @@ export function compactCollegeLabel(a: Alumnus): string | null {
  * quietly wrong. Deduped by key, so the same place typed twice is one entry.
  */
 export function institutesFor(a: Alumnus, studies: HigherStudy[] = []): string[] {
-  const out: string[] = [];
+  return institutePathsFor(a, studies).map((p) => p.label);
+}
+
+/**
+ * The same places, each with the line that belongs to it.
+ *
+ * The hero cycled the *name* through every institute someone had studied at
+ * while the line under it stayed on their undergraduate route - so a card
+ * read "IIT Madras / Board Marks · BSc" for a person who did a BSc elsewhere
+ * on board marks and went to IIT Madras years later. A visitor reads that
+ * literally, and it is not true. A place and its line travel together now.
+ *
+ * Higher study carries no route, because the form never asks for one: the
+ * line is the degree itself.
+ */
+export function institutePathsFor(
+  a: Alumnus,
+  studies: HigherStudy[] = [],
+): { label: string; path: string }[] {
+  const out: { label: string; path: string }[] = [];
   const seen = new Set<string>();
-  const add = (name: string | null | undefined) => {
+  const add = (name: string | null | undefined, path: string) => {
     const label = (name ?? '').trim();
     const key = instKey(label);
     if (!label || key.length < 2 || seen.has(key)) return;
     seen.add(key);
-    out.push(label);
+    out.push({ label, path });
   };
-  add(compactCollegeLabel(a));
-  for (const s of studies) add(s.institution);
+  add(compactCollegeLabel(a), pathLine(a));
+  for (const s of studies) add(s.institution, (s.degree_name ?? '').trim());
   return out;
 }
 

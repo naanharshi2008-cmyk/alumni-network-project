@@ -169,7 +169,7 @@ export function welcomeEmail(fullName: string | null) {
       preheader: "We've received your profile. The school will review it shortly.",
       heading: `Welcome, ${name}`,
       paragraphs: [
-        'Thank you for adding your journey. Students in classes 8 to 12 — and their parents — use these profiles to see the real paths seniors took after school.',
+        'Thank you for adding your journey. Students in classes 8 to 12 — and their parents — use these profiles to see where seniors went after school, and how they got there.',
         "The school reviews every profile before it goes public, so yours will appear in the directory once it's approved. You'll get another email when it does.",
         'Your email and phone number are never shown publicly.',
       ],

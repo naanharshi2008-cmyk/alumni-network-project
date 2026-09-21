@@ -84,7 +84,7 @@ export default function HomeGalleries({ alumni }: { alumni: Alumnus[] | null }) 
       {routes.length > 0 && (
         <Gallery
           title="How they got in"
-          sub="The exams and marks that opened each door."
+          sub="The entrance exams and routes seniors took."
           cards={routes.map((r) => ({
             href: `/directory?q=${encodeURIComponent(r.label)}`,
             emoji: '📝',

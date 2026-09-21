@@ -120,7 +120,7 @@ export default function AddAlumnus({ onAdded, setError }: { onAdded: () => Promi
       <h3 className="add-alum__head">Add an alumnus</h3>
       <p className="hint" style={{ display: 'block', margin: '0 0 16px' }}>
         Just enough to reach them. They sign in with the temporary password and fill in the rest —
-        their college, how they got in, and what they would tell a junior — and it comes back here
+        their college, how they got in, and what they have to say to juniors — and it comes back here
         for you to approve.
       </p>
 

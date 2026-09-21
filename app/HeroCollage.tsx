@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { Alumnus, HigherStudy } from '../lib/types';
-import { classTag, collegeLabel, institutesFor, pathLine, profileHref, shortName, type Quote } from '../lib/showcase';
+import { classTag, collegeLabel, institutePathsFor, pathLine, profileHref, shortName, type Quote } from '../lib/showcase';
 import { useCycle, useRotation } from '../lib/useRotation';
 
 const SLOTS = 4;
@@ -99,15 +99,20 @@ function FaceCard({
   paused: boolean;
   studies: HigherStudy[];
 }) {
-  const institutes = institutesFor(person, studies);
-  const label = useCycle(institutes.length > 0 ? institutes : [shortName(person.full_name)], LABEL_MS, paused);
-  const path = pathLine(person);
+  const institutes = institutePathsFor(person, studies);
+  const steps = institutes.length > 0
+    ? institutes
+    : [{ label: shortName(person.full_name), path: pathLine(person) }];
+  const label = useCycle(steps.map((x) => x.label), LABEL_MS, paused);
+  // Safe as a lookup: institutePathsFor has already deduped by institute key,
+  // so no two steps share a label.
+  const path = steps.find((x) => x.label === label)?.path ?? '';
 
   return (
     <Link
       href={profileHref(person)}
       className={`face-card face-card--${slot}${fading ? ' is-fading' : ''}`}
-      aria-label={`${person.full_name}${institutes.length ? `, ${institutes.join(', ')}` : ''}`}
+      aria-label={`${person.full_name}${institutes.length ? `, ${institutes.map((i) => i.label).join(', ')}` : ''}`}
     >
       <img src={person.photo_url!} alt="" loading="eager" decoding="async" />
       <span className="face-card__shade" aria-hidden />

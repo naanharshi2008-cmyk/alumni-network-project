@@ -1,16 +1,17 @@
 'use client';
 
 import Link from 'next/link';
-import { Alumnus, collegeDetailsOf, initialsOf, professionalLabel } from '../lib/types';
-import { classTag, collegeLabel, collegeTintKey, instituteInitials, instituteTint, pathLine, profileHref, shortName } from '../lib/showcase';
+import type { Alumnus } from '../lib/types';
+import PersonCard from '../lib/PersonCard';
 
 /**
  * Featured alumni: the school's starred picks first, the most complete
  * profiles after, rotating every few hours (see lib/showcase.ts).
  *
- * Each card leads with where the person went - the college's banner when the
- * school has uploaded one, otherwise a tile with its initials - because that is
- * what a junior scanning the row is looking for.
+ * Each card leads with the person - their face and their name - and then
+ * where they went. It used to be the other way round, with a campus banner
+ * the size of the card and the person's photo a 26px circle in its footer;
+ * see lib/PersonCard.tsx.
  */
 export default function FeaturedAlumni({ people }: { people: Alumnus[] }) {
   if (people.length === 0) return null;
@@ -23,7 +24,7 @@ export default function FeaturedAlumni({ people }: { people: Alumnus[] }) {
         </span>
         <div className="featured__titles">
           <h2 id="featured-title">Featured alumni</h2>
-          <p>Real seniors. Real paths.</p>
+          <p>Seniors from your school, and where they are now.</p>
         </div>
         <Link href="/directory" className="featured__all">
           View all alumni <span aria-hidden>→</span>
@@ -31,44 +32,7 @@ export default function FeaturedAlumni({ people }: { people: Alumnus[] }) {
       </div>
 
       <div className="featured__row">
-        {people.map((a, i) => {
-          const college = collegeLabel(a);
-          const banner = collegeDetailsOf(a)?.banner_url;
-          const title = college ?? a.currently_at ?? professionalLabel(a) ?? 'Veveaham alumni';
-          const path = pathLine(a);
-          const tintKey = collegeTintKey(a);
-          return (
-            <Link key={a.id ?? i} href={profileHref(a)} className="f-card">
-              <span
-                className="f-card__thumb" aria-hidden
-                style={tintKey ? ({ '--tint': instituteTint(tintKey) } as React.CSSProperties) : undefined}
-              >
-                {banner
-                  ? <img src={banner} alt="" loading="lazy" decoding="async" />
-                  /* Initials only when there IS a college. The title falls
-                     through to a company, or to the words "Veveaham alumni",
-                     and a tile reading "VA" looked like an institution. */
-                  : <span className="f-card__tile">{college ? instituteInitials(college) : ''}</span>}
-              </span>
-              <span className="f-card__body">
-                <span className="f-card__title">{title}</span>
-                {path && <span className="f-card__path">{path}</span>}
-                <span className="f-card__foot">
-                  <span className="f-card__avatar" aria-hidden>
-                    {a.photo_url
-                      ? <img src={a.photo_url} alt="" loading="lazy" decoding="async" />
-                      : initialsOf(a.full_name)}
-                  </span>
-                  <span className="f-card__name">
-                    {shortName(a.full_name)}
-                    {classTag(a) && <span className="f-card__year"> {classTag(a)}</span>}
-                  </span>
-                  <span className="f-card__go" aria-hidden>›</span>
-                </span>
-              </span>
-            </Link>
-          );
-        })}
+        {people.map((a, i) => <PersonCard key={a.id ?? i} a={a} size="lg" />)}
       </div>
     </section>
   );

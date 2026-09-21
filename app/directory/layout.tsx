@@ -8,7 +8,7 @@ import type { Metadata } from 'next';
  */
 export const metadata: Metadata = {
   title: 'Alumni directory',
-  description: 'Real paths taken by Veveaham seniors — where they got in, how they got in, and what they are doing now.',
+  description: 'Veveaham seniors — where they studied, how they got there, and what they are doing now.',
   alternates: { canonical: '/directory' },
 };
 
