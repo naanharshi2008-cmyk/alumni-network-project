@@ -218,11 +218,22 @@ export default function ImportPage() {
     setNote(`Taken back: ${(data as { removed: number }).removed} profile(s) removed.`);
   }
 
+  /**
+   * Email everyone who has an address, one at a time.
+   *
+   * The mail plan sends 100 a day, so a batch of two hundred cannot all go at
+   * once. The loop stops the moment the provider says so and says what is
+   * left - the rest go tomorrow, or by WhatsApp from their own page, which
+   * has no cap at all.
+   */
   async function emailEveryone() {
     const token = await bearer();
     if (!token) { setError('Your session expired — sign in again.'); return; }
     const byKey = new Map(ready.map((r) => [r.payload.import_key, r.payload]));
-    for (const r of results.filter((x) => x.status === 'created' && x.id)) {
+    const created = results.filter((x) => x.status === 'created' && x.id);
+    let sent = 0;
+    for (const [i, r] of created.entries()) {
+      if (invites[r.id!] === 'emailed') continue;
       if (!byKey.get(r.key)?.personal_email) { setInvites((s) => ({ ...s, [r.id!]: 'no email' })); continue; }
       setInvites((s) => ({ ...s, [r.id!]: 'sending…' }));
       try {
@@ -232,12 +243,21 @@ export default function ImportPage() {
           body: JSON.stringify({ alumni_id: r.id, channel: 'email' }),
         });
         const body = await res.json();
-        setInvites((s) => ({ ...s, [r.id!]: !res.ok ? (body.error ?? 'failed') : body.emailed ? 'emailed' : `not sent (${body.emailProblem})` }));
+        if (res.ok && body.emailed) { sent += 1; setInvites((s) => ({ ...s, [r.id!]: 'emailed' })); }
+        else if (body.emailProblem === 'rate-limited') {
+          setInvites((s) => ({ ...s, [r.id!]: 'not sent — the day’s limit' }));
+          setNote(`Emailed ${sent}. Today's sending limit is reached, with ${created.length - i} still to go — press this again tomorrow `
+            + '(anyone already emailed is skipped while this page stays open), or send the rest by WhatsApp from their own page.');
+          return;
+        } else {
+          setInvites((s) => ({ ...s, [r.id!]: !res.ok ? (body.error ?? 'failed') : `not sent (${body.emailProblem})` }));
+        }
       } catch {
         setInvites((s) => ({ ...s, [r.id!]: 'failed' }));
       }
       await new Promise((ok) => setTimeout(ok, 400));
     }
+    setNote(`Emailed ${sent} of ${created.length}.`);
   }
 
   function downloadTemplate() {

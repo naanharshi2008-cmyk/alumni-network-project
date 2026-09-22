@@ -17,7 +17,9 @@ const DEFAULT_FROM = 'Veveaham Alumni <alumni@dpmschools.com>';
 
 export type MailResult =
   | { sent: true }
-  | { sent: false; reason: 'not-configured' | 'provider-error' | 'network-error' | 'bad-recipient'; status?: number };
+  // 'rate-limited' is its own answer because it is the one failure that is
+  // not a fault: the free plan sends 100 a day, and the rest go tomorrow.
+  | { sent: false; reason: 'not-configured' | 'provider-error' | 'network-error' | 'bad-recipient' | 'rate-limited'; status?: number };
 
 export function siteUrl(): string {
   return siteOrigin();
@@ -103,8 +105,10 @@ export async function sendMail(message: {
     if (!res.ok) {
       // The body names recipients and addresses, so it goes to the server log
       // only, never back to a caller.
-      console.error('mailer: Resend rejected a message', res.status, await res.text().catch(() => ''));
-      return { sent: false, reason: 'provider-error', status: res.status };
+      const body = await res.text().catch(() => '');
+      console.error('mailer: Resend rejected a message', res.status, body);
+      const limited = res.status === 429 || /daily|rate.?limit|quota/i.test(body);
+      return { sent: false, reason: limited ? 'rate-limited' : 'provider-error', status: res.status };
     }
     return { sent: true };
   } catch (err) {
