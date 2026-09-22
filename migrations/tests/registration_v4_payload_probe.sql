@@ -15,6 +15,7 @@ DO $$
 DECLARE
   who   uuid;
   me    uuid;
+  slug  text;
   n     int;
   txt   text;
   r     text := E'\n';
@@ -23,6 +24,9 @@ BEGIN
    WHERE NOT EXISTS (SELECT 1 FROM public.alumni a WHERE a.user_id = u.id)
    ORDER BY u.created_at LIMIT 1;
   IF who IS NULL THEN RAISE EXCEPTION 'No login without a profile to borrow.'; END IF;
+  -- The share link's slug comes from the URL, not from a query the new
+  -- person could run, so it is looked up here, before acting as them.
+  SELECT public_slug INTO slug FROM public.alumni WHERE approval_status = 'approved' ORDER BY created_at LIMIT 1;
 
   PERFORM set_config('request.jwt.claims',
     format('{"sub":"%s","role":"authenticated","email":"zz-probe@veveaham-alumni-network.com"}', who), true);
@@ -80,7 +84,7 @@ BEGIN
     r := r || 'PASS  family and home accepted' || E'\n';
   EXCEPTION WHEN OTHERS THEN r := r || 'FAIL  alumni_private: ' || SQLERRM || E'\n'; END;
   BEGIN
-    PERFORM public.claim_invite((SELECT public_slug FROM public.alumni WHERE approval_status = 'approved' ORDER BY created_at LIMIT 1));
+    PERFORM public.claim_invite(slug);
     r := r || 'PASS  the invite is recorded without error' || E'\n';
   EXCEPTION WHEN OTHERS THEN r := r || 'FAIL  claim_invite: ' || SQLERRM || E'\n'; END;
   EXECUTE 'RESET ROLE';
