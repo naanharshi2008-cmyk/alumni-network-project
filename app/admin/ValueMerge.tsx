@@ -32,11 +32,8 @@ export type OptionRow = {
   canonical_value: string | null;
 };
 
-/** Only the columns a value can live in - the names match the categories. */
-export type PersonValues = { id: string } & { [K in OptionCategory]?: string | null };
-
 const CATEGORY_ORDER: OptionCategory[] = [
-  'admission_route', 'degree', 'field', 'current_status', 'stream', 'professional_course',
+  'exam', 'branch', 'degree', 'field', 'current_status', 'stream', 'professional_course', 'admission_route',
 ];
 
 type Usage = { value: string; count: number; approved: boolean; builtIn: boolean };
@@ -47,9 +44,10 @@ function builtInsFor(category: OptionCategory): string[] {
 }
 
 export default function ValueMergeTab({
-  people, approvedOptions, optionRows, onDone, setError, setNote,
+  usage, approvedOptions, optionRows, onDone, setError, setNote,
 }: {
-  people: PersonValues[];
+  /** People per value, per category (admin_option_usage). */
+  usage: Record<string, Record<string, number>>;
   approvedOptions: Record<string, string[]>;
   optionRows: OptionRow[];
   onDone: () => Promise<void> | void;
@@ -60,15 +58,11 @@ export default function ValueMergeTab({
   // (an unused list entry is exactly the kind of thing worth merging away).
   const usageByCategory = useMemo(() => {
     const out: Record<string, Usage[]> = {};
-    const seen = new Set<string>();
-    const unique = people.filter((p) => (seen.has(p.id) ? false : (seen.add(p.id), true)));
-
     for (const category of CATEGORY_ORDER) {
       const counts = new Map<string, number>();
-      for (const person of unique) {
-        const raw = person[category];
-        const value = typeof raw === 'string' ? raw.trim() : '';
-        if (value) counts.set(value, (counts.get(value) ?? 0) + 1);
+      for (const [raw, n] of Object.entries(usage[category] ?? {})) {
+        const value = raw.trim();
+        if (value) counts.set(value, (counts.get(value) ?? 0) + n);
       }
       const approved = new Set(approvedOptions[category] ?? []);
       for (const value of approved) if (!counts.has(value)) counts.set(value, 0);
@@ -80,7 +74,7 @@ export default function ValueMergeTab({
         .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value));
     }
     return out;
-  }, [people, approvedOptions]);
+  }, [usage, approvedOptions]);
 
   const aliasesByCategory = useMemo(() => {
     const out: Record<string, OptionRow[]> = {};

@@ -29,10 +29,46 @@ export const PUBLISHABLE_KEYS: ReadonlySet<string> = new Set([
   'branch', 'field', 'admission_route', 'admission_rank', 'board_marks', 'board_cutoff',
   'current_status', 'expected_finish_year', 'currently_at', 'organization_id', 'designation',
   'message_1', 'message_2', 'college_thoughts', 'photo_url', 'show_photo', 'consent_given',
+  // Migration 18 (and publishable_edit_columns() in 19, which is the real gate).
+  'admission_kind', 'admission_exam', 'admission_detail', 'linkedin_handle', 'in_gap_year',
 ]);
 
 /** Staged keys that are whole tables, handled separately from the columns. */
-export const TIMELINE_KEYS: ReadonlySet<string> = new Set(['higher_studies', 'work_experience']);
+export const TIMELINE_KEYS: ReadonlySet<string> = new Set([
+  'higher_studies', 'work_experience', 'exam_attempts', 'admits', 'gap_years',
+]);
+
+/**
+ * Columns that are published together or not at all. A trigger keeps each
+ * group in step (migration 18), so ticking the kind without its exam would
+ * publish an entrance exam with no exam. The first key of each group is the
+ * one the review card shows a tick for.
+ */
+export const GROUPED_KEYS: Record<string, string[]> = {
+  admission_kind: ['admission_exam', 'admission_detail', 'admission_route'],
+  linkedin_handle: ['linkedin_url'],
+};
+
+/** The keys to tick on the card: every staged column, a group shown once, plus the staged lists. */
+export function tickableKeys(staged: Record<string, any> | null | undefined): string[] {
+  const { columns } = splitStaged(staged);
+  const followers = new Set(
+    Object.entries(GROUPED_KEYS).filter(([lead]) => lead in columns).flatMap(([, f]) => f),
+  );
+  const keys = Object.keys(columns).filter((k) => !followers.has(k));
+  for (const k of TIMELINE_KEYS) if (Array.isArray(staged?.[k])) keys.push(k);
+  return keys;
+}
+
+/** What to send for the ticked keys: each group's followers come with their leader. */
+export function columnsToPublish(ticked: string[], staged: Record<string, any> | null | undefined): string[] {
+  const out = new Set(ticked.filter((k) => !TIMELINE_KEYS.has(k)));
+  for (const [lead, followers] of Object.entries(GROUPED_KEYS)) {
+    if (!out.has(lead)) continue;
+    for (const f of followers) if (staged && f in staged) out.add(f);
+  }
+  return [...out];
+}
 
 /** Split a staged blob into what may be published and what must not be. */
 export function splitStaged(staged: Record<string, any> | null | undefined): {

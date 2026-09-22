@@ -4,7 +4,9 @@ import React from 'react';
 import { formatMonthYear } from '../../lib/text';
 import { officialSchoolName } from '../../lib/options';
 import { categoryForDegree } from '../../lib/types';
-import type { AlumniRow, HigherStudyRow, WorkExperienceRow } from './adminData';
+import { admissionOf, labelOfShape } from '../../lib/admission';
+import { linkedinUrl } from '../../lib/linkedin';
+import type { AdminAdmitRow, AdminAttemptRow, AdminGapRow, AdminPath, AlumniRow, HigherStudyRow, WorkExperienceRow } from './adminData';
 import { FIELD_LABELS } from './adminData';
 import { splitStaged } from './editFields';
 
@@ -44,6 +46,8 @@ type Props = {
   staged?: Record<string, any> | null;
   /** Present for an edit the school is about to publish some of. */
   picks?: Picks | null;
+  /** Exams, offers, gap years, family and the office note (migration 18). */
+  path?: AdminPath;
 };
 
 function show(value: unknown): string {
@@ -54,22 +58,24 @@ function show(value: unknown): string {
 
 /** One field: what is live, and underneath it what they want instead. */
 function Field({
-  label, live, staged, has, wide, photo, note, picks,
+  label, live, staged, has, wide, photo, note, picks, tickKey,
 }: {
   label: string; live: unknown; staged?: Record<string, any> | null;
   has: string; wide?: boolean; photo?: boolean; note?: string | null;
   picks?: Picks | null;
+  /** The key the tick publishes, when the value shown is worked out from it. */
+  tickKey?: string;
 }) {
   const proposed = staged && has in staged ? staged[has] : undefined;
   const changed = proposed !== undefined && proposed !== live && !(!proposed && !live);
-  const ticked = !!picks && picks.has(has);
+  const ticked = !!picks && picks.has(tickKey ?? has);
 
   return (
     <div className={`pr-field${wide ? ' pr-field--wide' : ''}${changed ? ' pr-field--changed' : ''}${changed && picks && !ticked ? ' pr-field--held' : ''}`}>
       <span className="pr-field__label">
         {changed && picks ? (
           <label className="pr-tick">
-            <input type="checkbox" checked={ticked} onChange={() => picks.toggle(has)} />
+            <input type="checkbox" checked={ticked} onChange={() => picks.toggle(tickKey ?? has)} />
             <span>{label}</span>
           </label>
         ) : label}
@@ -123,10 +129,56 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-export default function ProfileReview({ person, studies, work, staged, picks }: Props) {
+/* The path lists, one line each. Exact ranks: this is the school's screen. */
+function attemptLine(t: Partial<AdminAttemptRow>): string {
+  const outcome = t.got_seat ? ' — the seat' : t.gave_admit === true ? ' — offer' : t.gave_admit === false ? ' — no offer' : '';
+  return `📝 ${t.exam}${t.exam_year ? ` ${t.exam_year}` : ''}${outcome}${t.exam_rank ? ` · rank ${t.exam_rank}` : ''}`;
+}
+function admitLine(d: Partial<AdminAdmitRow>): string {
+  const course = [d.degree, d.branch].filter(Boolean).join(' ');
+  const where = d.college?.name ?? d.college_name_raw ?? '';
+  const how = labelOfShape({ kind: d.route_kind ?? null, exam: d.exam ?? null, detail: d.route_detail ?? null });
+  return `🎓 ${[course, where].filter(Boolean).join(' at ')}${how ? ` (${how})` : ''}`;
+}
+function gapLine(g: Partial<AdminGapRow>): string {
+  return g.kind === 'break'
+    ? `🌱 ${g.gap_year} — a year out`
+    : `📚 ${g.gap_year} — preparing${g.exam ? ` for ${g.exam}` : ''}${g.coaching_name_raw ? ` with ${g.coaching_name_raw}` : ''}`;
+}
+function parentLine(p: Record<string, any> | null | undefined, n: 1 | 2): string | null {
+  if (!p) return null;
+  const name = p[`guardian${n}_name`];
+  if (!name) return null;
+  const phone = p[`guardian${n}_phone`] ? `${p[`guardian${n}_phone_code`] ?? ''} ${p[`guardian${n}_phone`]}`.trim() : null;
+  return [p[`guardian${n}_relation`], name, phone].filter(Boolean).join(' · ');
+}
+
+export default function ProfileReview({ person, studies, work, staged, picks, path }: Props) {
   const unknown = staged ? splitStaged(staged).unknown : [];
   const stagedStudies = staged && Array.isArray(staged.higher_studies) ? staged.higher_studies : null;
   const stagedWork = staged && Array.isArray(staged.work_experience) ? staged.work_experience : null;
+  const stagedAttempts = staged && Array.isArray(staged.exam_attempts) ? staged.exam_attempts : null;
+  const stagedAdmits = staged && Array.isArray(staged.admits) ? staged.admits : null;
+  const stagedGaps = staged && Array.isArray(staged.gap_years) ? staged.gap_years : null;
+  const ownAdmits = (path?.admits ?? []).filter((d) => !d.added_by_school);
+  const schoolAdmits = (path?.admits ?? []).filter((d) => d.added_by_school);
+
+  // How they got in, as one line, live and proposed - the kind, its exam and
+  // its detail are published together (GROUPED_KEYS in editFields.ts).
+  const liveHow = labelOfShape(admissionOf(person));
+  const hasNewHow = !!staged && ['admission_kind', 'admission_exam', 'admission_detail'].some((k) => k in staged);
+  const derived: Record<string, any> = { ...(staged ?? {}) };
+  if (hasNewHow) {
+    derived.__how = labelOfShape({
+      kind: 'admission_kind' in staged! ? staged!.admission_kind : person.admission_kind ?? null,
+      exam: 'admission_exam' in staged! ? staged!.admission_exam : person.admission_exam ?? null,
+      detail: 'admission_detail' in staged! ? staged!.admission_detail : person.admission_detail ?? null,
+    });
+  } else if (staged && 'admission_route' in staged) {
+    derived.__how = labelOfShape(admissionOf({ admission_route: staged.admission_route }));
+  }
+  if (staged && 'linkedin_handle' in staged) derived.__linkedin = linkedinUrl(staged.linkedin_handle);
+  else if (staged && 'linkedin_url' in staged) derived.__linkedin = staged.linkedin_url;
 
   return (
     <div className="pr">
@@ -151,6 +203,8 @@ export default function ProfileReview({ person, studies, work, staged, picks }: 
               <span className="badge badge--xs" title="They have not opened the confirmation link">email unconfirmed</span>
             )}
             {!person.user_id && <span className="badge badge--xs">no login yet</span>}
+            {person.origin === 'import' && <span className="badge badge--xs">imported</span>}
+            {person.in_gap_year && <span className="badge badge--xs" title="Unlisted until they say where they joined">in a year out</span>}
             {person.last_confirmed_at && (
               <span className="badge badge--xs">confirmed {formatMonthYear(person.last_confirmed_at)}</span>
             )}
@@ -188,7 +242,11 @@ export default function ProfileReview({ person, studies, work, staged, picks }: 
             one this is. No column and no migration: the answer is already in
             the row. */}
         <Field label="Field" live={person.field} staged={staged} has="field" note={correctedFrom(person)} picks={picks} />
-        <Field label="Admission route" live={person.admission_route} staged={staged} has="admission_route" picks={picks} />
+        <Field
+          label="How they got in" live={liveHow} staged={derived} has="__how" picks={picks}
+          tickKey={hasNewHow ? 'admission_kind' : 'admission_route'}
+        />
+        <Field label="In a year out" live={!!person.in_gap_year} staged={staged} has="in_gap_year" picks={picks} />
         <Field label="Rank" live={person.admission_rank} staged={staged} has="admission_rank" picks={picks} />
         <Field label="Board marks" live={person.board_marks} staged={staged} has="board_marks" picks={picks} />
         <Field label="Cutoff" live={person.board_cutoff} staged={staged} has="board_cutoff" picks={picks} />
@@ -226,9 +284,42 @@ export default function ProfileReview({ person, studies, work, staged, picks }: 
         </Section>
       ) : null}
 
+      {(path?.attempts.length || path?.admits.length || path?.gapYears.length
+        || stagedAttempts || stagedAdmits || stagedGaps) ? (
+        <Section title="Exams, offers and a year out">
+          <Timeline
+            label="Exams written" wide
+            rows={[...(path?.attempts ?? [])].sort((x, y) => Number(y.got_seat) - Number(x.got_seat)).map(attemptLine)}
+            proposed={stagedAttempts?.map(attemptLine)}
+            picks={picks} has="exam_attempts"
+          />
+          <Timeline
+            label="Offers not taken" wide
+            rows={ownAdmits.map(admitLine)}
+            proposed={stagedAdmits?.map(admitLine)}
+            picks={picks} has="admits"
+          />
+          {schoolAdmits.length > 0 && (
+            <div className="pr-field pr-field--wide">
+              <span className="pr-field__label">Offers the school recorded</span>
+              <ul className="pr-list">{schoolAdmits.map((d) => <li key={d.id}>{admitLine(d)}</li>)}</ul>
+            </div>
+          )}
+          <Timeline
+            label="Gap years" wide
+            rows={(path?.gapYears ?? []).map(gapLine)}
+            proposed={stagedGaps?.map(gapLine)}
+            picks={picks} has="gap_years"
+          />
+        </Section>
+      ) : null}
+
       <Section title="Picture and links">
         <Field label="Photo" live={person.photo_url} staged={staged} has="photo_url" wide photo picks={picks} />
-        <Field label="LinkedIn" live={person.linkedin_url} staged={staged} has="linkedin_url" wide picks={picks} />
+        <Field
+          label="LinkedIn" live={person.linkedin_url} staged={derived} has="__linkedin" wide picks={picks}
+          tickKey={staged && 'linkedin_handle' in staged ? 'linkedin_handle' : 'linkedin_url'}
+        />
       </Section>
 
       <Section title="Private — the office only">
@@ -240,6 +331,17 @@ export default function ProfileReview({ person, studies, work, staged, picks }: 
         />
         <Field label="Admission number" live={person.admission_number} staged={staged} has="admission_number" picks={picks} />
         <Field label="School" live={person.school_name ? officialSchoolName(person.school_name) : null} staged={staged} has="school_name" picks={picks} />
+        {/* Saved live by the person and never published, so there is nothing
+            to approve here - only to know. */}
+        <Field label="Parent or guardian" live={parentLine(path?.private, 1)} has="__none" />
+        {parentLine(path?.private, 2) && <Field label="Second parent" live={parentLine(path?.private, 2)} has="__none" />}
+        <Field
+          label="Home" wide has="__none"
+          live={path?.private
+            ? [path.private.address_line, path.private.town, path.private.district, path.private.state, path.private.pin].filter(Boolean).join(', ') || null
+            : null}
+        />
+        {path?.officeNote && <Field label="Office note" live={path.officeNote} has="__none" wide />}
       </Section>
     </div>
   );

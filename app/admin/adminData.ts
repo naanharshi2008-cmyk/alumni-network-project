@@ -73,7 +73,64 @@ export type AlumniRow = {
   // False on a row the school entered itself: nobody has agreed to anything
   // yet, and the profile is a stub until they sign in and fill it in.
   consent_given?: boolean | null;
+  /** Migration 18: how the seat was got, as a kind. */
+  admission_kind?: 'board_marks' | 'entrance_exam' | 'management' | 'other' | null;
+  admission_exam?: string | null;
+  admission_detail?: string | null;
+  linkedin_handle?: string | null;
+  /** A current year out: the profile is unlisted while this is true. */
+  in_gap_year?: boolean | null;
+  /** Who started the row: the person, the office, or an import. */
+  origin?: 'self' | 'school' | 'import' | null;
+  import_batch_id?: string | null;
+  invited_by?: string | null;
 };
+
+/** Everything about a path beyond the seat, for the school's eyes: exact ranks included. */
+export type AdminAttemptRow = {
+  id: string; alumni_id: string; exam: string; exam_year: number | null; exam_rank: number | null;
+  percentile: number | null; gave_admit: boolean | null; got_seat: boolean;
+};
+export type AdminAdmitRow = {
+  id: string; alumni_id: string; college_id: string | null; college_name_raw: string | null;
+  degree: string | null; branch: string | null; route_kind: AlumniRow['admission_kind']; exam: string | null;
+  route_detail: string | null; admit_year: number | null; added_by_school: boolean;
+  college?: { name: string } | null;
+};
+export type AdminGapRow = {
+  id: string; alumni_id: string; gap_year: number; kind: 'preparing' | 'break';
+  exam: string | null; coaching_name_raw: string | null;
+};
+export type AdminPath = {
+  attempts: AdminAttemptRow[];
+  admits: AdminAdmitRow[];
+  gapYears: AdminGapRow[];
+  /** alumni_private - parents and home. Never public. */
+  private: Record<string, any> | null;
+  officeNote: string | null;
+};
+
+export const emptyPath = (): AdminPath => ({ attempts: [], admits: [], gapYears: [], private: null, officeNote: null });
+
+/** The path details for a set of people, grouped by person. The school's RLS reads them all. */
+export async function loadPathDetails(ids: string[]): Promise<Record<string, AdminPath>> {
+  const out: Record<string, AdminPath> = {};
+  if (ids.length === 0) return out;
+  const slot = (id: string) => (out[id] ??= emptyPath());
+  const [att, adm, gap, priv, notes] = await Promise.all([
+    supabase.from('exam_attempts').select('*').in('alumni_id', ids),
+    supabase.from('admits').select('*, college:colleges(name)').in('alumni_id', ids),
+    supabase.from('gap_years').select('*').in('alumni_id', ids),
+    supabase.from('alumni_private').select('*').in('alumni_id', ids),
+    supabase.from('alumni_office_notes').select('alumni_id, note').in('alumni_id', ids),
+  ]);
+  for (const r of (att.data as AdminAttemptRow[]) ?? []) slot(r.alumni_id).attempts.push(r);
+  for (const r of (adm.data as AdminAdmitRow[]) ?? []) slot(r.alumni_id).admits.push(r);
+  for (const r of (gap.data as AdminGapRow[]) ?? []) slot(r.alumni_id).gapYears.push(r);
+  for (const r of (priv.data as Record<string, any>[]) ?? []) slot(r.alumni_id).private = r;
+  for (const r of (notes.data as { alumni_id: string; note: string | null }[]) ?? []) slot(r.alumni_id).officeNote = r.note;
+  return out;
+}
 
 export type HigherStudyRow = {
   id: string; alumni_id: string; degree_name: string;
@@ -342,13 +399,19 @@ export type ReviewData = {
   unmatchedCompanies: TypedNameGroup[];
   higherStudies: Record<string, HigherStudyRow[]>;
   workExperience: Record<string, WorkExperienceRow[]>;
+  /** Exams, offers, gap years, family and the office note - migration 18. */
+  paths: Record<string, AdminPath>;
   error: string;
 };
 
 /** Everything waiting for a decision, and nothing else. */
 export async function loadReview(): Promise<ReviewData> {
   const [reg, edits, photoRes, optRes, colRes, orgRes] = await Promise.all([
+    // Imported profiles nobody has claimed yet stay out: hundreds would bury
+    // the queue, and there is nothing to decide until the person signs in.
+    // They are listed under People instead.
     supabase.from('alumni').select('*').eq('approval_status', 'pending')
+      .or('origin.neq.import,user_id.not.is.null')
       .order('created_at', { ascending: true }).limit(PAGE),
     supabase.from('alumni').select('*').eq('approval_status', 'approved')
       .eq('modification_status', 'pending').order('created_at', { ascending: true }).limit(PAGE),
@@ -372,7 +435,8 @@ export async function loadReview(): Promise<ReviewData> {
 
   const pending = (reg.data as AlumniRow[]) ?? [];
   const pendingEdits = (edits.data as AlumniRow[]) ?? [];
-  const { studies, work } = await loadTimelines([...pending, ...pendingEdits].map((p) => p.id));
+  const ids = [...pending, ...pendingEdits].map((p) => p.id);
+  const [{ studies, work }, paths] = await Promise.all([loadTimelines(ids), loadPathDetails(ids)]);
 
   return {
     pending,
@@ -388,6 +452,7 @@ export async function loadReview(): Promise<ReviewData> {
     unmatchedCompanies: groupByTypedName((orgRes.data as any[]) ?? [], 'currently_at'),
     higherStudies: studies,
     workExperience: work,
+    paths,
     error: reg.error?.message ?? edits.error?.message ?? '',
   };
 }
@@ -466,24 +531,30 @@ export async function loadPeople(query: string, page: number, need: PeopleNeed =
 export type ValueBenchData = {
   approvedOptions: Record<string, string[]>;
   optionRows: OptionRow[];
-  people: { id: string }[];
+  /** How many people use each value, per category - from admin_option_usage(). */
+  usage: Record<string, Record<string, number>>;
   error: string;
 };
 
 /**
- * What the merge tool needs: the option lists, and every profile's six option
- * columns so it can say how many people are on each spelling.
+ * What the merge tool needs: the option lists, and how many people are on
+ * each spelling.
  *
- * Six columns rather than select('*'): counting how many profiles say "BTech"
- * does not need anybody's phone number.
+ * Counted in the database (admin_option_usage, migration 19) rather than by
+ * pulling six columns of every profile: an exam now lives in four tables and
+ * a branch in two, and one read that knows all of them cannot drift from the
+ * merge that moves them.
  */
 export async function loadValueBench(): Promise<ValueBenchData> {
-  const [optRes, peopleRes] = await Promise.all([
+  const [optRes, usageRes] = await Promise.all([
     supabase.from('field_options').select('id, category, value, status, canonical_value, created_at')
       .order('created_at', { ascending: true }),
-    supabase.from('alumni')
-      .select('id, stream, degree, admission_route, current_status, field, professional_course'),
+    supabase.rpc('admin_option_usage'),
   ]);
+  const usage: Record<string, Record<string, number>> = {};
+  for (const r of (usageRes.data as { category: string; value: string; uses: number }[]) ?? []) {
+    (usage[r.category] ??= {})[r.value] = Number(r.uses);
+  }
 
   const opts = (optRes.data as OptionRow[]) ?? [];
   const approved: Record<string, string[]> = {};
@@ -493,8 +564,8 @@ export async function loadValueBench(): Promise<ValueBenchData> {
   return {
     approvedOptions: approved,
     optionRows: opts,
-    people: (peopleRes.data as { id: string }[]) ?? [],
-    error: optRes.error?.message ?? peopleRes.error?.message ?? '',
+    usage,
+    error: optRes.error?.message ?? usageRes.error?.message ?? '',
   };
 }
 

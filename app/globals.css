@@ -1157,6 +1157,60 @@ textarea { min-height: 84px; resize: vertical; }
   line-height: 1.55;
 }
 
+/* A gentle correction: the answer belongs somewhere else on the form. */
+.form-note--warn {
+  background: var(--danger-bg); border: 1px solid var(--danger-border); color: var(--danger-ink);
+  border-radius: var(--r-sm); padding: 10px 13px; line-height: 1.55;
+}
+.form-note--warn .link-btn { color: inherit; text-decoration: underline; }
+
+/* ---------- Round 10 form pieces (lib/forms) ------------------------------- */
+/* "Priya invited you" - the share link's greeting, above the first question. */
+.invite-greeting {
+  margin: 10px 0 0; padding: 10px 13px; border-radius: var(--r-sm);
+  background: rgba(242, 195, 78, 0.08); border: 1px solid rgba(242, 195, 78, 0.28);
+  color: var(--text-muted); font-size: 0.9rem; line-height: 1.5;
+}
+.invite-greeting strong { color: var(--text); }
+.chips--wrap { gap: 8px; }
+/* The seat's own exam: ticked, and not a button - it is set above. */
+.chip--fixed { cursor: default; animation: none; }
+.chip--fixed:hover { transform: none; }
+.chip--fixed .chip__sub { opacity: 0.8; font-weight: 500; }
+.exam-attempts__another { display: flex; gap: 10px; align-items: flex-start; margin-top: 12px; }
+.exam-attempts__another > .field { flex: 1; min-width: 0; margin: 0; }
+.exam-attempts__another > .btn { margin-top: 4px; }
+.exam-attempts__list { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 10px; }
+.attempt-row {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px;
+  padding: 10px 12px; border: 1px solid var(--border-strong); border-radius: var(--r-sm);
+  background: var(--surface-2);
+}
+.attempt-row__exam { font-weight: 650; min-width: 7ch; }
+.attempt-row__q { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.attempt-row__label { font-size: 0.8rem; color: var(--text-faint); }
+.attempt-row .chip { min-height: 36px; padding: 6px 12px; font-size: 0.84rem; }
+.attempt-row__rank {
+  width: 9.5em; min-height: 36px; padding: 6px 10px; font: inherit; font-size: 0.86rem;
+  color: var(--text); background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--r-sm);
+}
+.attempt-row__note { flex-basis: 100%; font-size: 0.78rem; color: var(--text-faint); }
+.linkedin-field__box {
+  display: flex; align-items: stretch; border: 1.5px solid var(--border-strong);
+  border-radius: var(--r-sm); background: var(--surface-2); overflow: hidden;
+}
+.linkedin-field__box:focus-within { border-color: var(--gold); box-shadow: 0 0 0 3px var(--ring); }
+.linkedin-field__box--invalid { border-color: var(--danger-border); }
+.linkedin-field__prefix {
+  display: flex; align-items: center; padding: 0 4px 0 12px; color: var(--text-faint);
+  font-size: 0.9rem; white-space: nowrap;
+}
+.linkedin-field__box input {
+  flex: 1; min-width: 0; border: 0; background: transparent; color: var(--text);
+  font: inherit; padding: 12px 12px 12px 0; outline: none;
+}
+@media (max-width: 380px) { .linkedin-field__prefix { font-size: 0.8rem; padding-left: 10px; } }
+
 /* A fact the form worked out for itself, shown rather than asked for.
    Reads as an answer already given - not as a disabled control, which would
    suggest something is stopping them from changing it. */

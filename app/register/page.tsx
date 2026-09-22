@@ -8,13 +8,29 @@ import SchoolPicker from '../../lib/SchoolPicker';
 import { cleanFreeText, cleanProperNoun } from '../../lib/text';
 import { canonicalOption, fetchApprovedOptions, fetchOptionAliases, proposeOption } from '../../lib/publicData';
 import {
-  STREAMS, DEGREES, ADMISSION_ROUTES, asksForRank, boardForSchool,
+  STREAMS, DEGREES, boardForSchool,
   COUNTRY_CODES, OTHER_OPTION, isInProgressStatus, mergeOptions, resolveValue,
   statusForCourse, PROFESSIONAL_COURSES, PROFESSIONAL_STAGES,
 } from '../../lib/options';
 import { phoneProblem } from '../../lib/contactKeys';
 import { routePhrase } from '../../lib/admission';
 import { CATEGORIES, categoryForDegree } from '../../lib/types';
+import OptionSearchField from '../../lib/OptionSearchField';
+import AdmissionFields from '../../lib/forms/AdmissionFields';
+import ExamAttemptsField from '../../lib/forms/ExamAttemptsField';
+import AdmitsField from '../../lib/forms/AdmitsField';
+import GapYearField from '../../lib/forms/GapYearField';
+import FamilyHomeFields from '../../lib/forms/FamilyHomeFields';
+import LinkedInField from '../../lib/forms/LinkedInField';
+import {
+  admissionColumns, admissionFromRow, admissionProblem, admitRows, attemptRows, contextualBranchAliases,
+  emptyAdmission, emptyFamily, emptyGap, familyProblems, gapProblem, gapRows, inGapYear, joinedCollege,
+  privateRow, seatYear,
+  type AdmissionDraft, type AdmitDraft, type AttemptDraft, type FamilyDraft, type FamilyKey, type GapDraft,
+} from '../../lib/forms/model';
+import { branchVocab, canonicalBranch, examVocab, type Vocab } from '../../lib/forms/vocab';
+import { parseLinkedIn } from '../../lib/linkedin';
+import { examAreas, examCanonical } from '../../lib/exams';
 
 /* ─────────────────────────────────────────────────────────────────────────
    Form model
@@ -40,11 +56,13 @@ interface FormState {
   professional_org: string;
   professional_stage: string;
   branch: string;
-  admission_route: string;
-  admission_route_other: string;
-  admission_rank: string;
-  board_marks: string;
-  board_cutoff: string;
+  /* After Class 12, in the shapes lib/forms shares with /profile and the
+     school's editor: how the seat was got, the other exams, the offers not
+     taken, and whether there was a year out first. */
+  admission: AdmissionDraft;
+  attempts: AttemptDraft[];
+  admits: AdmitDraft[];
+  gap: GapDraft;
   /* "Are you still studying this?" - the one question about now. Yes means
      the course above is current; no opens the optional blocks below, and the
      status is read from what they fill in there rather than asked again. */
@@ -59,7 +77,8 @@ interface FormState {
   personal_email: string;
   phone_country_code: string;
   phone_number: string;
-  linkedin_url: string;
+  /** The LinkedIn username, or whatever link was pasted - parseLinkedIn() reads it. */
+  linkedin: string;
   message_1: string;
   photo_file: File | null;
   consent_given: boolean;
@@ -77,10 +96,10 @@ const initialForm: FormState = {
   class_of: '', stream: '', stream_other: '',
   field: '', field_other: '', college_name: '', college_pick: null, org_pick: null, degree: '', degree_other: '', branch: '',
   professional_course: '', professional_course_other: '', professional_stage: '', professional_org: '',
-  admission_route: '', admission_route_other: '', admission_rank: '', board_marks: '', board_cutoff: '',
+  admission: emptyAdmission(), attempts: [], admits: [], gap: emptyGap(),
   still_studying: '', own_business: 'no', expected_finish_year: '',
   currently_at: '', designation: '',
-  personal_email: '', phone_country_code: '+91', phone_number: '', linkedin_url: '',
+  personal_email: '', phone_country_code: '+91', phone_number: '', linkedin: '',
   message_1: '', photo_file: null, consent_given: false,
 };
 
@@ -90,15 +109,21 @@ const CURRENT_YEAR = new Date().getFullYear();
 const ALUMNI_LOGIN_DOMAIN = 'veveaham-alumni-network.com';
 const MIN_PASSWORD = 8;
 
+/*
+ * Family & home comes before After 12th on purpose: it is short and dull, and
+ * best asked while someone is still keen - so the form ends on the part that
+ * rewards them, where they went and what they would tell a junior.
+ */
 const STEPS = [
   { title: 'You', blurb: "Your name, and the email or phone you'll sign in with." },
   { title: 'School', blurb: 'Your Veveaham years.' },
+  { title: 'Family & home 🔒', blurb: 'For the school office only — never shown on your page.' },
   { title: 'After 12th', blurb: "Where you went, how you got in, and what you're doing now." },
   { title: 'Finish', blurb: "A photo, a word for your juniors, and you're done." },
 ];
+const FAMILY_STEP = 2;
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const URL_RE = /^https?:\/\/.+/i;
 
 /* ─────────────────────────────────────────────────────────────────────────
    Validation — one rule set, used both per-field (on blur) and per-step.
@@ -145,7 +170,8 @@ function useAppear(shown: boolean) {
 
 /** Did they just describe a course — a degree, or a CA/CS/CMA qualification? */
 function describesCourse(form: FormState): boolean {
-  return !!form.college_name.trim() || !!form.degree.trim() || !!form.professional_course.trim();
+  const college = joinedCollege(form.gap) && (!!form.college_name.trim() || !!form.degree.trim());
+  return college || !!form.professional_course.trim();
 }
 
 /**
@@ -213,13 +239,16 @@ function validateField(key: FieldKey, form: FormState): string {
       // somebody has chosen to correct it to "Other".
       if (form.field === OTHER_OPTION && !val(form.field_other)) return 'Type your area of study.';
       return '';
+    case 'gap':
+      return gapProblem(form.gap);
     case 'college_name':
-      // Never required. "Did you join a college?" used to ask this as a
-      // three-way chip whose "No" and "Not yet" saved identical rows - an
-      // empty college field says the same thing, one question sooner.
-      return '';
+      // Asked only of someone who said they joined one - straight after
+      // school, or after their year out. "Something else" and "not yet" have
+      // no college to name, and are not asked for one.
+      if (!joinedCollege(form.gap)) return '';
+      return val(form.college_name) ? '' : 'Which college did you join?';
     case 'degree':
-      if (!val(form.college_name)) return '';
+      if (!joinedCollege(form.gap) || !val(form.college_name)) return '';
       if (!val(form.degree)) return 'Pick your degree.';
       if (form.degree === OTHER_OPTION && !val(form.degree_other)) return 'Type your degree.';
       return '';
@@ -229,28 +258,15 @@ function validateField(key: FieldKey, form: FormState): string {
         return 'Type which qualification.';
       }
       return '';
-    case 'admission_route':
-      // Got in to what? Only asked of someone who named a college.
-      if (!val(form.college_name)) return '';
-      if (!val(form.admission_route)) return 'How did you get in?';
-      if (form.admission_route === OTHER_OPTION && !val(form.admission_route_other)) return 'Type how you got in.';
-      return '';
-    case 'admission_rank': {
-      const v = val(form.admission_rank);
-      if (!v) return '';
-      const rank = parseInt(v, 10);
-      return Number.isNaN(rank) || rank <= 0 ? 'Rank must be a positive number.' : '';
-    }
-    case 'board_marks': {
-      const v = val(form.board_marks);
-      if (!v) return '';
-      const marks = parseFloat(v);
-      return Number.isNaN(marks) || marks < 0 || marks > 100 ? 'Marks must be between 0 and 100.' : '';
-    }
+    case 'admission':
+      // Got in to what? Only asked of someone who joined a college.
+      if (!joinedCollege(form.gap) || !val(form.college_name)) return '';
+      return admissionProblem(form.admission, true);
     case 'still_studying':
       // The one question about now, and only asked of someone who named a
-      // course a moment ago. Everything under it is optional.
-      if (!describesCourse(form)) return '';
+      // course a moment ago. Everything under it is optional. Someone still
+      // in their year out has nothing to be "still" doing.
+      if (!describesCourse(form) || inGapYear(form.gap)) return '';
       return val(form.still_studying) ? '' : 'Yes or no is all we need.';
     case 'personal_email': {
       const v = val(form.personal_email);
@@ -259,22 +275,22 @@ function validateField(key: FieldKey, form: FormState): string {
     }
     case 'phone_number':
       return phoneProblem(form.phone_country_code, form.phone_number);
-    case 'linkedin_url': {
-      const v = val(form.linkedin_url);
-      if (!v) return '';
-      return URL_RE.test(v) ? '' : 'Start the link with https://';
-    }
+    case 'linkedin':
+      return parseLinkedIn(form.linkedin).problem;
     default:
       return '';
   }
 }
 
 // Which fields belong to which step, so "Continue" checks exactly that step.
+// Family & home is checked by familyProblems() instead: its answers are kept
+// out of FormState so they can be kept out of the saved draft.
 const STEP_FIELDS: FieldKey[][] = [
   ['full_name', 'personal_email', 'phone_number', 'password_val'],
   ['school_name', 'class_of', 'stream'],
-  ['field', 'college_name', 'degree', 'professional_course', 'admission_route', 'admission_rank', 'board_marks', 'still_studying'],
-  ['linkedin_url'],
+  [],
+  ['gap', 'field', 'college_name', 'degree', 'professional_course', 'admission', 'still_studying'],
+  ['linkedin'],
 ];
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -292,7 +308,10 @@ const STEP_FIELDS: FieldKey[][] = [
 // v2: usernames removed and the steps reordered, so a v1 draft would land on
 // the wrong step. v3: joined_college and now_choice are gone, and a draft
 // holding them would restore a form that no longer asks those questions.
-const DRAFT_KEY = 'veveaham.register.draft.v3';
+// v4: the route became four kinds, a gap year and lists (Round 10). A v3
+// draft is carried over rather than thrown away - see the restore effect.
+const DRAFT_KEY = 'veveaham.register.draft.v4';
+const OLD_DRAFT_KEY = 'veveaham.register.draft.v3';
 
 function friendlySubmitError(raw: string): string {
   const t = raw.toLowerCase();
@@ -345,6 +364,24 @@ export default function RegisterPage() {
   const [showWorkExperience, setShowWorkExperience] = useState(false);
   const [workExperience, setWorkExperience] = useState<WorkExperienceEntry[]>([emptyWorkExperience()]);
 
+  // Family & home lives outside `form` so the draft effect below can never
+  // write it to this browser's storage: a parent's phone and a home address
+  // do not belong on a shared computer.
+  const [family, setFamily] = useState<FamilyDraft>(emptyFamily());
+  const [familyTouched, setFamilyTouched] = useState<Partial<Record<FamilyKey, boolean>>>({});
+  const [showAdmits, setShowAdmits] = useState(false);
+
+  // Arrived through a senior's share link: /register?from=<their slug>.
+  const [inviter, setInviter] = useState<{ slug: string; name: string; classOf: number | null } | null>(null);
+  useEffect(() => {
+    const from = new URLSearchParams(window.location.search).get('from')?.trim();
+    if (!from || !isSupabaseConfigured) return;
+    void supabase.rpc('invite_card', { p_slug: from }).then(({ data }) => {
+      const card = data as { name?: string; class_of?: number | null } | null;
+      if (card?.name) setInviter({ slug: from, name: card.name, classOf: card.class_of ?? null });
+    });
+  }, []);
+
   useEffect(() => { void fetchApprovedOptions().then(setTagOptions); }, []);
   // Spellings the school has already merged away, so typing an old one under
   // "Other" lands on the name everyone else's profile uses.
@@ -369,11 +406,16 @@ export default function RegisterPage() {
   const streamOptions = useMemo(() => mergeOptions(STREAMS, tagOptions.stream, optionAliases.stream), [tagOptions, optionAliases]);
   const degreeOptions = useMemo(() => mergeOptions(DEGREES, tagOptions.degree, optionAliases.degree), [tagOptions, optionAliases]);
   const professionalOptions = useMemo(() => mergeOptions(PROFESSIONAL_COURSES, tagOptions.professional_course, optionAliases.professional_course), [tagOptions, optionAliases]);
-  const routeOptions = useMemo(() => mergeOptions(ADMISSION_ROUTES, tagOptions.admission_route, optionAliases.admission_route), [tagOptions, optionAliases]);
+  const exams = useMemo(() => examVocab(tagOptions, optionAliases), [tagOptions, optionAliases]);
+  const branches = useMemo(() => branchVocab(tagOptions, optionAliases), [tagOptions, optionAliases]);
   const fieldOptions = useMemo(() => mergeOptions([...CATEGORIES.map((c) => c.label)], tagOptions.field, optionAliases.field), [tagOptions, optionAliases]);
 
   function update<K extends FieldKey>(key: K, value: FormState[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
+  }
+  /** For the lib/forms pieces: apply their update to the latest state, not this render's. */
+  function updateWith<K extends FieldKey>(key: K, fn: (prev: FormState[K]) => FormState[K]) {
+    setForm((prev) => ({ ...prev, [key]: fn(prev[key]) }));
   }
   function markTouched(key: FieldKey) {
     setTouched((prev) => ({ ...prev, [key]: true }));
@@ -386,9 +428,12 @@ export default function RegisterPage() {
     return !!touched[key] && !validateField(key, form) && String(form[key] ?? '').trim().length > 0;
   }
 
+  const familyErrors = useMemo(() => familyProblems(family, true, phoneProblem), [family]);
   const stepErrors = useMemo(
-    () => STEP_FIELDS[step].map((k) => validateField(k, form)).filter(Boolean),
-    [step, form],
+    () => (step === FAMILY_STEP
+      ? Object.values(familyErrors).filter(Boolean) as string[]
+      : STEP_FIELDS[step].map((k) => validateField(k, form)).filter(Boolean)),
+    [step, form, familyErrors],
   );
   const stepComplete = stepErrors.length === 0;
 
@@ -397,14 +442,41 @@ export default function RegisterPage() {
   // stored: one is a credential, the other cannot be serialised anyway.
   useEffect(() => {
     try {
-      const saved = window.localStorage.getItem(DRAFT_KEY);
+      let saved = window.localStorage.getItem(DRAFT_KEY);
+      const legacy = !saved && !!window.localStorage.getItem(OLD_DRAFT_KEY);
+      if (legacy) saved = window.localStorage.getItem(OLD_DRAFT_KEY);
       if (!saved) return;
       const parsed = JSON.parse(saved) as {
-        form?: Partial<FormState>; step?: number;
+        form?: Partial<FormState> & Record<string, any>; step?: number;
         higherStudies?: HigherStudyEntry[]; workExperience?: WorkExperienceEntry[];
       };
       if (!parsed.form) return;
-      setForm((f) => ({ ...f, ...parsed.form, password_val: '', photo_file: null }));
+      let restoredForm: Partial<FormState> = parsed.form;
+      if (legacy) {
+        // A v3 draft held one route string. Read it the way the database read
+        // every stored route in migration 18, so nothing typed is lost.
+        const {
+          admission_route: route, admission_route_other: routeOther, admission_rank, board_marks, board_cutoff,
+          linkedin_url, ...rest
+        } = parsed.form as Record<string, any>;
+        restoredForm = {
+          ...rest,
+          linkedin: linkedin_url ?? '',
+          admission: admissionFromRow({
+            admission_route: route === OTHER_OPTION ? routeOther : route, admission_rank, board_marks, board_cutoff,
+          }),
+          gap: { ...emptyGap(), afterSchool: String(rest.college_name ?? '').trim() ? 'joined' : '' },
+        } as Partial<FormState>;
+        try { window.localStorage.removeItem(OLD_DRAFT_KEY); } catch { /* the v4 copy is written next */ }
+      }
+      setForm((f) => ({
+        ...f, ...restoredForm,
+        admission: { ...emptyAdmission(), ...(restoredForm.admission ?? {}) },
+        gap: { ...emptyGap(), ...(restoredForm.gap ?? {}) },
+        attempts: Array.isArray(restoredForm.attempts) ? restoredForm.attempts : [],
+        admits: Array.isArray(restoredForm.admits) ? restoredForm.admits : [],
+        password_val: '', photo_file: null,
+      }));
       // Past courses and jobs are held outside `form`, and used to be dropped
       // from the draft entirely - someone who typed three jobs and came back
       // the next day found them gone.
@@ -493,6 +565,22 @@ export default function RegisterPage() {
   }
 
   function goNext() {
+    if (step === FAMILY_STEP) {
+      const bad = Object.keys(familyErrors) as FamilyKey[];
+      setFamilyTouched((t) => ({ ...t, ...Object.fromEntries(bad.map((k) => [k, true])) }));
+      if (bad.length) {
+        requestAnimationFrame(() => {
+          const holder = document.querySelector<HTMLElement>(`[data-field="${bad[0]}"]`);
+          const el = holder?.querySelector<HTMLElement>('input, select, button') ?? holder;
+          el?.scrollIntoView({ block: 'center', behavior: scrollBehavior() });
+          el?.focus?.({ preventScroll: true });
+        });
+        return;
+      }
+      setError('');
+      setStep((st) => st + 1);
+      return;
+    }
     // Reveal every problem on this step at once rather than one at a time.
     const fields = STEP_FIELDS[step];
     setTouched((prev) => ({ ...prev, ...Object.fromEntries(fields.map((f) => [f, true])) }));
@@ -547,7 +635,10 @@ export default function RegisterPage() {
       return;
     }
     // Re-check every step, in case someone skipped ahead.
-    const allErrors = STEP_FIELDS.flat().map((k) => validateField(k, form)).filter(Boolean);
+    const allErrors = [
+      ...STEP_FIELDS.flat().map((k) => validateField(k, form)),
+      ...Object.values(familyErrors),
+    ].filter(Boolean) as string[];
     if (allErrors.length) {
       setError(allErrors[0]);
       submitLockRef.current = false;
@@ -601,7 +692,7 @@ export default function RegisterPage() {
       // college-shaped value below is gated on this rather than written
       // regardless: typing a degree and then clearing the college used to
       // ship a degree on a row that says no college.
-      const namedCollege = !!form.college_name.trim();
+      const namedCollege = joinedCollege(form.gap) && !!form.college_name.trim();
       const typedCollege = namedCollege ? cleanProperNoun(form.college_name) : null;
       const collegeId = await linkFor('college', typedCollege, form.college_pick);
       const typedOrg = cleanProperNoun(form.currently_at);
@@ -614,12 +705,20 @@ export default function RegisterPage() {
       // The area of study is worked out from the degree unless they corrected
       // it by hand. Always a concrete string: `field` is directory search text
       // and an admin-visible value, so a blank would cost more than a guess.
+      // Only a degree they still claim counts: one typed before answering "not
+      // yet" is not their area. A year preparing for NEET is, though.
+      const gapArea = !namedCollege && form.gap.afterSchool === 'gap' ? examAreas(form.gap.exam)[0] : undefined;
       const finalField = canon('field',
         resolveValue(form.field, form.field_other)
-        || categoryForDegree(finalDegree, form.branch, finalCourse)?.label
+        || categoryForDegree(namedCollege ? finalDegree : '', namedCollege ? form.branch : '', finalCourse)?.label
+        || CATEGORIES.find((c) => c.key === gapArea)?.label
         || '');
-      const finalRoute = canon('admission_route', resolveValue(form.admission_route, form.admission_route_other));
-      const finalStatus = canon('current_status', statusFromForm(form, higherStudies));
+      const finalStatus = inGapYear(form.gap) ? '' : canon('current_status', statusFromForm(form, higherStudies));
+      const finalBranch = namedCollege
+        ? cleanProperNoun(canonicalBranch(form.branch, branches, contextualBranchAliases(finalDegree)))
+        : null;
+      const classOf = parseInt(form.class_of, 10);
+      const admission = namedCollege ? admissionColumns(form.admission, exams.aliases) : admissionColumns(emptyAdmission());
 
 
       // 5. The profile row.
@@ -636,24 +735,24 @@ export default function RegisterPage() {
         personal_email: form.personal_email.trim().toLowerCase(),
         phone_country_code: form.phone_country_code,
         phone_number: form.phone_number.trim(),
-        linkedin_url: cleanFreeText(form.linkedin_url),
+        // The username; the database writes linkedin_url from it.
+        linkedin_handle: parseLinkedIn(form.linkedin).handle,
         college_id: collegeId,
         college_name_raw: typedCollege,
         professional_course: finalCourse || null,
         professional_stage: form.professional_course ? (form.professional_stage || null) : null,
         professional_org: form.professional_course ? (cleanProperNoun(form.professional_org) || null) : null,
         degree: namedCollege ? (finalDegree || null) : null,
-        branch: namedCollege ? cleanProperNoun(form.branch) : null,
+        branch: finalBranch,
         field: finalField || null,
-        admission_route: namedCollege ? (finalRoute || null) : null,
-        // All three are kept, whatever the route says today. Nulling the
-        // unused half meant that changing your route from an exam to Board
-        // Marks silently deleted the rank you had already typed. What is
-        // *shown* is decided by asksForRank at the card, not here.
-        admission_rank: namedCollege ? cleanFreeText(form.admission_rank) : null,
-        board_marks: namedCollege ? cleanFreeText(form.board_marks) : null,
-        board_cutoff: namedCollege ? cleanFreeText(form.board_cutoff) : null,
-        current_status: finalStatus,
+        // How the seat was got. admission_route is labelled from these by a
+        // trigger (migration 18). Rank, marks and cutoff are all kept whatever
+        // the kind; what is shown is decided by admissionFacts().
+        ...admission,
+        // A year out that is still going on keeps the profile unlisted until
+        // they say where they joined.
+        in_gap_year: inGapYear(form.gap),
+        current_status: finalStatus || null,
         expected_finish_year: isInProgressStatus(finalStatus) && form.expected_finish_year
           ? parseInt(form.expected_finish_year, 10) : null,
         currently_at: typedOrg,
@@ -704,12 +803,57 @@ export default function RegisterPage() {
         }
       }
 
+      // 6b. The rest of the path: every exam written, the offers not taken, a
+      //     year out, and - privately - family and home. The profile is not
+      //     published yet, so the owner may write these rows directly
+      //     (migration 18's policies); a failure is reported, never fatal.
+      if (newId) {
+        const year = seatYear(form.gap, classOf);
+        const attempts = attemptRows(form.attempts, { admission: namedCollege ? form.admission : emptyAdmission(), year, attemptYear: classOf }, exams.aliases);
+        if (attempts.length) {
+          const { error: eaErr } = await supabase.from('exam_attempts').insert(attempts.map((r) => ({ ...r, alumni_id: newId })));
+          if (eaErr) { console.error('exam_attempts insert', eaErr); lostSections.push('entrance exams'); }
+        }
+        if (namedCollege) {
+          const offers = form.admits.filter((d) => d.college.trim());
+          const ids: Record<string, string | null> = {};
+          for (const d of offers) ids[d.key] = await linkFor('college', cleanProperNoun(d.college), d.pick);
+          const rows = admitRows(offers, year, ids, exams.aliases).map((r) => ({
+            ...r,
+            branch: r.branch ? cleanProperNoun(canonicalBranch(r.branch, branches, contextualBranchAliases(r.degree ?? ''))) : null,
+          }));
+          if (rows.length) {
+            const { error: adErr } = await supabase.from('admits').insert(rows.map((r) => ({ ...r, alumni_id: newId })));
+            if (adErr) { console.error('admits insert', adErr); lostSections.push('other offers'); }
+          }
+        }
+        const gaps = gapRows(form.gap, classOf, exams.aliases);
+        if (gaps.length) {
+          const { error: gyErr } = await supabase.from('gap_years').insert(gaps.map((r) => ({ ...r, alumni_id: newId })));
+          if (gyErr) { console.error('gap_years insert', gyErr); lostSections.push('gap year'); }
+        }
+        const { error: pvErr } = await supabase.from('alumni_private').insert({ ...privateRow(family), alumni_id: newId });
+        if (pvErr) { console.error('alumni_private insert', pvErr); lostSections.push('family and home details'); }
+
+        // Who sent them, once. The database checks the slug and freezes the
+        // answer; a failure here costs nothing but the greeting's credit.
+        if (inviter) void supabase.rpc('claim_invite', { p_slug: inviter.slug }).then(() => undefined, () => undefined);
+      }
+
       // 7. Queue any free-typed values for staff review. They already show on
       //    this person's profile; this is only about joining the shared lists.
       if (form.stream === OTHER_OPTION) void proposeOption('stream', form.stream_other);
       if (form.degree === OTHER_OPTION) void proposeOption('degree', form.degree_other);
-      if (form.admission_route === OTHER_OPTION) void proposeOption('admission_route', form.admission_route_other);
       if (form.field === OTHER_OPTION) void proposeOption('field', form.field_other);
+      // An exam or branch the list does not know joins the queue under its own name.
+      const unknownExams = [
+        namedCollege && form.admission.kind === 'entrance_exam' ? form.admission.exam : '',
+        ...form.attempts.map((t) => t.exam), form.gap.exam,
+      ].filter((e) => e.trim() && !examCanonical(e, exams.aliases) && !exams.options.some((o) => o.toLowerCase() === e.trim().toLowerCase()));
+      for (const e of new Set(unknownExams.map((e) => e.trim()))) void proposeOption('exam', e);
+      if (finalBranch && !branches.options.some((o) => o.toLowerCase() === finalBranch.toLowerCase())) {
+        void proposeOption('branch', finalBranch);
+      }
       if (form.professional_course === OTHER_OPTION) void proposeOption('professional_course', form.professional_course_other);
 
       // 8. Alert the school and welcome the new alumnus. The route reads the
@@ -765,7 +909,7 @@ export default function RegisterPage() {
   }
 
   const isLast = step === STEPS.length - 1;
-  const stepProps = { form, update, markTouched, errorFor, isValid };
+  const stepProps = { form, update, updateWith, markTouched, errorFor, isValid };
 
   return (
     <div className="container container--narrow">
@@ -778,6 +922,13 @@ export default function RegisterPage() {
           <p className="step-sub">{STEPS[step].blurb}</p>
           {/* The way back to sign-in, before they type anything. It was only
               ever offered after a duplicate email had already been caught. */}
+          {step === 0 && inviter && (
+            <p className="invite-greeting" role="status">
+              👋 <strong>{inviter.name.split(/\s+/)[0]}</strong>
+              {inviter.classOf ? ` (Class of ${inviter.classOf})` : ''} invited you to add where you went after
+              Class 12 — so juniors can see the paths ahead.
+            </p>
+          )}
           {step === 0 && (
             <p className="step-sub step-sub--alt">
               Already registered, or did the school set you up? <a href="/login">Sign in</a>
@@ -809,20 +960,38 @@ export default function RegisterPage() {
               />
             )}
             {step === 1 && <StepSchool {...stepProps} streamOptions={streamOptions} />}
-            {step === 2 && (
+            {step === FAMILY_STEP && (
+              <FamilyHomeFields
+                value={family} onChange={(patch) => setFamily((f) => ({ ...f, ...patch }))} required
+                problems={familyErrors} touched={familyTouched}
+                onTouch={(k) => setFamilyTouched((t) => ({ ...t, [k]: true }))}
+                studentPhone={form.phone_number}
+              />
+            )}
+            {step === 3 && (
               <>
-                <StepStudies {...stepProps} fieldOptions={fieldOptions} degreeOptions={degreeOptions} routeOptions={routeOptions} professionalOptions={professionalOptions} />
-                <h3 className="step-subhead">What you&apos;re doing now</h3>
-                <StepNow
+                <StepStudies
                   {...stepProps}
-                  showHigherStudies={showHigherStudies} setShowHigherStudies={setShowHigherStudies}
-                  higherStudies={higherStudies} setHigherStudies={setHigherStudies}
-                  showWorkExperience={showWorkExperience} setShowWorkExperience={setShowWorkExperience}
-                  workExperience={workExperience} setWorkExperience={setWorkExperience}
+                  fieldOptions={fieldOptions} degreeOptions={degreeOptions} professionalOptions={professionalOptions}
+                  exams={exams} branches={branches} showAdmits={showAdmits} setShowAdmits={setShowAdmits}
                 />
+                {/* Nothing to say about "now" until the first question is
+                    answered, and nothing while the year out is still on. */}
+                {form.gap.afterSchool && !inGapYear(form.gap) && (
+                  <>
+                    <h3 className="step-subhead">What you&apos;re doing now</h3>
+                    <StepNow
+                      {...stepProps}
+                      showHigherStudies={showHigherStudies} setShowHigherStudies={setShowHigherStudies}
+                      higherStudies={higherStudies} setHigherStudies={setHigherStudies}
+                      showWorkExperience={showWorkExperience} setShowWorkExperience={setShowWorkExperience}
+                      workExperience={workExperience} setWorkExperience={setWorkExperience}
+                    />
+                  </>
+                )}
               </>
             )}
-            {step === 3 && <StepFinish {...stepProps} />}
+            {step === 4 && <StepFinish {...stepProps} />}
           </div>
 
           <div className="wizard-nav">
@@ -857,6 +1026,7 @@ export default function RegisterPage() {
 type StepProps = {
   form: FormState;
   update: <K extends FieldKey>(key: K, value: FormState[K]) => void;
+  updateWith: <K extends FieldKey>(key: K, fn: (prev: FormState[K]) => FormState[K]) => void;
   markTouched: (key: FieldKey) => void;
   errorFor: (key: FieldKey) => string;
   isValid: (key: FieldKey) => boolean;
@@ -987,73 +1157,85 @@ function StepSchool({ form, update, markTouched, errorFor, isValid, streamOption
 }
 
 function StepStudies({
-  form, update, markTouched, errorFor, isValid, fieldOptions, degreeOptions, routeOptions, professionalOptions,
-}: StepProps & { fieldOptions: string[]; degreeOptions: string[]; routeOptions: string[]; professionalOptions: string[] }) {
-  const route = resolveValue(form.admission_route, form.admission_route_other);
-  const usesBoardMarks = form.admission_route === 'Board Marks';
-  const wantsRank = asksForRank(form.admission_route);
-  const namedCollege = !!form.college_name.trim();
-  const collegeRef = useAppear(namedCollege);
+  form, update, updateWith, markTouched, errorFor, fieldOptions, degreeOptions, professionalOptions,
+  exams, branches, showAdmits, setShowAdmits,
+}: StepProps & {
+  fieldOptions: string[]; degreeOptions: string[]; professionalOptions: string[];
+  exams: Vocab; branches: Vocab; showAdmits: boolean; setShowAdmits: (v: boolean) => void;
+}) {
+  const joined = joinedCollege(form.gap);
+  const namedCollege = joined && !!form.college_name.trim();
+  const collegeRef = useAppear(joined);
+  const answered = !!form.gap.afterSchool;
+  const degree = resolveValue(form.degree, form.degree_other);
 
   // What we think their area is, from the degree they picked. categorize()
   // cannot answer this - "btech" never matches its "tech" alias - so the
   // mapping is explicit, and null means we genuinely cannot tell and should
   // ask rather than file them under Other.
   const guessed = categoryForDegree(
-    resolveValue(form.degree, form.degree_other),
+    degree,
     form.branch,
     resolveValue(form.professional_course, form.professional_course_other),
   );
   // Only once there is something to file. A college name alone is not a
   // course, and asking for an area of study before a degree has been picked
   // is the old required dropdown wearing a different hat.
-  const hasCourse = !!resolveValue(form.degree, form.degree_other).trim()
+  const hasCourse = (joined && !!degree.trim())
     || !!resolveValue(form.professional_course, form.professional_course_other).trim();
   const [correctingField, setCorrectingField] = useState(false);
-  const showFieldPicker = correctingField || !!form.field || (hasCourse && !guessed);
+  const showFieldPicker = hasCourse && (correctingField || !!form.field || !guessed);
 
   return (
     <>
-      {/* The college field IS the question. A three-way "did you join a
-          college?" chip came first for a while, but "No" and "Not yet" saved
-          byte-for-byte identical rows and the distinction was stored nowhere -
-          so leaving this blank says the same thing, one question sooner. */}
-      <div onBlur={() => markTouched('college_name')}>
-        <EntitySearchField
-          kind="college" label="College / University"
-          hint="leave blank if you didn’t join one — short names work too, “IIT Madras”, “CEG”"
-          value={form.college_name}
-          onChange={(v) => update('college_name', v)}
-          onSelect={(hit) => update('college_pick', toPick(hit))}
-          invalid={!!errorFor('college_name')}
-        />
-      </div>
+      {/* The first question, and the honest one: not everyone joined a
+          college straight after school, and a year out - preparing or not -
+          is a path juniors need to see too. */}
+      <GapYearField
+        value={form.gap} onChange={(g) => { updateWith('gap', (prev) => ({ ...prev, ...g })); markTouched('gap'); }}
+        examOptions={exams.options} examAliases={exams.aliases}
+        error={validateField('gap', form)} touched={!!errorFor('gap')}
+      />
 
       <div ref={collegeRef}>
-      {namedCollege && (
+      {joined && (
         <>
-          <SelectWithOther
-            name="degree" label="Degree" required options={degreeOptions}
-            value={form.degree} onChange={(v) => { update('degree', v); markTouched('degree'); }}
-            otherValue={form.degree_other} onOtherChange={(v) => update('degree_other', v)}
-            error={errorFor('degree')}
-          />
+          <div onBlur={() => markTouched('college_name')} data-field="college_name">
+            <EntitySearchField
+              kind="college" label="Which college did you join?" required
+              hint="short names work too — “IIT Madras”, “CEG”, “PSG Tech”"
+              value={form.college_name}
+              onChange={(v) => update('college_name', v)}
+              onSelect={(hit) => update('college_pick', toPick(hit))}
+              invalid={!!errorFor('college_name')}
+            />
+            {errorFor('college_name') && <p className="field__error field__error--static">{errorFor('college_name')}</p>}
+          </div>
 
-          <Field
-            label="Branch / Department" optional
-            hint="e.g. Computer Science"
-            value={form.branch} onChange={(v) => update('branch', v)}
-            onBlur={() => markTouched('branch')} error="" valid={false}
-          />
+          {namedCollege && (
+            <>
+              <SelectWithOther
+                name="degree" label="Degree" required options={degreeOptions}
+                value={form.degree} onChange={(v) => { update('degree', v); markTouched('degree'); }}
+                otherValue={form.degree_other} onOtherChange={(v) => update('degree_other', v)}
+                error={errorFor('degree')}
+              />
+              <OptionSearchField
+                name="branch" label="Branch / Department"
+                hint="type any short form — “CSE”, “ECE”, “AI&DS”"
+                options={branches.options} aliases={branches.aliases} extra={contextualBranchAliases(degree)}
+                value={form.branch} onChange={(v) => update('branch', v)}
+              />
+            </>
+          )}
         </>
       )}
-
       </div>
 
       {/* Derived, and correctable. It used to be a required dropdown asking
           for something the site can work out from the degree - and then
           worked it out again anyway, every time it read the value. */}
-      {guessed && !showFieldPicker && (
+      {guessed && hasCourse && !showFieldPicker && (
         <p className="derived">
           <span className="derived__label">Area of study</span>
           <span className="derived__value">{guessed.emoji} {guessed.label}</span>
@@ -1072,53 +1254,39 @@ function StepStudies({
       )}
 
       {namedCollege && (
-        <SelectWithOther
-          name="admission_route" label="How did you get in?" required options={routeOptions}
-          value={form.admission_route} onChange={(v) => { update('admission_route', v); markTouched('admission_route'); }}
-          otherValue={form.admission_route_other} onOtherChange={(v) => update('admission_route_other', v)}
-          error={errorFor('admission_route')}
+        <AdmissionFields
+          value={form.admission} required
+          onChange={(a) => { updateWith('admission', (prev) => ({ ...prev, ...a })); markTouched('admission'); }}
+          examOptions={exams.options} examAliases={exams.aliases}
+          error={validateField('admission', form)} touched={!!errorFor('admission')}
         />
       )}
 
-      {usesBoardMarks ? (
-        <div className="two-col">
-          <Field
-            label="Board marks (%)" optional type="number" min={0} max={100} step={0.01}
-            value={form.board_marks} onChange={(v) => update('board_marks', v)}
-            onBlur={() => markTouched('board_marks')}
-            error={errorFor('board_marks')} valid={isValid('board_marks')}
-          />
-          <Field
-            label="Cutoff" optional hint="if applicable"
-            value={form.board_cutoff} onChange={(v) => update('board_cutoff', v)}
-            onBlur={() => markTouched('board_cutoff')} error="" valid={false}
-          />
-        </div>
-      ) : wantsRank && route ? (
-        <Field
-          label={`${route} rank`} optional type="number" min={1} inputMode="numeric"
-          hint="shown only as a range, never the exact number"
-          value={form.admission_rank}
-          onChange={(v) => update('admission_rank', v.replace(/[^\d]/g, ''))}
-          onBlur={() => markTouched('admission_rank')}
-          error={errorFor('admission_rank')} valid={isValid('admission_rank')}
+      {answered && (
+        <ExamAttemptsField
+          attempts={form.attempts} onChange={(fn) => updateWith('attempts', fn)}
+          seatExam={namedCollege && form.admission.kind === 'entrance_exam' ? form.admission.exam : ''}
+          area={joined ? (guessed?.key ?? null) : (examAreas(form.gap.exam)[0] ?? guessed?.key ?? null)}
+          examOptions={exams.options} examAliases={exams.aliases}
+          classOf={parseInt(form.class_of, 10) || null}
+          tookGap={form.gap.afterSchool === 'gap'}
         />
-      ) : null}
-
-      {(route === 'Board Marks' || (wantsRank && route)) && (
-        <p className="form-note form-note--warm">
-          Honestly? An average rank helps a junior more than a top one does.
-          Most of them aren&apos;t aiming for rank 100 — they want to know if
-          someone like them got in. We only ever show a range, like
-          &ldquo;Rank 10,000–25,000&rdquo;.
-        </p>
       )}
 
-      {/* Always shown, whichever way the college question was answered: plenty
-          of people read for CA alongside a degree, and plenty do it instead of
-          one. Presenting it as an either/or would misrepresent both. It sits
-          after "how did you get in" so the college questions run together
-          rather than being interrupted by a qualification most people skip. */}
+      {namedCollege && (
+        <AdmitsField
+          admits={form.admits} onChange={(fn) => updateWith('admits', fn)}
+          open={showAdmits} onToggle={setShowAdmits}
+          degreeOptions={degreeOptions}
+          branchOptions={branches.options} branchAliases={branches.aliases}
+          examOptions={exams.options} examAliases={exams.aliases}
+        />
+      )}
+
+      {/* Always offered once the first question is answered: plenty of people
+          read for CA alongside a degree, and plenty do it instead of one.
+          Presenting it as an either/or would misrepresent both. */}
+      {answered && (
       <div className="opt-section opt-section--static">
         <div className="opt-section__body">
           <p className="opt-section__title">Doing CA, CS, CMA or ACCA? <span className="opt">optional</span></p>
@@ -1151,6 +1319,7 @@ function StepStudies({
         )}
         </div>
       </div>
+      )}
     </>
   );
 }
@@ -1362,7 +1531,9 @@ function StepFinish({ form, update, markTouched, errorFor, isValid }: StepProps)
     return () => URL.revokeObjectURL(url);
   }, [form.photo_file]);
 
-  const route = routePhrase({ admission_route: resolveValue(form.admission_route, form.admission_route_other) });
+  const route = joinedCollege(form.gap) && form.college_name.trim()
+    ? routePhrase({ admission_route: null, ...admissionColumns(form.admission) })
+    : null;
   const college = cleanProperNoun(form.college_name);
   const initials = form.full_name.trim().split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase() || '?';
 
@@ -1444,12 +1615,7 @@ function StepFinish({ form, update, markTouched, errorFor, isValid }: StepProps)
         </p>
       </div>
 
-      <Field
-        name="linkedin_url" label="LinkedIn" optional type="url" autoComplete="url" hint="shown publicly if you add it"
-        value={form.linkedin_url} onChange={(v) => update('linkedin_url', v)}
-        onBlur={() => markTouched('linkedin_url')}
-        error={errorFor('linkedin_url')} valid={isValid('linkedin_url')}
-      />
+      <LinkedInField value={form.linkedin} onChange={(v) => { update('linkedin', v); markTouched('linkedin'); }} />
 
       <div className="consent" style={{ marginTop: 20 }}>
         <label className="cbox">

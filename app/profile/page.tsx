@@ -12,12 +12,28 @@ import {
   canonicalOption, fetchApprovedOptions, fetchOptionAliases, fetchOrganizationNames, proposeOption,
 } from '../../lib/publicData';
 import {
-  STREAMS, DEGREES, ADMISSION_ROUTES, STATUSES, NOW_CHOICES, asksForRank, boardForSchool,
+  STREAMS, DEGREES, STATUSES, NOW_CHOICES, boardForSchool,
   COUNTRY_CODES, OTHER_OPTION, LEGACY_STREAM_MAP, officialSchoolName,
   PROFESSIONAL_COURSES, PROFESSIONAL_STAGES,
   isInProgressStatus, mergeOptions, splitStoredValue, resolveValue,
 } from '../../lib/options';
-import { CATEGORIES } from '../../lib/types';
+import { CATEGORIES, categoryForDegree } from '../../lib/types';
+import OptionSearchField from '../../lib/OptionSearchField';
+import AdmissionFields from '../../lib/forms/AdmissionFields';
+import ExamAttemptsField from '../../lib/forms/ExamAttemptsField';
+import AdmitsField from '../../lib/forms/AdmitsField';
+import GapYearField from '../../lib/forms/GapYearField';
+import FamilyHomeFields from '../../lib/forms/FamilyHomeFields';
+import LinkedInField from '../../lib/forms/LinkedInField';
+import {
+  admissionColumns, admissionFromRow, admissionProblem, admitRows, admitsFromRows, attemptRows, attemptsFromRows,
+  contextualBranchAliases, emptyAdmission, emptyFamily, emptyGap, familyFromRow, familyProblems, gapFromRows,
+  gapProblem, gapRows, inGapYear, joinedCollege, privateRow, seatYear,
+  type AdmissionDraft, type AdmitDraft, type AttemptDraft, type FamilyDraft, type FamilyKey, type GapDraft,
+} from '../../lib/forms/model';
+import { branchVocab, canonicalBranch, examVocab } from '../../lib/forms/vocab';
+import { handleFromStored, parseLinkedIn } from '../../lib/linkedin';
+import { examAreas } from '../../lib/exams';
 
 interface AlumnusData {
   id: string;
@@ -196,7 +212,23 @@ export default function ProfilePage() {
   // Free-typed "Other" values, kept beside the dropdown selection. The old
   // editor had no such box: choosing "Other" stored the literal word "Other"
   // and wiped whatever the person had actually written.
-  const [others, setOthers] = useState({ stream: '', degree: '', admission_route: '', current_status: '', field: '', professional_course: '' });
+  const [others, setOthers] = useState({ stream: '', degree: '', current_status: '', field: '', professional_course: '' });
+
+  // Round 10: after Class 12, in the shapes lib/forms shares with registration
+  // and the school's editor. `schoolAdmits` are offers the school recorded -
+  // shown, never edited here. Family and home save straight away and are
+  // never reviewed, because they are never published.
+  const [admission, setAdmission] = useState<AdmissionDraft>(emptyAdmission());
+  const [attempts, setAttempts] = useState<AttemptDraft[]>([]);
+  const [admits, setAdmits] = useState<AdmitDraft[]>([]);
+  const [schoolAdmits, setSchoolAdmits] = useState<string[]>([]);
+  const [gap, setGap] = useState<GapDraft>(emptyGap());
+  const [liveInGap, setLiveInGap] = useState(false);
+  const [family, setFamily] = useState<FamilyDraft>(emptyFamily());
+  const [hadPrivateRow, setHadPrivateRow] = useState(false);
+  const [familyTouched, setFamilyTouched] = useState<Partial<Record<FamilyKey, boolean>>>({});
+  const [linkedin, setLinkedin] = useState('');
+  const [showAdmits, setShowAdmits] = useState(false);
   // "Something else" has been tapped, so the full status list is on screen.
   const [statusOpen, setStatusOpen] = useState(false);
 
@@ -222,7 +254,10 @@ export default function ProfilePage() {
       // Anything already staged for review is what the person should see and
       // keep editing - otherwise their pending changes would look lost.
       const staged = (data.pending_changes ?? {}) as Record<string, any>;
-      const { higher_studies: stagedStudies, work_experience: stagedWork, ...stagedColumns } = staged;
+      const {
+        higher_studies: stagedStudies, work_experience: stagedWork,
+        exam_attempts: stagedAttempts, admits: stagedAdmits, gap_years: stagedGaps, ...stagedColumns
+      } = staged;
       const merged = normalizeProfile({ ...data, ...stagedColumns });
       setProfile(merged);
       setPicks({
@@ -234,10 +269,37 @@ export default function ProfilePage() {
         stream: splitStoredValue(merged.stream, STREAMS, LEGACY_STREAM_MAP).other,
         degree: splitStoredValue(merged.degree, DEGREES).other,
         professional_course: splitStoredValue(merged.professional_course, PROFESSIONAL_COURSES).other,
-        admission_route: splitStoredValue(merged.admission_route, ADMISSION_ROUTES).other,
         current_status: splitStoredValue(merged.current_status, STATUSES).other,
         field: splitStoredValue(merged.field, CATEGORIES.map((c) => c.label)).other,
       });
+
+      // The path beyond the seat: staged lists if an edit is waiting, else
+      // what is saved. Owners read their own rows at any state (migration 18).
+      const current = { ...data, ...stagedColumns };
+      setAdmission(admissionFromRow(current));
+      setLinkedin(handleFromStored(current.linkedin_handle, current.linkedin_url));
+      setLiveInGap(!!data.in_gap_year);
+      const classOfNum = current.class_of ? Number(current.class_of) : null;
+      const [attRes, admRes, gapRes, privRes] = await Promise.all([
+        supabase.from('exam_attempts').select('*').eq('alumni_id', data.id),
+        supabase.from('admits').select('*, college:colleges(name)').eq('alumni_id', data.id),
+        supabase.from('gap_years').select('*').eq('alumni_id', data.id),
+        supabase.from('alumni_private').select('*').eq('alumni_id', data.id).maybeSingle(),
+      ]);
+      setAttempts(attemptsFromRows(Array.isArray(stagedAttempts) ? stagedAttempts : (attRes.data ?? []), classOfNum));
+      const savedAdmits = (admRes.data ?? []) as any[];
+      const own = Array.isArray(stagedAdmits) ? stagedAdmits : savedAdmits.filter((r) => !r.added_by_school);
+      setAdmits(admitsFromRows(own));
+      if (own.length) setShowAdmits(true);
+      setSchoolAdmits(savedAdmits.filter((r) => r.added_by_school).map((r) =>
+        [[r.degree, r.branch].filter(Boolean).join(' '), r.college?.name ?? r.college_name_raw].filter(Boolean).join(' at ')));
+      setGap(gapFromRows(
+        Array.isArray(stagedGaps) ? stagedGaps : (gapRes.data ?? []),
+        current.in_gap_year ?? !!data.in_gap_year,
+        !!(current.college_id || (current.college_name_raw ?? '').trim()),
+      ));
+      setFamily(familyFromRow(privRes.data));
+      setHadPrivateRow(!!privRes.data);
 
       // Timelines: staged version if present, else what's published.
       if (Array.isArray(stagedStudies)) {
@@ -296,7 +358,9 @@ export default function ProfilePage() {
   const streamOptions = useMemo(() => mergeOptions(STREAMS, tagOptions.stream, optionAliases.stream), [tagOptions, optionAliases]);
   const degreeOptions = useMemo(() => mergeOptions(DEGREES, tagOptions.degree, optionAliases.degree), [tagOptions, optionAliases]);
   const professionalOptions = useMemo(() => mergeOptions(PROFESSIONAL_COURSES, tagOptions.professional_course, optionAliases.professional_course), [tagOptions, optionAliases]);
-  const routeOptions = useMemo(() => mergeOptions(ADMISSION_ROUTES, tagOptions.admission_route, optionAliases.admission_route), [tagOptions, optionAliases]);
+  const exams = useMemo(() => examVocab(tagOptions, optionAliases), [tagOptions, optionAliases]);
+  const branches = useMemo(() => branchVocab(tagOptions, optionAliases), [tagOptions, optionAliases]);
+  const familyErrors = useMemo(() => familyProblems(family, false, phoneProblem), [family]);
   const statusOptions = useMemo(() => mergeOptions(STATUSES, tagOptions.current_status, optionAliases.current_status), [tagOptions, optionAliases]);
   const fieldOptions = useMemo(
     () => mergeOptions([...CATEGORIES.map((c) => c.label)], tagOptions.field, optionAliases.field),
@@ -319,7 +383,6 @@ export default function ProfilePage() {
       const finalStream = canon('stream', resolveValue(profile.stream, others.stream));
       const finalDegree = canon('degree', resolveValue(profile.degree, others.degree));
       const finalProfessional = canon('professional_course', resolveValue(profile.professional_course, others.professional_course));
-      const finalRoute = canon('admission_route', resolveValue(profile.admission_route, others.admission_route));
       const finalStatus = canon('current_status', resolveValue(profile.current_status, others.current_status));
       const finalField = canon('field', resolveValue(profile.field, others.field));
 
@@ -330,6 +393,18 @@ export default function ProfilePage() {
       }
       const phoneIssue = phoneProblem(profile.phone_country_code, profile.phone_number);
       if (phoneIssue) throw new Error(phoneIssue);
+      // After Class 12. How the seat was got stays optional here, as the old
+      // route did: a profile saved before it was asked must still be savable.
+      const joined = joinedCollege(gap);
+      const namedCollege = joined && !!profile.college_name.trim();
+      const gapIssue = gapProblem(gap);
+      if (gapIssue) throw new Error(gapIssue);
+      const admissionIssue = namedCollege ? admissionProblem(admission, false) : '';
+      if (admissionIssue) throw new Error(admissionIssue);
+      const li = parseLinkedIn(linkedin);
+      if (li.problem) throw new Error(li.problem);
+      const familyIssue = Object.values(familyErrors).find(Boolean);
+      if (familyIssue) throw new Error(`Family & home: ${familyIssue}`);
       // Status is no longer required to save. Registration now derives it from
       // "are you still doing this?", and rows written before that can have
       // none - blocking the save would leave those people unable to edit
@@ -368,19 +443,21 @@ export default function ProfilePage() {
         personal_email: profile.personal_email.trim(),
         phone_country_code: profile.phone_country_code,
         phone_number: profile.phone_number || null,
-        linkedin_url: profile.linkedin_url.trim() || null,
-        college_id: collegeId,
-        college_name_raw: typedCollege,
-        degree: finalDegree || null,
+        // The username; the database writes linkedin_url from it.
+        linkedin_handle: li.handle,
+        college_id: namedCollege ? collegeId : null,
+        college_name_raw: namedCollege ? typedCollege : null,
+        degree: namedCollege ? (finalDegree || null) : null,
         professional_course: finalProfessional || null,
         professional_stage: finalProfessional ? (profile.professional_stage || null) : null,
         professional_org: finalProfessional ? (cleanProperNoun(profile.professional_org) || null) : null,
-        branch: cleanProperNoun(profile.branch),
+        branch: namedCollege
+          ? cleanProperNoun(canonicalBranch(profile.branch, branches, contextualBranchAliases(finalDegree)))
+          : null,
         field: finalField || null,
-        admission_route: finalRoute || null,
-        admission_rank: cleanFreeText(profile.admission_rank),
-        board_marks: cleanFreeText(profile.board_marks),
-        board_cutoff: cleanFreeText(profile.board_cutoff),
+        // admission_route is labelled from these by a trigger (migration 18).
+        ...admissionColumns(namedCollege ? admission : emptyAdmission(), exams.aliases),
+        in_gap_year: inGapYear(gap),
         current_status: finalStatus,
         expected_finish_year: isInProgressStatus(finalStatus) && profile.expected_finish_year
           ? parseInt(profile.expected_finish_year, 10) : null,
@@ -409,6 +486,20 @@ export default function ProfilePage() {
         is_current: w.is_current,
       }));
 
+      // The rest of the path, as the lists the database keeps.
+      const classOfNum = profile.class_of ? parseInt(profile.class_of, 10) : null;
+      const attemptPayload = attemptRows(attempts, {
+        admission: namedCollege ? admission : emptyAdmission(), year: seatYear(gap, classOfNum), attemptYear: classOfNum,
+      }, exams.aliases);
+      const offers = namedCollege ? admits.filter((d) => d.college.trim()) : [];
+      const offerIds: Record<string, string | null> = {};
+      for (const d of offers) offerIds[d.key] = await linkFor('college', cleanProperNoun(d.college), d.pick);
+      const admitPayload = admitRows(offers, seatYear(gap, classOfNum), offerIds, exams.aliases).map((r) => ({
+        ...r,
+        branch: r.branch ? cleanProperNoun(canonicalBranch(r.branch, branches, contextualBranchAliases(r.degree ?? ''))) : null,
+      }));
+      const gapPayload = gapRows(gap, classOfNum, exams.aliases);
+
       // Email and phone are how this person signs in, and they are private, so
       // they save immediately instead of waiting in the review queue - and they
       // must stay unique across accounts.
@@ -425,9 +516,26 @@ export default function ProfilePage() {
       if (contactCheck?.phone_free === false) throw new Error('That phone number is already used by another account.');
       const { personal_email: _e, phone_country_code: _c, phone_number: _p, ...contentColumns } = columns;
 
+      // Family and home: private, never published, so never reviewed - saved
+      // straight away whatever the profile's state.
+      const priv = privateRow(family);
+      const saysAnything = Object.entries(priv).some(([k, v]) => v && !['guardian1_phone_code', 'state'].includes(k));
+      if (saysAnything || hadPrivateRow) {
+        const { error: privErr } = await supabase.from('alumni_private')
+          .upsert({ alumni_id: profile.id, ...priv }, { onConflict: 'alumni_id' });
+        if (privErr) throw privErr;
+        setHadPrivateRow(true);
+      }
+
       if (isApproved) {
-        const { error: contactSaveErr } = await supabase.from('alumni').update(contact).eq('id', profile.id);
+        // Entering a year out hides the page at once - the database allows the
+        // owner exactly that much (migration 18). Leaving it waits for review
+        // with the rest of the edit.
+        const enteringGap = inGapYear(gap) && !liveInGap;
+        const { error: contactSaveErr } = await supabase.from('alumni')
+          .update({ ...contact, ...(enteringGap ? { in_gap_year: true } : {}) }).eq('id', profile.id);
         if (contactSaveErr) throw contactSaveErr;
+        if (enteringGap) setLiveInGap(true);
 
         // ── Already published: stage, don't publish. ──────────────────────
         // The live columns stay exactly as they are, so the directory keeps
@@ -437,7 +545,10 @@ export default function ProfilePage() {
         const { error: saveErr } = await supabase
           .from('alumni')
           .update({
-            pending_changes: { ...contentColumns, higher_studies: studiesPayload, work_experience: workPayload },
+            pending_changes: {
+              ...contentColumns, higher_studies: studiesPayload, work_experience: workPayload,
+              exam_attempts: attemptPayload, admits: admitPayload, gap_years: gapPayload,
+            },
             modification_status: 'pending',
             // Saving is the alumnus attesting their info - that stands even
             // while the edits wait for review. last_updated is deliberately
@@ -465,13 +576,28 @@ export default function ProfilePage() {
         if (workPayload.length) {
           await supabase.from('work_experience').insert(workPayload.map((w) => ({ ...w, alumni_id: profile.id })));
         }
+
+        // The path lists, replaced whole. Offers the school recorded stay.
+        const lists: [string, Record<string, unknown>[], boolean][] = [
+          ['exam_attempts', attemptPayload, false], ['admits', admitPayload, true], ['gap_years', gapPayload, false],
+        ];
+        for (const [table, rows, keepSchool] of lists) {
+          let del = supabase.from(table).delete().eq('alumni_id', profile.id);
+          if (keepSchool) del = del.eq('added_by_school', false);
+          const { error: delErr } = await del;
+          if (delErr) throw delErr;
+          if (rows.length) {
+            const { error: insErr } = await supabase.from(table).insert(rows.map((r) => ({ ...r, alumni_id: profile.id })));
+            if (insErr) throw insErr;
+          }
+        }
+        setLiveInGap(inGapYear(gap));
         setSuccess('Your details have been updated. Your profile is still awaiting its first approval.');
       }
 
       // Queue any new free-typed values for the admin's option review.
       if (profile.stream === OTHER_OPTION && others.stream.trim()) void proposeOption('stream', others.stream);
       if (profile.degree === OTHER_OPTION && others.degree.trim()) void proposeOption('degree', others.degree);
-      if (profile.admission_route === OTHER_OPTION && others.admission_route.trim()) void proposeOption('admission_route', others.admission_route);
       if (profile.current_status === OTHER_OPTION && others.current_status.trim()) void proposeOption('current_status', others.current_status);
       // These two were missing, so an area of study or a qualification typed
       // here reached the profile but never the staff list it should join.
@@ -547,7 +673,12 @@ export default function ProfilePage() {
   const streamSel = splitStoredValue(profile.stream, streamOptions, LEGACY_STREAM_MAP).selected;
   const degreeSel = splitStoredValue(profile.degree, degreeOptions).selected;
   const professionalSel = splitStoredValue(profile.professional_course, professionalOptions).selected;
-  const routeSel = splitStoredValue(profile.admission_route, routeOptions).selected;
+  const joinedNow = joinedCollege(gap);
+  const collegeNamed = joinedNow && !!profile.college_name.trim();
+  const classOfNum = profile.class_of ? parseInt(profile.class_of, 10) || null : null;
+  const areaKey = joinedNow
+    ? (categoryForDegree(resolveValue(degreeSel, others.degree), profile.branch, resolveValue(professionalSel, others.professional_course))?.key ?? null)
+    : (examAreas(gap.exam)[0] ?? null);
   const statusSel = splitStoredValue(profile.current_status, statusOptions).selected;
   // Which chip, if any, says what is already stored. Anything else - a status
   // from the longer list, or free text - opens the select instead of quietly
@@ -620,6 +751,27 @@ export default function ProfilePage() {
           </div>
         )}
 
+        {/* A year out that is still going on keeps the page private. The way
+            back is one tap, and says what happens next. */}
+        {liveInGap && gap.joinedSince !== 'yes' && (
+          <div className="welcome-card">
+            <h2 className="welcome-card__title">Joined a college now?</h2>
+            <p>
+              Your page is private while you are taking your year. Tell us where you joined and the
+              school will publish it — your year out stays on it, as part of your path.
+            </p>
+            <button
+              type="button" className="btn btn--ghost"
+              onClick={() => {
+                setGap((g) => ({ ...g, afterSchool: 'gap', joinedSince: 'yes' }));
+                requestAnimationFrame(() => document.getElementById('profile-after12')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+              }}
+            >
+              <span className="btn__inner">Yes — add where I joined</span>
+            </button>
+          </div>
+        )}
+
         {notice.welcome && (
           <div className="welcome-card">
             <h2 className="welcome-card__title">You&apos;re in, {profile.full_name.split(' ')[0]} 🎉</h2>
@@ -655,6 +807,7 @@ export default function ProfilePage() {
           hasHigherStudies={higherStudies.some((h) => h.degree_name.trim())}
           hasWork={workExperience.some((w) => w.company.trim())}
           photoPending={!!photoFile}
+          hasLinkedIn={!!parseLinkedIn(linkedin).handle}
         />
 
         {!profile.email_verified_at && <ConfirmEmail email={profile.personal_email} />}
@@ -723,7 +876,40 @@ export default function ProfilePage() {
           />
 
           <Divider />
-          <h2>Higher education</h2>
+          <h2 id="profile-after12">After Class 12</h2>
+
+          <GapYearField
+            value={gap} onChange={(p) => setGap((g) => ({ ...g, ...p }))}
+            examOptions={exams.options} examAliases={exams.aliases}
+          />
+
+          {joinedNow && (
+            <>
+              {/* Not marked required here: an older profile may have none on
+                  file, and a star next to an unfillable field reads as an
+                  error they cannot clear. */}
+              <EntitySearchField
+                kind="college"
+                label="College / University"
+                value={profile.college_name}
+                onChange={(v) => updateField('college_name', v)}
+                onSelect={(hit) => setPicks((p) => ({ ...p, college: toPick(hit) }))}
+              />
+
+              <SelectWithOther
+                label="Degree" options={degreeOptions} value={degreeSel}
+                onChange={(v) => updateField('degree', v)}
+                otherValue={others.degree} onOtherChange={(v) => updateOther('degree', v)}
+              />
+
+              <OptionSearchField
+                label="Branch / Department" hint="any short form works — “CSE”, “ECE”"
+                options={branches.options} aliases={branches.aliases}
+                extra={contextualBranchAliases(resolveValue(degreeSel, others.degree))}
+                value={profile.branch} onChange={(v) => updateField('branch', v)}
+              />
+            </>
+          )}
 
           <SelectWithOther
             label="Broad area of study" options={fieldOptions} value={fieldSel}
@@ -731,26 +917,6 @@ export default function ProfilePage() {
             otherValue={others.field} onOtherChange={(v) => updateOther('field', v)}
             required
           />
-
-          {/* Not marked required here: someone reading for CA has no college
-              and no degree, and a star next to an unfillable field just reads
-              as an error they cannot clear. */}
-          <EntitySearchField
-            kind="college"
-            label="College / University"
-            hint="leave blank if you didn't join one"
-            value={profile.college_name}
-            onChange={(v) => updateField('college_name', v)}
-            onSelect={(hit) => setPicks((p) => ({ ...p, college: toPick(hit) }))}
-          />
-
-          <SelectWithOther
-            label="Degree" options={degreeOptions} value={degreeSel}
-            onChange={(v) => updateField('degree', v)}
-            otherValue={others.degree} onOtherChange={(v) => updateOther('degree', v)}
-          />
-
-          <FloatingField label="Branch / Department" hint="optional" value={profile.branch} onChange={(v) => updateField('branch', v)} />
 
           <SelectWithOther
             label="Professional qualification" options={professionalOptions} value={professionalSel}
@@ -773,21 +939,30 @@ export default function ProfilePage() {
             />
           )}
 
-          <SelectWithOther
-            label="How you got in" options={routeOptions} value={routeSel}
-            onChange={(v) => updateField('admission_route', v)}
-            otherValue={others.admission_route} onOtherChange={(v) => updateOther('admission_route', v)}
+          {collegeNamed && (
+            <AdmissionFields
+              value={admission} onChange={(p) => setAdmission((a) => ({ ...a, ...p }))}
+              examOptions={exams.options} examAliases={exams.aliases}
+            />
+          )}
+
+          <ExamAttemptsField
+            attempts={attempts} onChange={(fn) => setAttempts(fn)}
+            seatExam={collegeNamed && admission.kind === 'entrance_exam' ? admission.exam : ''}
+            area={areaKey}
+            examOptions={exams.options} examAliases={exams.aliases}
+            classOf={classOfNum} tookGap={gap.afterSchool === 'gap'}
           />
 
-          {routeSel === 'Board Marks' ? (
-            <div className="two-col">
-              <FloatingField label="Board marks (%)" type="number" min={0} max={100} step={0.01} value={profile.board_marks} onChange={(v) => updateField('board_marks', v)} />
-              <FloatingField label="Cutoff" hint="if applicable" value={profile.board_cutoff} onChange={(v) => updateField('board_cutoff', v)} />
-            </div>
-          ) : (
-            asksForRank(routeSel) && (
-              <FloatingField label="Admission rank" hint="optional" type="number" min={1} value={profile.admission_rank} onChange={(v) => updateField('admission_rank', v.replace(/[^\d]/g, ''))} />
-            )
+          {collegeNamed && (
+            <AdmitsField
+              admits={admits} onChange={(fn) => setAdmits(fn)}
+              open={showAdmits} onToggle={setShowAdmits}
+              degreeOptions={degreeOptions}
+              branchOptions={branches.options} branchAliases={branches.aliases}
+              examOptions={exams.options} examAliases={exams.aliases}
+              schoolAdded={schoolAdmits}
+            />
           )}
 
           <Divider />
@@ -892,17 +1067,31 @@ export default function ProfilePage() {
             <span className="btn__inner">+ Add work experience</span>
           </button>
 
+          {/* Public, so not under "Contact": it sat beneath a heading saying
+              "never shown publicly" while its own hint said the opposite. */}
+          <div id="profile-linkedin" style={{ marginTop: 20 }}>
+            <LinkedInField value={linkedin} onChange={setLinkedin} />
+          </div>
+
           <Divider />
           <h2 id="profile-contact">Contact <span className="hint">never shown publicly</span></h2>
 
-          <div id="profile-linkedin" />
-          <FloatingField label="LinkedIn profile URL" hint="optional, shown publicly" type="url" value={profile.linkedin_url} onChange={(v) => updateField('linkedin_url', v)} />
           <FloatingField label="Email" type="email" value={profile.personal_email} onChange={(v) => updateField('personal_email', v)} required />
           <div className="two-col">
             <FloatingSelect label="Country code" value={profile.phone_country_code} onChange={(v) => updateField('phone_country_code', v)} options={COUNTRY_CODES} />
             <FloatingField label="Phone number" type="tel" value={profile.phone_number} onChange={(v) => updateField('phone_number', v.replace(/\D/g, ''))} required />
           </div>
 
+          <Divider />
+          <h2 id="profile-family">Family &amp; home 🔒 <span className="hint">saved straight away, never reviewed or shown</span></h2>
+          <FamilyHomeFields
+            value={family} onChange={(p) => setFamily((f) => ({ ...f, ...p }))}
+            problems={familyErrors} touched={familyTouched}
+            onTouch={(k) => setFamilyTouched((t) => ({ ...t, [k]: true }))}
+            studentPhone={profile.phone_number}
+          />
+
+          <Divider />
           <div id="profile-advice" className="field" style={{ marginTop: 20 }}>
             <label>One thing you&apos;d tell your junior self?</label>
             <textarea value={profile.message_1} onChange={(e) => updateField('message_1', e.target.value)} placeholder="e.g. don't stress over one bad exam, or start applying early…" />
@@ -1139,12 +1328,13 @@ function ConfirmEmail({ email }: { email: string }) {
 }
 
 function ProfileChecklist({
-  profile, hasHigherStudies, hasWork, photoPending,
+  profile, hasHigherStudies, hasWork, photoPending, hasLinkedIn,
 }: {
   profile: AlumnusData;
   hasHigherStudies: boolean;
   hasWork: boolean;
   photoPending: boolean;
+  hasLinkedIn: boolean;
 }) {
   const confirmedRecently = !!profile.last_confirmed_at
     && Date.now() - new Date(profile.last_confirmed_at).getTime() < 365 * 24 * 3600 * 1000;
@@ -1158,7 +1348,7 @@ function ProfileChecklist({
     // nudge lives here instead - where it can be ignored without abandoning
     // a form half way through.
     { done: !!profile.current_status.trim(), label: "Say what you're doing now", why: 'juniors filter by it', href: '#profile-now' },
-    { done: !!profile.linkedin_url.trim(), label: 'Your LinkedIn', why: 'so juniors can reach out', href: '#profile-linkedin' },
+    { done: hasLinkedIn, label: 'Your LinkedIn', why: 'so juniors can reach out', href: '#profile-linkedin' },
     { done: confirmedRecently, label: 'Confirm your details this year', why: 'keeps your profile trusted', href: '#profile-confirm' },
   ];
   const done = items.filter((i) => i.done).length;

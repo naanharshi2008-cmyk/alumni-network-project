@@ -4,10 +4,10 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../../../lib/supabaseClient';
 import {
   loadReview, logDecision, type AlumniRow, type HigherStudyRow, type PendingOption,
-  type PendingPhoto, type ReviewData, type WorkExperienceRow,
+  type PendingPhoto, type ReviewData, type WorkExperienceRow, type AdminPath,
 } from '../adminData';
 import { buildQueue, KIND_LABELS, waitedFor, type ReviewItem, type ReviewKind } from '../reviewModel';
-import { splitStaged } from '../editFields';
+import { TIMELINE_KEYS, columnsToPublish, tickableKeys } from '../editFields';
 import { useSearchParams } from 'next/navigation';
 import { useAdminShell } from '../shell';
 import AddAlumnus from '../AddAlumnus';
@@ -28,7 +28,7 @@ import { ConfirmAction, EmptyCard } from '../ui';
 const EMPTY: ReviewData = {
   pending: [], pendingEdits: [], photos: [], options: [], optionRows: [],
   approvedOptions: {}, unmatchedColleges: [], unmatchedCompanies: [],
-  higherStudies: {}, workExperience: {}, error: '',
+  higherStudies: {}, workExperience: {}, paths: {}, error: '',
 };
 
 export default function ReviewPage() {
@@ -206,21 +206,28 @@ export default function ReviewPage() {
    * admin_publish_changes does all of it in one statement, in the database,
    * inside one transaction, and writes the log line itself.
    */
-  async function publishEdit(person: AlumniRow, keys: string[], studies: boolean, work: boolean, note: string) {
+  async function publishEdit(person: AlumniRow, keys: string[], lists: Set<string>, note: string) {
     setActionError(''); setBusy(true);
     const { data, error } = await supabase.rpc('admin_publish_changes', {
       p_alumni_id: person.id,
       p_keys: keys,
-      p_studies: studies,
-      p_work: work,
+      p_studies: lists.has('higher_studies'),
+      p_work: lists.has('work_experience'),
       p_note: note.trim() || null,
+      p_attempts: lists.has('exam_attempts'),
+      p_admits: lists.has('admits'),
+      p_gap_years: lists.has('gap_years'),
     });
     setBusy(false);
     if (error) { setActionError('Could not publish: ' + error.message); return; }
     const out = (data ?? {}) as {
-      published?: string[]; refused?: string[]; studies?: boolean; work?: boolean; still_waiting?: boolean;
+      published?: string[]; refused?: string[]; studies?: boolean; work?: boolean;
+      attempts?: boolean; admits?: boolean; gap_years?: boolean; still_waiting?: boolean;
     };
-    const n = (out.published?.length ?? 0) + (out.studies ? 1 : 0) + (out.work ? 1 : 0);
+    // A group - the kind and its exam - is one change to the person who made it.
+    const followers = new Set(['admission_exam', 'admission_detail', 'admission_route', 'linkedin_url']);
+    const n = (out.published?.filter((k) => !followers.has(k)).length ?? 0)
+      + [out.studies, out.work, out.attempts, out.admits, out.gap_years].filter(Boolean).length;
 
     setActionNote(
       `Published ${n} change${n === 1 ? '' : 's'} for ${person.full_name}.`
@@ -332,10 +339,8 @@ export default function ReviewPage() {
             // - anything less is a judgement the keyboard should not make.
             e.preventDefault();
             const staged = current.person.pending_changes ?? {};
-            void publishEdit(
-              current.person, Object.keys(splitStaged(staged).columns),
-              Array.isArray(staged.higher_studies), Array.isArray(staged.work_experience), '',
-            );
+            const all = tickableKeys(staged);
+            void publishEdit(current.person, columnsToPublish(all, staged), new Set(all.filter((k) => TIMELINE_KEYS.has(k))), '');
           }
           else if (current.kind === 'photo') { e.preventDefault(); void decidePhoto(current.photo, 'approved'); }
           // A value or an unmatched name has no single right answer - which
@@ -480,17 +485,18 @@ export default function ReviewPage() {
  * ever publishes the previous card's ticks.
  */
 function PersonDetail({
-  item, busy, studies, work, skip,
+  item, busy, studies, work, paths, skip,
   onApproveRegistration, onRejectRegistration, onDeleteAlumnus, onPublishEdit, onDiscardEdit,
 }: {
   item: Extract<ReviewItem, { kind: 'registration' | 'edit' }>;
   busy: boolean;
   studies: Record<string, HigherStudyRow[]>;
   work: Record<string, WorkExperienceRow[]>;
+  paths: Record<string, AdminPath>;
   skip: React.ReactNode;
   onApproveRegistration: (p: AlumniRow) => Promise<void>;
   onRejectRegistration: (p: AlumniRow, reason: string) => Promise<void>;
-  onPublishEdit: (p: AlumniRow, keys: string[], studies: boolean, work: boolean, note: string) => Promise<void>;
+  onPublishEdit: (p: AlumniRow, keys: string[], lists: Set<string>, note: string) => Promise<void>;
   onDiscardEdit: (p: AlumniRow, reason: string) => Promise<void>;
   onDeleteAlumnus: (p: AlumniRow) => Promise<void>;
 }) {
@@ -499,13 +505,7 @@ function PersonDetail({
 
   // Everything publishable starts ticked, so the common case - publish the
   // lot - is still one click. Unticking is the deliberate act.
-  const publishable = useMemo(() => {
-    const { columns } = splitStaged(staged);
-    const keys = Object.keys(columns);
-    if (Array.isArray(staged?.higher_studies)) keys.push('higher_studies');
-    if (Array.isArray(staged?.work_experience)) keys.push('work_experience');
-    return keys;
-  }, [staged]);
+  const publishable = useMemo(() => tickableKeys(staged), [staged]);
   const [picked, setPicked] = useState<Set<string>>(() => new Set(publishable));
   const [note, setNote] = useState('');
 
@@ -520,7 +520,8 @@ function PersonDetail({
 
   const chosen = publishable.filter((k) => picked.has(k));
   const held = publishable.length - chosen.length;
-  const columnKeys = chosen.filter((k) => k !== 'higher_studies' && k !== 'work_experience');
+  const columnKeys = columnsToPublish(chosen, staged);
+  const chosenLists = new Set(chosen.filter((k) => TIMELINE_KEYS.has(k)));
 
   return (
     <div className="card">
@@ -528,6 +529,7 @@ function PersonDetail({
         person={person}
         studies={studies[person.id]}
         work={work[person.id]}
+        path={paths[person.id]}
         staged={staged}
         picks={picks}
       />
@@ -580,10 +582,7 @@ function PersonDetail({
             <button
               type="button" className="btn btn--primary"
               disabled={busy || chosen.length === 0}
-              onClick={() => onPublishEdit(
-                person, columnKeys,
-                picked.has('higher_studies'), picked.has('work_experience'), note,
-              )}
+              onClick={() => onPublishEdit(person, columnKeys, chosenLists, note)}
             >
               <span className="btn__inner">
                 {held === 0
@@ -624,7 +623,7 @@ function Detail({
   onApproveRegistration: (p: AlumniRow) => Promise<void>;
   onRejectRegistration: (p: AlumniRow, reason: string) => Promise<void>;
   onDeleteAlumnus: (p: AlumniRow) => Promise<void>;
-  onPublishEdit: (p: AlumniRow, keys: string[], studies: boolean, work: boolean, note: string) => Promise<void>;
+  onPublishEdit: (p: AlumniRow, keys: string[], lists: Set<string>, note: string) => Promise<void>;
   onDiscardEdit: (p: AlumniRow, reason: string) => Promise<void>;
   onDecidePhoto: (p: PendingPhoto, d: 'approved' | 'rejected') => Promise<void>;
   onDeletePhoto: (p: PendingPhoto) => Promise<void>;
@@ -645,7 +644,7 @@ function Detail({
         // Keyed, so the ticks and the note belong to this person and nobody
         // ever publishes the previous card's choices.
         key={item.person.id}
-        item={item} busy={busy} studies={studies} work={work}
+        item={item} busy={busy} studies={studies} work={work} paths={data.paths}
         onApproveRegistration={onApproveRegistration}
         onRejectRegistration={onRejectRegistration}
         onDeleteAlumnus={onDeleteAlumnus}

@@ -42,7 +42,7 @@ export default function DataPage() {
 
   const [approvedOptions, setApprovedOptions] = useState<Record<string, string[]>>({});
   const [optionRows, setOptionRows] = useState<OptionRow[]>([]);
-  const [people, setPeople] = useState<{ id: string }[]>([]);
+  const [usage, setUsage] = useState<Record<string, Record<string, number>>>({});
   const [collegesInfo, setCollegesInfo] = useState<CollegeInfoRow[]>([]);
   const [aliases, setAliases] = useState<Record<string, AliasRow[]>>({});
   const [instView, setInstView] = useState<InstView>('needs');
@@ -80,7 +80,7 @@ export default function DataPage() {
     const [values, area] = await Promise.all([loadValueBench(), loadDataArea()]);
     setApprovedOptions(values.approvedOptions);
     setOptionRows(values.optionRows);
-    setPeople(values.people);
+    setUsage(values.usage);
     setCollegesInfo(area.colleges);
     setAliases(area.aliases);
     if (area.error || values.error) setActionError('Could not load everything: ' + (area.error || values.error));
@@ -114,7 +114,7 @@ export default function DataPage() {
             spelling is remembered, so the same typing next year maps itself.
           </TabIntro>
           <ValueMergeTab
-            people={people}
+            usage={usage}
             approvedOptions={approvedOptions}
             optionRows={optionRows}
             onDone={load}

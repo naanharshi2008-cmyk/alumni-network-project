@@ -102,16 +102,20 @@ export function PendingOptionRow({
     });
   }, [existing, option.value]);
 
-  /** Rewrite every profile using `from` for this category to `to`. */
-  async function rewriteProfiles(from: string, to: string) {
-    // ilike treats % and _ as wildcards, so an unescaped value could match -
-    // and silently rewrite - profiles it has nothing to do with. Escape them
-    // so this stays an exact, case-insensitive comparison.
-    const literal = from.replace(/[\\%_]/g, (c) => `\\${c}`);
-    const { error } = await supabase
-      .from('alumni')
-      .update({ [option.category]: to })
-      .ilike(option.category, literal);
+  /**
+   * Move everyone on `option.value` to `to`, in the database.
+   *
+   * This used to rewrite `alumni[category]` from the browser, which cannot
+   * reach where an exam or a branch now also lives - attempts, offers, gap
+   * years, staged edits - and for an exam named a column that does not exist.
+   * admin_merge_option (migration 19) knows every place a value lives, and
+   * keeps the typed spelling as an alias, so the same typing next year maps
+   * itself instead of arriving here again.
+   */
+  async function mergeInto(to: string) {
+    const { error } = await supabase.rpc('admin_merge_option', {
+      p_category: option.category, p_from: [option.value], p_into: to,
+    });
     if (error) throw error;
   }
 
@@ -119,9 +123,7 @@ export function PendingOptionRow({
     if (!mergeTarget) return;
     setBusy(true);
     try {
-      await rewriteProfiles(option.value, mergeTarget);
-      const { error } = await supabase.from('field_options').delete().eq('id', option.id);
-      if (error) throw error;
+      await mergeInto(mergeTarget);
       onResolved(option.id);
     } catch (e: any) {
       setError(`Could not merge "${option.value}": ${e?.message ?? 'unknown error'}`);
@@ -135,15 +137,21 @@ export function PendingOptionRow({
     if (!finalValue) return;
     setBusy(true);
     try {
-      // Fix the spelling on the profiles that already carry the raw value.
-      if (finalValue !== option.value) await rewriteProfiles(option.value, finalValue);
-      const { data: approved, error } = await supabase
-        .from('field_options')
-        .update({ value: finalValue, status: 'approved', canonical_value: null })
-        .eq('id', option.id)
-        .select('id');
-      if (error) throw error;
-      if (!approved?.length) throw new Error('the option row was not updated — reload and try again');
+      // A corrected spelling is a merge into it: the profiles carrying the raw
+      // value move, and the raw value is remembered as an alias. Approving as
+      // typed is just the approval. (A difference in case alone is the same
+      // value to the database, so the merge renames the row in place.)
+      if (finalValue !== option.value) {
+        await mergeInto(finalValue);
+      } else {
+        const { data: approved, error } = await supabase
+          .from('field_options')
+          .update({ status: 'approved', canonical_value: null })
+          .eq('id', option.id)
+          .select('id');
+        if (error) throw error;
+        if (!approved?.length) throw new Error('the option row was not updated — reload and try again');
+      }
       onApprovedValue(option.category, finalValue);
       onResolved(option.id);
     } catch (e: any) {

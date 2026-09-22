@@ -243,7 +243,8 @@ export function statusForNowChoice(key: string): string {
 export const COUNTRY_CODES = ['+91', '+1', '+44', '+61', '+971', '+65', '+49', '+33', '+81', '+86'];
 
 /** The `category` keys used in the `field_options` table. */
-export type OptionCategory = 'stream' | 'degree' | 'admission_route' | 'current_status' | 'field' | 'professional_course';
+export type OptionCategory = 'stream' | 'degree' | 'admission_route' | 'current_status' | 'field' | 'professional_course'
+  | 'exam' | 'branch';
 
 /** Built-in defaults per category, for the admin "is this already known?" check. */
 export const BUILT_IN_OPTIONS: Record<OptionCategory, string[]> = {
@@ -253,6 +254,10 @@ export const BUILT_IN_OPTIONS: Record<OptionCategory, string[]> = {
   current_status: STATUSES,
   professional_course: PROFESSIONAL_COURSES,
   field: [], // filled from CATEGORIES in lib/types.ts to avoid a circular import
+  // Seeded in the database by migration 18 rather than listed here: the
+  // school approves new ones, each with its areas, without a code change.
+  exam: [],
+  branch: [],
 };
 
 /** Friendly headings for the admin "Pending Options" tab. */
@@ -263,6 +268,8 @@ export const OPTION_CATEGORY_LABELS: Record<OptionCategory, string> = {
   current_status: 'Current status',
   field: 'Broad field',
   professional_course: 'Professional course',
+  exam: 'Entrance exam',
+  branch: 'Branch / department',
 };
 
 /** The form of a value we compare on: trimmed, single-spaced, lower case. */
