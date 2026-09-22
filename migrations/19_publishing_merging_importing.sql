@@ -39,6 +39,25 @@ ALTER TABLE public.review_events ADD CONSTRAINT review_events_action_check CHECK
 
 
 -- -----------------------------------------------------------------------------
+-- 1b. The admin check for SECURITY DEFINER functions
+-- -----------------------------------------------------------------------------
+-- assert_school_admin() also trusts any role that is not anon or
+-- authenticated - the SQL editor, migrations - by asking current_user. Inside
+-- a SECURITY DEFINER function current_user is the function's owner, so that
+-- test lets every caller through; this migration's probe caught exactly that.
+-- Definer functions ask the token instead: the school's email, or the service
+-- role's key, and nothing else.
+CREATE OR REPLACE FUNCTION public.assert_school_admin_strict()
+RETURNS void LANGUAGE plpgsql STABLE SET search_path = public AS $$
+BEGIN
+  IF NOT (public.is_school_admin() OR coalesce(auth.jwt() ->> 'role', '') = 'service_role') THEN
+    RAISE EXCEPTION 'Only school administrators can do this.' USING ERRCODE = '42501';
+  END IF;
+END
+$$;
+
+
+-- -----------------------------------------------------------------------------
 -- 2. What a staged edit may touch - 16's list, plus 18's columns
 -- -----------------------------------------------------------------------------
 -- in_gap_year is here because leaving a gap year waits for review: the owner
@@ -748,7 +767,8 @@ CREATE POLICY "Admins only" ON public.claim_tokens FOR ALL TO authenticated
 --
 -- SECURITY DEFINER so the insert does not depend on the admin's own row
 -- rights to set what self-service never can (origin, the review state); the
--- first line makes sure the caller is the school.
+-- first line makes sure the caller is the school - with the strict check,
+-- because the ordinary one cannot see the caller from inside a definer.
 CREATE OR REPLACE FUNCTION public.admin_import_rows(p_batch uuid, p_rows jsonb)
 RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER
@@ -765,7 +785,7 @@ DECLARE
   kind     text;
   exam     text;
 BEGIN
-  PERFORM public.assert_school_admin();
+  PERFORM public.assert_school_admin_strict();
   IF jsonb_typeof(p_rows) IS DISTINCT FROM 'array' THEN RAISE EXCEPTION 'Send the rows as a list.'; END IF;
   IF jsonb_array_length(p_rows) > 25 THEN RAISE EXCEPTION 'At most 25 rows at a time.'; END IF;
   PERFORM 1 FROM public.import_batches WHERE id = p_batch;
@@ -870,7 +890,7 @@ DECLARE
   gone int;
   kept int;
 BEGIN
-  PERFORM public.assert_school_admin();
+  PERFORM public.assert_school_admin_strict();
   DELETE FROM public.alumni
    WHERE import_batch_id = p_batch AND user_id IS NULL AND approval_status <> 'approved';
   GET DIAGNOSTICS gone = ROW_COUNT;
