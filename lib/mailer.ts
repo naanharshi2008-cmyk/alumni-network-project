@@ -44,11 +44,29 @@ function escapeHtml(value: string): string {
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+/**
+ * Which kind of mail this is.
+ *
+ * `transactional` - resets, confirmations, invitations, approvals: one person,
+ * something they asked for or need. From alumni@dpmschools.com.
+ *
+ * `broadcast` - the same message to many (a newsletter, a reunion). Not sent
+ * yet, but the shape is here so it is an addition when it comes, not a
+ * rewrite: it must come from a separate sender (BROADCAST_FROM, on its own
+ * verified subdomain, so complaints about bulk mail never touch the
+ * reputation that password resets travel on) and must carry a one-click
+ * unsubscribe, which Gmail requires of bulk senders.
+ */
+export type MailStream = 'transactional' | 'broadcast';
+
 export async function sendMail(message: {
   to: string | string[];
   subject: string;
   html: string;
   text: string;
+  stream?: MailStream;
+  /** Required for a broadcast: the one-click unsubscribe address. */
+  unsubscribeUrl?: string;
 }): Promise<MailResult> {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) return { sent: false, reason: 'not-configured' };
@@ -56,7 +74,11 @@ export async function sendMail(message: {
   const to = (Array.isArray(message.to) ? message.to : [message.to]).map((t) => t.trim()).filter(Boolean);
   if (to.length === 0 || !to.every((t) => EMAIL_RE.test(t))) return { sent: false, reason: 'bad-recipient' };
 
-  const from = fromHeader();
+  const stream = message.stream ?? 'transactional';
+  const broadcastFrom = process.env.BROADCAST_FROM;
+  // A broadcast never falls back to the transactional sender.
+  if (stream === 'broadcast' && (!broadcastFrom || !message.unsubscribeUrl)) return { sent: false, reason: 'not-configured' };
+  const from = stream === 'broadcast' ? broadcastFrom! : fromHeader();
   try {
     const res = await fetch(`${RESEND_API}/emails`, {
       method: 'POST',
@@ -69,6 +91,13 @@ export async function sendMail(message: {
         subject: message.subject,
         html: message.html,
         text: message.text,
+        tags: [{ name: 'stream', value: stream }],
+        ...(stream === 'broadcast' ? {
+          headers: {
+            'List-Unsubscribe': `<${message.unsubscribeUrl}>`,
+            'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+          },
+        } : {}),
       }),
     });
     if (!res.ok) {
@@ -157,6 +186,22 @@ export function passwordResetEmail(fullName: string | null, link: string) {
       footnote: "Didn't ask for this? You can ignore this email — your password stays the same.",
     }),
     text: `Hi ${(fullName ?? '').trim().split(/\s+/)[0] || 'there'},\n\nSomeone asked to reset the password for your Veveaham Alumni account. If that was you, open this link (it works once and expires in an hour):\n\n${link}\n\nDidn't ask for this? Ignore this email and your password stays the same.`,
+  };
+}
+
+/** The Today page's "Send a test email": proves the whole path, SPF to inbox. */
+export function testEmail() {
+  return {
+    subject: 'Test email from the Veveaham Alumni site',
+    html: layout({
+      preheader: 'If this arrived in your inbox, email from the site is working.',
+      heading: 'Email is working',
+      paragraphs: [
+        'This is a test from the admin dashboard. If it reached your inbox (not spam), password resets, invitations and alerts will too.',
+        'To check the domain is authenticated, open this message in Gmail, choose ⋮ → Show original, and look for SPF, DKIM and DMARC: PASS.',
+      ],
+    }),
+    text: 'This is a test from the Veveaham Alumni admin dashboard. If it reached your inbox, email from the site is working. In Gmail, Show original should read SPF, DKIM and DMARC: PASS.',
   };
 }
 
@@ -269,6 +314,8 @@ export function adminNewRegistrationEmail(r: {
 
 /* ── Health ─────────────────────────────────────────────────────────────── */
 
+export type RecordState = 'ok' | 'missing' | 'wrong' | 'unknown';
+
 export type MailHealth = {
   apiKeySet: boolean;
   from: string;
@@ -276,14 +323,57 @@ export type MailHealth = {
   domainStatus: 'verified' | 'pending' | 'not-added' | 'unknown';
   adminAlertsTo: boolean;
   hint: string;
+  /** What the domain's DNS says, read publicly - so the Today page can name what is missing. */
+  records: { spf: RecordState; googleDkim: RecordState; resendDkim: RecordState; dmarc: RecordState; detail: string[] };
 };
+
+/** TXT records for a name, over DNS-over-HTTPS (Cloudflare). Null when the lookup failed. */
+async function txt(name: string): Promise<string[] | null> {
+  try {
+    const res = await fetch(`https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(name)}&type=TXT`, {
+      headers: { accept: 'application/dns-json' }, cache: 'no-store',
+    });
+    if (!res.ok) return null;
+    const body = (await res.json()) as { Answer?: { type: number; data: string }[] };
+    return (body.Answer ?? []).filter((a) => a.type === 16).map((a) => a.data.replace(/^"|"$/g, '').replace(/"\s*"/g, ''));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * SPF, DKIM (Google's and Resend's) and DMARC for the sending domain. Only
+ * one SPF record may exist, and it must let Google send; Resend's return path
+ * lives on its own subdomain and needs no change to it.
+ */
+async function domainRecords(domain: string): Promise<MailHealth['records']> {
+  const [root, google, resend, dmarc] = await Promise.all([
+    txt(domain), txt(`google._domainkey.${domain}`), txt(`resend._domainkey.${domain}`), txt(`_dmarc.${domain}`),
+  ]);
+  const detail: string[] = [];
+  const spfs = root?.filter((r) => /^v=spf1/i.test(r)) ?? [];
+  const spf: RecordState = root === null ? 'unknown'
+    : spfs.length === 0 ? 'missing'
+      : spfs.length > 1 || !/include:_spf\.google\.com/i.test(spfs[0]) ? 'wrong' : 'ok';
+  if (spf === 'missing') detail.push(`No SPF record on ${domain} (v=spf1 include:_spf.google.com ~all).`);
+  if (spf === 'wrong') detail.push(spfs.length > 1 ? `${domain} has ${spfs.length} SPF records; only one is allowed.` : 'The SPF record does not include Google.');
+  const has = (rows: string[] | null, re: RegExp): RecordState => (rows === null ? 'unknown' : rows.some((r) => re.test(r)) ? 'ok' : 'missing');
+  const googleDkim = has(google, /v=DKIM1/i);
+  const resendDkim = has(resend, /p=/i);
+  const dm = has(dmarc, /^v=DMARC1/i);
+  if (googleDkim === 'missing') detail.push('Google Workspace DKIM (google._domainkey) is not published — generate it in the Admin console.');
+  if (resendDkim === 'missing') detail.push('Resend DKIM (resend._domainkey) is not published.');
+  if (dm === 'missing') detail.push(`No DMARC record (_dmarc.${domain}).`);
+  return { spf, googleDkim, resendDkim, dmarc: dm, detail };
+}
 
 /** What an admin needs to know about email, without exposing any secret. */
 export async function mailHealth(): Promise<MailHealth> {
   const from = fromHeader();
   const domain = addressOf(from).split('@')[1] ?? '';
   const apiKey = process.env.RESEND_API_KEY;
-  const base = { apiKeySet: !!apiKey, from, domain, adminAlertsTo: !!process.env.ADMIN_EMAIL };
+  const records = domain ? await domainRecords(domain) : { spf: 'unknown' as const, googleDkim: 'unknown' as const, resendDkim: 'unknown' as const, dmarc: 'unknown' as const, detail: [] };
+  const base = { apiKeySet: !!apiKey, from, domain, adminAlertsTo: !!process.env.ADMIN_EMAIL, records };
 
   if (!apiKey) {
     return { ...base, domainStatus: 'unknown', hint: 'RESEND_API_KEY is not set in Vercel, so no email can be sent.' };

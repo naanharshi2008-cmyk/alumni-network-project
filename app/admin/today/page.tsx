@@ -52,7 +52,27 @@ export default function TodayPage() {
   const { lastVisit, refreshCounts } = useAdminShell();
   const [data, setData] = useState<TodayData>(FALLBACK);
   const [loading, setLoading] = useState(true);
-  const [mail, setMail] = useState<{ domainStatus: string; hint: string } | null>(null);
+  const [mail, setMail] = useState<{
+    domainStatus: string; hint: string; domain: string; from: string;
+    records?: { spf: string; googleDkim: string; resendDkim: string; dmarc: string; detail: string[] };
+  } | null>(null);
+  const [testTo, setTestTo] = useState('');
+  const [testState, setTestState] = useState('');
+
+  async function sendTest() {
+    setTestState('Sending…');
+    const { data: session } = await supabase.auth.getSession();
+    if (!session.session) { setTestState('Your session expired — sign in again.'); return; }
+    const res = await fetch('/api/admin/mail-test', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', Authorization: `Bearer ${session.session.access_token}` },
+      body: JSON.stringify({ to: testTo }),
+    }).catch(() => null);
+    const body = res ? await res.json().catch(() => ({})) : {};
+    setTestState(!res ? 'Could not reach the server.'
+      : body.sent ? `Sent to ${body.to}. Check it arrived in the inbox, not spam — then Show original should say SPF, DKIM and DMARC: PASS.`
+        : body.error ?? `Not sent (${body.reason}${body.status ? `, ${body.status}` : ''}).`);
+  }
 
   const [undoing, setUndoing] = useState<number | null>(null);
   const [undoError, setUndoError] = useState('');
@@ -207,6 +227,27 @@ export default function TodayPage() {
             welcome emails and new-registration alerts are not delivered — use <em>Reset password</em>
             in People to help someone who is locked out.
           </p>
+        )}
+        {mail?.records && (
+          <div className="today__mail">
+            <p className="today__mail-head">
+              <strong>Email from {mail.from.replace(/.*<|>.*/g, '')}</strong>
+              {' · '}Resend: {mail.domainStatus === 'verified' ? '✓ verified' : mail.domainStatus.replace('-', ' ')}
+            </p>
+            <ul className="today__records">
+              {([['SPF', mail.records.spf], ['Google DKIM', mail.records.googleDkim], ['Resend DKIM', mail.records.resendDkim], ['DMARC', mail.records.dmarc]] as const).map(([name, st]) => (
+                <li key={name} className={`today__record today__record--${st}`}>{st === 'ok' ? '✓' : st === 'unknown' ? '?' : '✕'} {name}</li>
+              ))}
+            </ul>
+            {mail.records.detail.map((d) => <p key={d} className="hint" style={{ display: 'block', margin: '2px 0' }}>{d}</p>)}
+            <div className="today__test">
+              <input type="email" placeholder="Send a test to… (default: the office inbox)" value={testTo} onChange={(e) => setTestTo(e.target.value)} />
+              <button type="button" className="btn btn--ghost" onClick={() => void sendTest()}>
+                <span className="btn__inner">Send a test email</span>
+              </button>
+            </div>
+            {testState && <p className="hint" style={{ display: 'block', marginTop: 6 }}>{testState}</p>}
+          </div>
         )}
         {health.length === 0 && (!mail || mail.domainStatus === 'verified') ? (
           <p className="subtitle" style={{ margin: 0, fontSize: '0.88rem' }}>Nothing needs attention.</p>

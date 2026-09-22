@@ -178,6 +178,18 @@ for (const [view, forbidden] of [
   else pass('public_alumni carries no import, invite or gap-year bookkeeping');
 }
 
+// 9. Migration 20: public_alumni carries bands, not the numbers behind them.
+{
+  const edges = new Set(['100', '500', '1000', '5000', '10000', '25000', '50000', '100000', '100001']);
+  const floors = new Set(['0', '50', '60', '70', '80', '85', '90', '95']);
+  const { body } = await get('/public_alumni?select=admission_rank,board_marks');
+  const rows = Array.isArray(body) ? body : [];
+  const ranks = rows.filter((r) => r.admission_rank != null && !edges.has(String(r.admission_rank))).length;
+  const marks = rows.filter((r) => r.board_marks != null && !floors.has(String(r.board_marks))).length;
+  if (ranks || marks) fail(`public_alumni still publishes ${ranks} exact rank(s) and ${marks} exact mark(s) — is migration 20 applied?`);
+  else pass('public_alumni publishes rank and marks bands only');
+}
+
 console.log(
   failures === 0
     ? '\n\x1b[32mAll checks passed.\x1b[0m The public API no longer exposes contact details.\n'
