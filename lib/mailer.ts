@@ -1,12 +1,20 @@
 import 'server-only';
+import { GMAIL_SEND, googleConfigured, googleSubject, googleToken } from './googleAuth';
 import { siteOrigin } from './site';
 
 /**
  * Every email the site sends, in one place.
  *
- * Sends through Resend. Mail comes from the school's own address,
- * alumni@dpmschools.com, which only works once dpmschools.com is verified in
- * Resend - until then Resend refuses every recipient except the account owner.
+ * Two ways out, and the site uses whichever is configured:
+ *
+ * 1. The school's own Google Workspace mailbox, alumni@dpmschools.com, through
+ *    the Gmail API as a service account the Workspace admin has allowed
+ *    (lib/googleAuth.ts). This needs NO DNS record of any kind - the mail
+ *    leaves Google exactly as the office's own mail does - which is why it is
+ *    preferred: the domain's DNS is held by the school's ERP provider.
+ * 2. Resend, when a key is set and Workspace is not. Needs the domain verified
+ *    in Resend, which needs DNS records.
+ *
  * Nothing here may ever throw into a caller: a mail failure must not break a
  * registration, an approval or a password reset request. Failures are returned
  * as values and logged, and /api/admin/mail-health makes them visible.
@@ -19,7 +27,88 @@ export type MailResult =
   | { sent: true }
   // 'rate-limited' is its own answer because it is the one failure that is
   // not a fault: the free plan sends 100 a day, and the rest go tomorrow.
-  | { sent: false; reason: 'not-configured' | 'provider-error' | 'network-error' | 'bad-recipient' | 'rate-limited'; status?: number };
+  | { sent: false; reason: 'not-configured' | 'provider-error' | 'network-error' | 'bad-recipient' | 'rate-limited' | 'not-delegated'; status?: number };
+
+/** Which way out the site is set up to use. */
+export type MailTransport = 'workspace' | 'resend' | 'none';
+
+export function mailTransport(): MailTransport {
+  const forced = (process.env.MAIL_TRANSPORT ?? '').toLowerCase();
+  if (forced === 'resend') return process.env.RESEND_API_KEY ? 'resend' : 'none';
+  if (forced === 'workspace') return googleConfigured() ? 'workspace' : 'none';
+  if (googleConfigured()) return 'workspace';
+  return process.env.RESEND_API_KEY ? 'resend' : 'none';
+}
+
+/** RFC 2047, so a subject with an em dash survives every mail client. */
+function encodeSubject(subject: string): string {
+  return /^[\x20-\x7E]*$/.test(subject) ? subject : `=?UTF-8?B?${Buffer.from(subject, 'utf8').toString('base64')}?=`;
+}
+
+/** The message as MIME: a plain-text part and an HTML one, as every mailer sends. */
+function mimeMessage(opts: {
+  from: string; to: string[]; subject: string; html: string; text: string; headers?: Record<string, string>;
+}): string {
+  const boundary = `veveaham-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  const extra = Object.entries(opts.headers ?? {}).map(([k, v]) => `${k}: ${v}\r\n`).join('');
+  return [
+    `From: ${opts.from}`,
+    `To: ${opts.to.join(', ')}`,
+    `Reply-To: ${addressOf(opts.from)}`,
+    `Subject: ${encodeSubject(opts.subject)}`,
+    'MIME-Version: 1.0',
+    `Content-Type: multipart/alternative; boundary="${boundary}"`,
+    extra.trimEnd(),
+    '',
+    `--${boundary}`,
+    'Content-Type: text/plain; charset="UTF-8"',
+    'Content-Transfer-Encoding: base64',
+    '',
+    Buffer.from(opts.text, 'utf8').toString('base64').replace(/(.{76})/g, '$1\r\n'),
+    `--${boundary}`,
+    'Content-Type: text/html; charset="UTF-8"',
+    'Content-Transfer-Encoding: base64',
+    '',
+    Buffer.from(opts.html, 'utf8').toString('base64').replace(/(.{76})/g, '$1\r\n'),
+    `--${boundary}--`,
+    '',
+  ].filter((line) => line !== undefined).join('\r\n');
+}
+
+/**
+ * Send as the school's own mailbox, through Gmail.
+ *
+ * Workspace allows about 2,000 recipients a day, which is more than a whole
+ * batch of leavers; over that Google answers 429 and the caller is told to
+ * come back tomorrow rather than shown a fault.
+ */
+async function sendViaWorkspace(message: {
+  to: string[]; subject: string; html: string; text: string; from: string; headers?: Record<string, string>;
+}): Promise<MailResult> {
+  const token = await googleToken([GMAIL_SEND]);
+  if ('error' in token) {
+    console.error('mailer: Google would not issue a token —', token.error);
+    return { sent: false, reason: /has not allowed/.test(token.error) ? 'not-delegated' : 'not-configured' };
+  }
+  const raw = Buffer.from(mimeMessage(message), 'utf8').toString('base64url');
+  try {
+    const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token.token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ raw }),
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      console.error('mailer: Gmail rejected a message', res.status, body);
+      const limited = res.status === 429 || /rateLimitExceeded|quota|limit/i.test(body);
+      return { sent: false, reason: limited ? 'rate-limited' : 'provider-error', status: res.status };
+    }
+    return { sent: true };
+  } catch (err) {
+    console.error('mailer: could not reach Gmail', err);
+    return { sent: false, reason: 'network-error' };
+  }
+}
 
 export function siteUrl(): string {
   return siteOrigin();
@@ -70,13 +159,28 @@ export async function sendMail(message: {
   /** Required for a broadcast: the one-click unsubscribe address. */
   unsubscribeUrl?: string;
 }): Promise<MailResult> {
-  const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey) return { sent: false, reason: 'not-configured' };
-
   const to = (Array.isArray(message.to) ? message.to : [message.to]).map((t) => t.trim()).filter(Boolean);
   if (to.length === 0 || !to.every((t) => EMAIL_RE.test(t))) return { sent: false, reason: 'bad-recipient' };
 
   const stream = message.stream ?? 'transactional';
+  const transport = mailTransport();
+
+  if (transport === 'workspace') {
+    // The From must be the mailbox the site is allowed to act as, or Gmail
+    // refuses it.
+    const name = fromHeader().replace(/\s*<[^>]*>\s*/, '').trim() || 'Veveaham Alumni';
+    return sendViaWorkspace({
+      to, subject: message.subject, html: message.html, text: message.text,
+      from: `${name} <${googleSubject()}>`,
+      headers: stream === 'broadcast' && message.unsubscribeUrl
+        ? { 'List-Unsubscribe': `<${message.unsubscribeUrl}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' }
+        : undefined,
+    });
+  }
+
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) return { sent: false, reason: 'not-configured' };
+
   const broadcastFrom = process.env.BROADCAST_FROM;
   // A broadcast never falls back to the transactional sender.
   if (stream === 'broadcast' && (!broadcastFrom || !message.unsubscribeUrl)) return { sent: false, reason: 'not-configured' };
@@ -321,10 +425,14 @@ export function adminNewRegistrationEmail(r: {
 export type RecordState = 'ok' | 'missing' | 'wrong' | 'unknown';
 
 export type MailHealth = {
+  /** Which way out is configured: the school's mailbox, Resend, or neither. */
+  transport: MailTransport;
+  /** Set when sending as the school's own mailbox. */
+  workspace?: { subject: string; ok: boolean; problem: string };
   apiKeySet: boolean;
   from: string;
   domain: string;
-  domainStatus: 'verified' | 'pending' | 'not-added' | 'unknown';
+  domainStatus: 'verified' | 'pending' | 'not-added' | 'unknown' | 'not-used';
   adminAlertsTo: boolean;
   hint: string;
   /** What the domain's DNS says, read publicly - so the Today page can name what is missing. */
@@ -376,11 +484,34 @@ export async function mailHealth(): Promise<MailHealth> {
   const from = fromHeader();
   const domain = addressOf(from).split('@')[1] ?? '';
   const apiKey = process.env.RESEND_API_KEY;
+  const transport = mailTransport();
   const records = domain ? await domainRecords(domain) : { spf: 'unknown' as const, googleDkim: 'unknown' as const, resendDkim: 'unknown' as const, dmarc: 'unknown' as const, detail: [] };
-  const base = { apiKeySet: !!apiKey, from, domain, adminAlertsTo: !!process.env.ADMIN_EMAIL, records };
+  const base = { transport, apiKeySet: !!apiKey, from, domain, adminAlertsTo: !!process.env.ADMIN_EMAIL, records };
+
+  // Sending as the school's own mailbox: no DNS is involved, so the only
+  // question is whether the Workspace admin has allowed it.
+  if (transport === 'workspace') {
+    const subject = googleSubject();
+    const token = await googleToken([GMAIL_SEND]);
+    const ok = 'token' in token;
+    const problem = 'error' in token ? token.error : '';
+    return {
+      ...base,
+      from: `${from.replace(/\s*<[^>]*>\s*/, '').trim() || 'Veveaham Alumni'} <${subject}>`,
+      domainStatus: 'not-used',
+      workspace: { subject, ok, problem },
+      hint: ok
+        ? (base.adminAlertsTo ? `Email is working, sent from ${subject}.` : `Email is working, but ADMIN_EMAIL is not set, so new-registration alerts have nowhere to go.`)
+        : problem,
+    };
+  }
 
   if (!apiKey) {
-    return { ...base, domainStatus: 'unknown', hint: 'RESEND_API_KEY is not set in Vercel, so no email can be sent.' };
+    return {
+      ...base, domainStatus: 'unknown',
+      hint: 'No way to send email is configured. Set GOOGLE_SERVICE_ACCOUNT_JSON in Vercel to send as the school’s own '
+        + 'mailbox (no DNS needed), or RESEND_API_KEY to send through Resend.',
+    };
   }
   try {
     const res = await fetch(`${RESEND_API}/domains`, { headers: { Authorization: `Bearer ${apiKey}` } });

@@ -53,7 +53,8 @@ export default function TodayPage() {
   const [data, setData] = useState<TodayData>(FALLBACK);
   const [loading, setLoading] = useState(true);
   const [mail, setMail] = useState<{
-    domainStatus: string; hint: string; domain: string; from: string;
+    domainStatus: string; hint: string; domain: string; from: string; transport?: string;
+    workspace?: { subject: string; ok: boolean; problem: string };
     records?: { spf: string; googleDkim: string; resendDkim: string; dmarc: string; detail: string[] };
   } | null>(null);
   const [testTo, setTestTo] = useState('');
@@ -221,7 +222,7 @@ export default function TodayPage() {
 
       <h2 className="today__h">Worth a look</h2>
       <div className="card today__health">
-        {mail && mail.domainStatus !== 'verified' && (
+        {mail && mail.domainStatus !== 'verified' && mail.domainStatus !== 'not-used' && (
           <p className="today__health-row today__health-row--warn">
             <strong>Email is not working yet.</strong> {mail.hint} Until it is, password resets,
             welcome emails and new-registration alerts are not delivered — use <em>Reset password</em>
@@ -232,8 +233,20 @@ export default function TodayPage() {
           <div className="today__mail">
             <p className="today__mail-head">
               <strong>Email from {mail.from.replace(/.*<|>.*/g, '')}</strong>
-              {' · '}Resend: {mail.domainStatus === 'verified' ? '✓ verified' : mail.domainStatus.replace('-', ' ')}
+              {' · '}
+              {mail.transport === 'workspace'
+                ? <>the school’s own Google mailbox: {mail.workspace?.ok ? '✓ working' : '✕ not allowed yet'}</>
+                : mail.transport === 'resend'
+                  ? <>Resend: {mail.domainStatus === 'verified' ? '✓ verified' : mail.domainStatus.replace('-', ' ')}</>
+                  : <>no sender configured</>}
             </p>
+            {mail.workspace && !mail.workspace.ok && <p className="hint" style={{ display: 'block', margin: '2px 0' }}>{mail.workspace.problem}</p>}
+            {mail.transport === 'workspace' && (
+              <p className="hint" style={{ display: 'block', margin: '2px 0 8px' }}>
+                Mail leaves Google as this mailbox, so none of the records below are needed to send. They are worth
+                publishing anyway: they make every message the school sends more trusted.
+              </p>
+            )}
             <ul className="today__records">
               {([['SPF', mail.records.spf], ['Google DKIM', mail.records.googleDkim], ['Resend DKIM', mail.records.resendDkim], ['DMARC', mail.records.dmarc]] as const).map(([name, st]) => (
                 <li key={name} className={`today__record today__record--${st}`}>{st === 'ok' ? '✓' : st === 'unknown' ? '?' : '✕'} {name}</li>
@@ -249,7 +262,7 @@ export default function TodayPage() {
             {testState && <p className="hint" style={{ display: 'block', marginTop: 6 }}>{testState}</p>}
           </div>
         )}
-        {health.length === 0 && (!mail || mail.domainStatus === 'verified') ? (
+        {health.length === 0 && (!mail || mail.domainStatus === 'verified' || mail.workspace?.ok) ? (
           <p className="subtitle" style={{ margin: 0, fontSize: '0.88rem' }}>Nothing needs attention.</p>
         ) : (
           health.map((h) => (
