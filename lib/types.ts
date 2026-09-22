@@ -113,7 +113,8 @@ const DEGREE_CATEGORY: Record<string, CategoryKey> = {
   bba: 'management', bhm: 'management',
   ba: 'humanities', bsw: 'humanities',
   bed: 'education',
-  llb: 'law', balb: 'law', bballb: 'law',
+  // Keys are normDegree() of the degree: "BA LLB" becomes ballb, not balb.
+  llb: 'law', ballb: 'law', bballb: 'law',
   // BVoc and Diploma say nothing about the area, so they are deliberately absent.
 };
 

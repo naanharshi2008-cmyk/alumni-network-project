@@ -176,9 +176,13 @@ export default function AddAlumnus({ onAdded, setError }: { onAdded: () => Promi
         </label>
 
         <label className="add-alum__field add-alum__field--wide">
-          <span>A note for the office (they never see this)</span>
+          {/* This field is school_note, which the profile page publishes as "A
+              note from Veveaham". It used to be labelled "for the office (they
+              never see this)" - the opposite of true. Private office notes get
+              their own table in migration 18. */}
+          <span>A note from Veveaham — shown on their public page once approved</span>
           <input type="text" value={note} maxLength={300} disabled={busy}
-            onChange={(e) => setNote(e.target.value)} placeholder="Where this came from, who to ask…" />
+            onChange={(e) => setNote(e.target.value)} placeholder="A line in the school's voice, if you have one" />
         </label>
       </div>
 

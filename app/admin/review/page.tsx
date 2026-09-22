@@ -322,7 +322,11 @@ export default function ReviewPage() {
           break;
         case 'a':
           if (busy) return;
-          if (current.kind === 'registration') { e.preventDefault(); void approveRegistration(current.person); }
+          if (current.kind === 'registration') {
+            e.preventDefault();
+            // The same rule as the button: nobody is published before they agree.
+            if (current.person.consent_given !== false) void approveRegistration(current.person);
+          }
           else if (current.kind === 'edit') {
             // The keyboard publishes the lot, which is what the ticks start as
             // - anything less is a judgement the keyboard should not make.
@@ -545,10 +549,17 @@ function PersonDetail({
       <div className="queue__actions">
         {item.kind === 'registration' ? (
           <>
-            <button type="button" className="btn btn--primary" disabled={busy}
+            {/* A school-started profile is published only once its owner has
+                agreed. Approving before that put a person in the directory who
+                had never seen their own page. */}
+            <button type="button" className="btn btn--primary" disabled={busy || person.consent_given === false}
+              title={person.consent_given === false ? 'They have not agreed yet — they need to sign in and confirm first.' : undefined}
               onClick={() => onApproveRegistration(person)}>
               <span className="btn__inner">✓ Approve</span>
             </button>
+            {person.consent_given === false && (
+              <span className="queue__held">Waiting for them to sign in and agree.</span>
+            )}
             <ConfirmAction
               label="✕ Reject" confirmLabel="Yes, reject" busyLabel="Rejecting…" wide
               question={<>Reject <strong>{person.full_name}</strong>? They stay out of the directory.</>}

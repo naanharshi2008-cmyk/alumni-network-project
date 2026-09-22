@@ -570,7 +570,11 @@ export default function ProfilePage() {
           reason={profile.approval_status === 'rejected' ? profile.rejection_reason : profile.review_note}
         />
 
-        {profile.seeded_by_school && profile.approval_status !== 'approved' && (
+        {/* Whenever consent is missing, not only before approval. A profile the
+            school approved before its owner signed in used to hide this box -
+            while saving still demanded it be ticked, so that person could never
+            save anything at all. */}
+        {profile.seeded_by_school && (
           <div className="welcome-card">
             <h2 className="welcome-card__title">The school started this for you</h2>
             <p>
