@@ -34,6 +34,7 @@ import {
 import { branchVocab, canonicalBranch, examVocab } from '../../lib/forms/vocab';
 import { handleFromStored, parseLinkedIn } from '../../lib/linkedin';
 import { examAreas } from '../../lib/exams';
+import ShareCard from '../../lib/ShareCard';
 
 interface AlumnusData {
   id: string;
@@ -183,7 +184,6 @@ export default function ProfilePage() {
   const [notice, setNotice] = useState<{ welcome: boolean; unsaved: string[]; passwordUpdated: boolean }>({
     welcome: false, unsaved: [], passwordUpdated: false,
   });
-  const [inviteCopied, setInviteCopied] = useState(false);
 
   // Read once, then drop them from the address bar so a refresh or a shared
   // link doesn't show "Welcome" again.
@@ -772,27 +772,10 @@ export default function ProfilePage() {
           </div>
         )}
 
+        {/* The end of registration: a card to bring the rest of the batch.
+            The link names them, so a friend is greeted with who sent it. */}
         {notice.welcome && (
-          <div className="welcome-card">
-            <h2 className="welcome-card__title">You&apos;re in, {profile.full_name.split(' ')[0]} 🎉</h2>
-            <p>
-              The school will review your profile before it appears in the directory.
-              Sign in any time with your email or phone number to add to it.
-            </p>
-            <button
-              type="button"
-              className="btn btn--ghost"
-              onClick={async () => {
-                try {
-                  await navigator.clipboard.writeText(`${window.location.origin}/register`);
-                  setInviteCopied(true);
-                  setTimeout(() => setInviteCopied(false), 2000);
-                } catch { /* clipboard needs permission; the link is simple to type */ }
-              }}
-            >
-              <span className="btn__inner">{inviteCopied ? '✓ Link copied' : 'Invite a batchmate'}</span>
-            </button>
-          </div>
+          <ShareCard slug={profile.public_slug || null} firstName={profile.full_name.split(' ')[0]} prominent />
         )}
         {notice.unsaved.length > 0 && (
           <div className="alert alert--error">
@@ -1117,6 +1100,12 @@ export default function ProfilePage() {
             />
             <span className="hint">Shown on your page, with what you have to say — juniors choosing a college read this.</span>
           </div>
+
+          {!notice.welcome && (
+            <div style={{ marginTop: 24 }}>
+              <ShareCard slug={profile.public_slug || null} firstName={profile.full_name.split(' ')[0]} />
+            </div>
+          )}
 
           <button type="submit" disabled={saving} className="btn btn--neutral btn--lg btn--block" style={{ marginTop: 24 }}>
             <span className="btn__inner">

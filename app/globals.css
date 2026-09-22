@@ -2704,3 +2704,18 @@ a.xcollege__thumb:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--rin
 /* A college page's "also offered a seat here". */
 .cpage__offered { display: grid; gap: 4px; }
 .cpage__offered-how { font-size: 0.78rem; color: var(--text-faint); padding-left: 4px; }
+
+/* The share card: the end of registration, and a smaller copy on the profile. */
+.share-card {
+  padding: 16px 18px; border-radius: var(--r); border: 1px solid rgba(242, 195, 78, 0.28);
+  background: rgba(242, 195, 78, 0.06); margin: 0 0 18px;
+}
+.share-card--big { padding: 20px 22px; }
+.share-card__title { margin: 0 0 8px; font-size: 1.25rem; }
+.share-card__lead { margin: 0 0 10px; font-size: 0.92rem; }
+.share-card__message {
+  margin: 12px 0; padding: 10px 14px; border-left: 3px solid var(--gold);
+  background: var(--surface-2); border-radius: 0 var(--r-sm) var(--r-sm) 0; color: var(--text-muted); font-size: 0.9rem;
+}
+.share-card__actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.share-card__link { margin: 10px 0 0; font-size: 0.78rem; color: var(--text-faint); overflow-wrap: anywhere; }
