@@ -112,7 +112,7 @@ const MIN_PASSWORD = 8;
 /*
  * Family & home comes before After 12th on purpose: it is short and dull, and
  * best asked while someone is still keen - so the form ends on the part that
- * rewards them, where they went and what they would tell a junior.
+ * rewards them: where they went, and a word for a junior.
  */
 const STEPS = [
   { title: 'You', blurb: "Your name, and the email or phone you'll sign in with." },

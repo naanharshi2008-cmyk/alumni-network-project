@@ -1,9 +1,9 @@
 'use client';
 
-import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { isSupabaseConfigured } from '../../lib/supabaseClient';
-import { fetchApprovedAlumni, fetchTimelines } from '../../lib/publicData';
+import { fetchApprovedAlumni, fetchPathExtras, fetchTimelines } from '../../lib/publicData';
 import { useDebounced } from '../../lib/useDebounced';
 import { clearDirectoryView, readDirectoryView, rememberDirectoryView, type DirectorySnapshot } from './viewState';
 import { boardForSchool, officialSchoolName, SCHOOLS } from '../../lib/options';
@@ -11,8 +11,9 @@ import { isExamRoute, routeLabel, routeParamLabel, routePhrase } from '../../lib
 import { AdmissionBadges, Row } from '../../lib/profileParts';
 import { formatRankBand, formatMarksBand, formatRankSpan, formatMonthYear } from '../../lib/text';
 import { buildSearchDoc, searchItems, type SearchDoc } from '../../lib/search';
-import { collegeTintKey, instituteInitials, instituteTint, profileHref } from '../../lib/showcase';
+import { collegeTintKey, instituteInitials, instituteTint, profileHref, shortInstituteName } from '../../lib/showcase';
 import {
+  type PathExtras,
   Alumnus,
   CATEGORIES,
   CollegeDetails,
@@ -44,11 +45,6 @@ const SENIOR_PREVIEW = 6;
 type Timelines = { studies: Record<string, HigherStudy[]>; work: Record<string, WorkExperience[]> };
 
 /* ── Batch/year grouping helpers ─────────────────────────────────────────── */
-// Schools render in the official order, with anything unrecognised last.
-function schoolRank(name: string | null): number {
-  const idx = (SCHOOLS as readonly string[]).indexOf(officialSchoolName(name));
-  return idx === -1 ? SCHOOLS.length : idx;
-}
 
 function groupByYear(items: EnrichedAlumnus[]): Map<number | null, EnrichedAlumnus[]> {
   const map = new Map<number | null, EnrichedAlumnus[]>();
@@ -60,17 +56,9 @@ function groupByYear(items: EnrichedAlumnus[]): Map<number | null, EnrichedAlumn
   return new Map([...map.entries()].sort((a, b) => (b[0] ?? 0) - (a[0] ?? 0)));
 }
 
-// Within a year, split further by school so the directory reads
-// "Class of 2024 -> Girls -> [cards] -> Prime Academy -> [cards]".
-function groupBySchool(items: EnrichedAlumnus[]): [string, EnrichedAlumnus[]][] {
-  const map = new Map<string, EnrichedAlumnus[]>();
-  for (const item of items) {
-    const school = officialSchoolName(item.a.school_name) || 'Other';
-    if (!map.has(school)) map.set(school, []);
-    map.get(school)!.push(item);
-  }
-  return [...map.entries()].sort((a, b) => schoolRank(a[0]) - schoolRank(b[0]));
-}
+// A year is one group. It used to split again by school - "Class of 2024 ->
+// Girls -> Prime Academy" - and the owner asked for that to go (Round 10):
+// the path is the grouping that matters, and Pathways is where it lives.
 
 /* ── College Explorer model ─────────────────────────────────────────────── */
 // The Explorer used to fetch the whole `colleges` table (47,000 rows, silently
@@ -169,7 +157,9 @@ function matchesFilters(item: EnrichedAlumnus, filters: Filters, except?: Filter
 // word "quota" is never what finds anyone, and the college state is included so the
 // home page's "Where they studied" cards land on real results. Institutes
 // carry their aliases, so "IITM" finds everyone at IIT Madras.
-function searchDocOf(a: Alumnus): SearchDoc {
+// Offers not taken and exams written are searchable too: "VIT Chennai" finds
+// everyone who had a seat there, not only the ones who took it.
+function searchDocOf(a: Alumnus, extras?: PathExtras): SearchDoc {
   const college = collegeDetailsOf(a);
   return buildSearchDoc({
     people: [a.full_name],
@@ -177,8 +167,10 @@ function searchDocOf(a: Alumnus): SearchDoc {
       college?.name, ...(college?.aliases ?? []), a.college_name_raw,
       a.organization?.name, ...(a.organization?.aliases ?? []),
       a.currently_at, a.professional_org,
+      ...(extras?.admits ?? []).flatMap((d) => [d.college?.name, ...(d.college?.aliases ?? []), d.college_name_raw]),
     ],
     other: [
+      ...(extras?.attempts ?? []).map((t) => t.exam),
       a.degree, a.branch, a.field, a.designation, a.stream, officialSchoolName(a.school_name),
       a.professional_course, a.professional_stage,
       routeLabel(a), a.admission_rank,
@@ -252,6 +244,7 @@ export default function DirectoryPage() {
   const [filters, setFilters] = useState<Filters>(NO_FILTERS);
   const [lens, setLens] = useState<Lens>('batch');
   const [timelines, setTimelines] = useState<Timelines>({ studies: {}, work: {} });
+  const [extras, setExtras] = useState<Record<string, PathExtras>>({});
   // Username from a shared ?p= link, held until the fetch resolves it.
 
   // Honour /directory?cat=medicine from the home-page chips. Read once on
@@ -288,8 +281,8 @@ export default function DirectoryPage() {
       if (truncated) setCapped(everyone ?? 0);
 
       const ids = data.map((a) => a.id).filter(Boolean) as string[];
-      const t = await fetchTimelines(ids);
-      if (!cancelled) setTimelines(t);
+      const [t, x] = await Promise.all([fetchTimelines(ids), fetchPathExtras(ids)]);
+      if (!cancelled) { setTimelines(t); setExtras(x); }
     })();
     return () => { cancelled = true; };
   }, []);
@@ -303,9 +296,10 @@ export default function DirectoryPage() {
   // Built once per load, not per keystroke.
   const searchDocs = useMemo(() => {
     const docs = new WeakMap<Alumnus, SearchDoc>();
-    for (const { a } of enriched) docs.set(a, searchDocOf(a));
+    for (const { a } of enriched) docs.set(a, searchDocOf(a, extras[a.id ?? '']));
     return docs;
-  }, [enriched]);
+  }, [enriched, extras]);
+
 
   // Searched but not yet filtered - the base every facet count is measured
   // against, so typing in the search box updates the numbers too.
@@ -313,6 +307,28 @@ export default function DirectoryPage() {
     () => searchItems(enriched, ({ a }) => searchDocs.get(a)!, settledQuery),
     [enriched, searchDocs, settledQuery],
   );
+
+  // Why a card is in the results, when it is not for anything the card shows:
+  // an offer they did not take, or an exam they wrote.
+  const whyById = useMemo(() => {
+    const out = new Map<string, string>();
+    if (!settledQuery.trim()) return out;
+    for (const { a } of searched) {
+      const x = a.id ? extras[a.id] : undefined;
+      if (!x || searchItems([a], (p) => searchDocOf(p), settledQuery).results.length) continue;
+      const offer = x.admits.find((d) => searchItems([d], (o) => buildSearchDoc({
+        people: [], institutes: [o.college?.name, ...(o.college?.aliases ?? []), o.college_name_raw], other: [],
+      }), settledQuery).results.length);
+      if (offer) {
+        const name = offer.college?.name ? shortInstituteName(offer.college.name, offer.college.aliases ?? []) : offer.college_name_raw;
+        out.set(a.id!, `Had an offer at ${name}`);
+        continue;
+      }
+      const exam = x.attempts.find((t) => searchItems([t], (e) => buildSearchDoc({ people: [], institutes: [], other: [e.exam] }), settledQuery).results.length);
+      if (exam) out.set(a.id!, `Wrote ${exam.exam}`);
+    }
+    return out;
+  }, [searched, extras, settledQuery]);
 
   const filtered = useMemo(
     () => searched.filter((item) => matchesFilters(item, filters)),
@@ -466,6 +482,7 @@ export default function DirectoryPage() {
 
   return (
     <ViewContext.Provider value={view}>
+    <WhyContext.Provider value={whyById}>
     <div className="container container--wide">
       <div className="fade-up">
         <h1>Alumni Network</h1>
@@ -567,18 +584,7 @@ export default function DirectoryPage() {
             count={items.length}
             defaultOpen={gi < OPEN_GROUPS}
           >
-            {groupBySchool(items).map(([school, schoolItems]) => (
-              <div key={school} style={{ marginBottom: 24 }}>
-                <h3 className="school-head">
-                  🏫 {school}
-                  <span className="school-head__count">{schoolItems.length}</span>
-                </h3>
-                <PagedGrid
-                  items={schoolItems}
-                  signature={`${year}|${school}|${filterSignature}`}
-                />
-              </div>
-            ))}
+            <PagedGrid items={items} signature={`${year}|${filterSignature}`} />
           </GroupSection>
         ))
       ) : lens === 'college' ? (
@@ -632,6 +638,7 @@ export default function DirectoryPage() {
       )}
 
     </div>
+    </WhyContext.Provider>
     </ViewContext.Provider>
   );
 }
@@ -964,9 +971,13 @@ function CollegeExplorerCard({
 /* ─────────────────────────────────────────────────────────────────────────
    Alumnus Card (Directory tab)
 ───────────────────────────────────────────────────────────────────────── */
+/** Why each result matched, when it was not for anything the card shows. */
+const WhyContext = createContext<Map<string, string>>(new Map());
+
 function Card({ item }: { item: EnrichedAlumnus }) {
   const remember = useRemember();
   const { a, cat } = item;
+  const why = useContext(WhyContext).get(a.id ?? '');
   const college = collegeNameOf(a) ?? a.college_name_raw;
   const collegeDet = collegeDetailsOf(a);
   const tintKey = collegeTintKey(a);
@@ -990,6 +1001,7 @@ function Card({ item }: { item: EnrichedAlumnus }) {
           </div>
         </div>
       </div>
+      {why && <p className="a-card__why">🔎 {why}</p>}
 
       <div className="badge-row">
         <span className="badge">
@@ -1013,10 +1025,8 @@ function Card({ item }: { item: EnrichedAlumnus }) {
         />
       ) : null}
 
-      {/* No "School" row here on purpose: these cards are already grouped under
-          a school heading, and repeating the full official name cost two
-          wrapped lines on every card. The modal still shows it, since a profile
-          opened on its own has no grouping context. */}
+      {/* No "School" row: the full official name cost two wrapped lines on
+          every card, and the profile page says it. */}
       <div className="a-card__rows">
         {college && (
           <Row icon="🏛️" label="College">

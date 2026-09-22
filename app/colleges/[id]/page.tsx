@@ -5,9 +5,9 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { supabase } from '../../../lib/supabaseClient';
 import { fetchApprovedAlumni } from '../../../lib/publicData';
-import { routePhrase } from '../../../lib/admission';
+import { labelOfShape, routePhrase } from '../../../lib/admission';
 import { instituteInitials, instituteTint, shortInstituteName } from '../../../lib/showcase';
-import { Alumnus, collegeDetailsOf, collegeKeyer } from '../../../lib/types';
+import { Alumnus, collegeDetailsOf, collegeKeyer, type AdmissionKind } from '../../../lib/types';
 import PersonCard from '../../../lib/PersonCard';
 
 type College = {
@@ -40,6 +40,8 @@ export default function CollegePage() {
   const collegeId = String(useParams().id ?? '');
   const [college, setCollege] = useState<College | null>(null);
   const [seniors, setSeniors] = useState<Alumnus[]>([]);
+  // Seniors who were offered a seat here and went somewhere else (Round 10).
+  const [offered, setOffered] = useState<{ a: Alumnus; how: string | null }[]>([]);
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [mine, setMine] = useState<MyPhoto[]>([]);
   const [canContribute, setCanContribute] = useState(false);
@@ -55,7 +57,7 @@ export default function CollegePage() {
   const load = useCallback(async () => {
     if (!collegeId) { setState('missing'); return; }
 
-    const [{ data: row, error: rowErr }, alumniRes, { data: pics, error: picsErr }] = await Promise.all([
+    const [{ data: row, error: rowErr }, alumniRes, { data: pics, error: picsErr }, { data: admitRows }] = await Promise.all([
       supabase.from('colleges')
         .select('id, name, state, district, website, university_name, management_type, established_year, banner_url, logo_url, description')
         .eq('id', collegeId).maybeSingle(),
@@ -64,6 +66,7 @@ export default function CollegePage() {
         .select('id, url, caption, shared_by, shared_by_slug, shared_by_class')
         .eq('college_id', collegeId)
         .order('created_at', { ascending: false }),
+      supabase.from('public_admits').select('alumni_id, route_kind, exam, route_detail').eq('college_id', collegeId),
     ]);
 
     if (rowErr) { setState('error'); return; }
@@ -76,7 +79,14 @@ export default function CollegePage() {
     const all = (alumniRes.data ?? []) as Alumnus[];
     const keyOf = collegeKeyer(all);
     setSeniorsError(alumniRes.error);
-    setSeniors(all.filter((a) => keyOf(a) === `id:${collegeId}`));
+    const here = all.filter((a) => keyOf(a) === `id:${collegeId}`);
+    setSeniors(here);
+    const hereIds = new Set(here.map((a) => a.id));
+    const byId = new Map(all.map((a) => [a.id, a]));
+    const seen = new Set<string>();
+    setOffered(((admitRows ?? []) as { alumni_id: string; route_kind: AdmissionKind | null; exam: string | null; route_detail: string | null }[])
+      .filter((d) => byId.has(d.alumni_id) && !hereIds.has(d.alumni_id) && !seen.has(d.alumni_id) && (seen.add(d.alumni_id), true))
+      .map((d) => ({ a: byId.get(d.alumni_id)!, how: labelOfShape({ kind: d.route_kind, exam: d.exam, detail: d.route_detail }) })));
     // A gallery that failed to load and a gallery with nothing in it looked
     // identical - both said "No photos yet", which invites nobody to fix it.
     setPhotosError(picsErr?.message ?? '');
@@ -223,6 +233,25 @@ export default function CollegePage() {
           </>
         )}
       </section>
+
+      {/* Offered a seat here, and chose somewhere else: the most useful thing
+          on the site for a junior choosing between two colleges. */}
+      {offered.length > 0 && (
+        <section className="cpage__section">
+          <h2>Also offered a seat here</h2>
+          <p className="lens-note">
+            {offered.length} {offered.length === 1 ? 'senior' : 'seniors'} had an offer from {label} and chose another college.
+          </p>
+          <div className="cpage__seniors">
+            {offered.map(({ a, how }) => (
+              <div key={a.id} className="cpage__offered">
+                <PersonCard a={a} size="md" />
+                {how && <span className="cpage__offered-how">offered via {how}</span>}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {college.description && (
         <section className="cpage__section">

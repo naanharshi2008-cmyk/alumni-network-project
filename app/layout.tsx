@@ -81,6 +81,7 @@ function Footer() {
             <h2 className="footer__col-title">Explore</h2>
             <Link href="/">Home</Link>
             <Link href="/directory">Directory</Link>
+            <Link href="/pathways">Pathways</Link>
             <Link href="/colleges">Colleges</Link>
           </div>
           <div className="footer__col">

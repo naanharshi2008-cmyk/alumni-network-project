@@ -7,7 +7,7 @@
 // view, which simply does not contain those columns (see schema_v2.sql).
 
 import { supabase, isSupabaseConfigured } from './supabaseClient';
-import type { Alumnus, HigherStudy, PathExtras, PublicAdmit, PublicExamAttempt, PublicGapYear, WorkExperience } from './types';
+import type { Alumnus, CategoryKey, HigherStudy, PathExtras, PublicAdmit, PublicExamAttempt, PublicGapYear, WorkExperience } from './types';
 import { collegeDetailsOf } from './types';
 import { normaliseOptionValue } from './options';
 import { collegeLabel } from './showcase';
@@ -195,6 +195,47 @@ export async function fetchPathExtras(alumniIds: string[]): Promise<Record<strin
     for (const r of gaps) slot(r.alumni_id).gapYears.push(r);
   }
   return out;
+}
+
+/**
+ * Everything the Pathways pages count: every listed person (a card's worth),
+ * every exam written, every offer not taken, each exam's areas, and how many
+ * are preparing again per area. Paged through PostgREST's 1,000-row cap.
+ */
+export async function fetchPathwaysData(): Promise<{
+  alumni: Alumnus[];
+  attempts: Pick<PublicExamAttempt, 'alumni_id' | 'exam' | 'gave_admit' | 'got_seat'>[];
+  admits: Pick<PublicAdmit, 'alumni_id' | 'degree' | 'branch' | 'route_kind' | 'exam' | 'route_detail'>[];
+  examAreas: Record<string, CategoryKey[]>;
+  preparing: { area: string; preparing: number }[];
+}> {
+  const empty = { alumni: [], attempts: [], admits: [], examAreas: {}, preparing: [] };
+  if (!isSupabaseConfigured) return empty;
+  async function all<T>(view: string, select: string): Promise<T[]> {
+    const rows: T[] = [];
+    for (let from = 0; ; from += 1000) {
+      const { data, error } = await supabase.from(view).select(select).order('id').range(from, from + 999);
+      if (error || !data) break;
+      rows.push(...(data as T[]));
+      if (data.length < 1000) break;
+    }
+    return rows;
+  }
+  const [alumni, attempts, admits, options, preparing] = await Promise.all([
+    all<Alumnus>('public_alumni', `${PUBLIC_ALUMNI_CARD_SELECT}, branch, professional_course`),
+    all<PublicExamAttempt>('public_exam_attempts', 'id, alumni_id, exam, gave_admit, got_seat'),
+    all<PublicAdmit>('public_admits', 'id, alumni_id, degree, branch, route_kind, exam, route_detail'),
+    supabase.from('field_options').select('value, areas').eq('category', 'exam').eq('status', 'approved').is('canonical_value', null),
+    supabase.rpc('pathway_preparing_counts'),
+  ]);
+  const examAreas: Record<string, CategoryKey[]> = {};
+  for (const o of (options.data as { value: string; areas: CategoryKey[] | null }[]) ?? []) {
+    if (o.areas?.length) examAreas[o.value] = o.areas;
+  }
+  return {
+    alumni, attempts, admits, examAreas,
+    preparing: ((preparing.data as { area: string; preparing: number }[]) ?? []),
+  };
 }
 
 /** Just enough of every approved profile to build the sitemap. */

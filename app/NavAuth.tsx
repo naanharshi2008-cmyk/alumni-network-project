@@ -91,6 +91,7 @@ export default function NavAuth() {
   const links = (
     <>
       <NavLink href="/directory">Directory</NavLink>
+      <NavLink href="/pathways">Pathways</NavLink>
       <NavLink href="/colleges">Colleges</NavLink>
       <NavLink href="/about">About</NavLink>
       <span className="nav__sep" aria-hidden />

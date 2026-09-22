@@ -85,6 +85,7 @@ export default function HomeGalleries({ alumni }: { alumni: Alumnus[] | null }) 
         <Gallery
           title="How they got in"
           sub="The entrance exams and routes seniors took."
+          more={{ href: '/pathways', label: 'Every pathway, by area →' }}
           cards={routes.map((r) => ({
             href: `/directory?q=${encodeURIComponent(r.label)}`,
             emoji: '📝',

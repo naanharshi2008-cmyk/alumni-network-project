@@ -1,5 +1,6 @@
 import type { MetadataRoute } from 'next';
-import { fetchSitemapRows } from '../lib/publicData';
+import { fetchPathwaysData, fetchSitemapRows } from '../lib/publicData';
+import { buildPathways } from '../lib/pathways';
 import { siteOrigin } from '../lib/site';
 
 /**
@@ -21,6 +22,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${origin}/`, lastModified: now, changeFrequency: 'daily', priority: 1 },
     { url: `${origin}/directory`, lastModified: now, changeFrequency: 'daily', priority: 0.9 },
     { url: `${origin}/colleges`, lastModified: now, changeFrequency: 'weekly', priority: 0.8 },
+    { url: `${origin}/pathways`, lastModified: now, changeFrequency: 'weekly', priority: 0.8 },
     { url: `${origin}/about`, lastModified: now, changeFrequency: 'yearly', priority: 0.5 },
     { url: `${origin}/register`, lastModified: now, changeFrequency: 'yearly', priority: 0.6 },
   ];
@@ -44,5 +46,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.7,
     }));
 
-  return [...statics, ...people, ...colleges];
+  // An area's page only when someone is in it: a page of nobody is thin content.
+  const areas: MetadataRoute.Sitemap = buildPathways(await fetchPathwaysData())
+    .filter((a) => a.pathways.length > 0)
+    .map((a) => ({ url: `${origin}/pathways/${a.key}`, lastModified: now, changeFrequency: 'weekly' as const, priority: 0.7 }));
+
+  return [...statics, ...people, ...colleges, ...areas];
 }
