@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { supabase } from '../../../lib/supabaseClient';
 import { fetchApprovedAlumni } from '../../../lib/publicData';
-import { publicRouteLabel } from '../../../lib/options';
+import { routePhrase } from '../../../lib/admission';
 import { instituteInitials, instituteTint, shortInstituteName } from '../../../lib/showcase';
 import { Alumnus, collegeDetailsOf, collegeKeyer } from '../../../lib/types';
 import PersonCard from '../../../lib/PersonCard';
@@ -111,7 +111,7 @@ export default function CollegePage() {
   const shownSeniors = allSeniors ? seniors : seniors.slice(0, SENIORS_SHOWN);
   const place = college ? [college.district, college.state].filter(Boolean).join(', ') : '';
   const routes = useMemo(
-    () => Array.from(new Set(seniors.map((s) => publicRouteLabel(s.admission_route)).filter(Boolean) as string[])),
+    () => Array.from(new Set(seniors.map((s) => routePhrase(s)).filter(Boolean) as string[])),
     [seniors],
   );
 

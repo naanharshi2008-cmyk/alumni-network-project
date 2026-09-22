@@ -151,6 +151,33 @@ for (const table of ['higher_studies', 'work_experience']) {
   }
 }
 
+// 8. Migration 18: the new private tables are closed to anon, the new public
+//    views open and carrying bands only, and public_alumni has no bookkeeping.
+for (const table of ['exam_attempts', 'admits', 'gap_years', 'alumni_private', 'alumni_office_notes', 'import_batches']) {
+  const { status } = await get(`/${table}?select=*&limit=1`);
+  if (status === 200) fail(`anon can read ${table} — migration 18's REVOKE did not apply`);
+  else pass(`${table} is closed to anon (HTTP ${status})`);
+}
+for (const [view, forbidden] of [
+  ['public_exam_attempts', ['exam_rank', 'percentile']],
+  ['public_admits', ['added_by_school']],
+  ['public_gap_years', []],
+  ['public_seats', []],
+]) {
+  const { status, body } = await get(`/${view}?select=*&limit=5`);
+  if (status !== 200 || !Array.isArray(body)) { fail(`${view} is not readable (HTTP ${status})`); continue; }
+  const found = body.length ? forbidden.filter((c) => c in body[0]) : [];
+  if (found.length) fail(`${view} exposes ${found.join(', ')}`);
+  else pass(`${view} is readable and carries no exact score (${body.length} row(s) sampled)`);
+}
+{
+  const { body } = await get('/public_alumni?select=*&limit=1');
+  const bookkeeping = ['origin', 'import_key', 'import_batch_id', 'invited_by', 'in_gap_year', 'consent_given', 'approval_status'];
+  const found = Array.isArray(body) && body.length ? bookkeeping.filter((c) => c in body[0]) : [];
+  if (found.length) fail(`public_alumni exposes bookkeeping: ${found.join(', ')}`);
+  else pass('public_alumni carries no import, invite or gap-year bookkeeping');
+}
+
 console.log(
   failures === 0
     ? '\n\x1b[32mAll checks passed.\x1b[0m The public API no longer exposes contact details.\n'

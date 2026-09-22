@@ -32,12 +32,12 @@ export function Row({ icon, label, children }: { icon: string; label: string; ch
  * muted, underneath.
  */
 export function AdmissionBadges({ a }: { a: Alumnus }) {
-  const { route, score } = admissionFacts(a);
-  if (!route && !score) return null;
+  const { phrase, score } = admissionFacts(a);
+  if (!phrase && !score) return null;
 
   return (
     <div className="admission-row">
-      {route && <span className="badge badge--xs">via {route}</span>}
+      {phrase && <span className="badge badge--xs">via {phrase}</span>}
       {score && <span className="admission-row__score">{score}</span>}
     </div>
   );

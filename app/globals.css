@@ -951,6 +951,19 @@ textarea { min-height: 84px; resize: vertical; }
 /* Where the story starts: present, but plainly not an achievement. */
 .timeline__item--origin .timeline__dot { background: transparent; border-style: dashed; }
 .timeline__item--now .timeline__dot { border-color: var(--ok-border); background: var(--ok-bg); }
+/* A year out: part of the path, drawn as quietly as where it started. */
+.timeline__item--gap .timeline__dot { background: transparent; }
+/* The paths beside the one taken - other exams, offers not taken. Smaller
+   than the step, so the path pursued stays the thing you read. */
+.timeline__aside { margin-top: 6px; font-size: 0.85rem; color: var(--text-muted); }
+.timeline__aside-label {
+  display: block; font-size: 0.72rem; font-weight: 650; text-transform: uppercase;
+  letter-spacing: 0.04em; color: var(--text-faint); margin-bottom: 2px;
+}
+.timeline__aside ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.timeline__aside a { color: inherit; text-decoration: underline; text-decoration-color: var(--border-strong); text-underline-offset: 3px; }
+.timeline__aside a:hover { color: var(--gold); }
+.timeline__aside-meta { color: var(--text-faint); font-size: 0.8rem; }
 .timeline__now {
   margin-left: 8px; font-size: 0.68rem; font-weight: 700; text-transform: uppercase;
   letter-spacing: 0.04em; color: var(--ok-ink);
@@ -2277,7 +2290,7 @@ a.xcollege__thumb:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--rin
   display: block; font-size: 0.78rem; letter-spacing: 0.04em;
   text-transform: uppercase; color: var(--text-muted); margin-bottom: 6px;
 }
-.add-alum__field input, .add-alum__field select { width: 100%; }
+.add-alum__field input, .add-alum__field select, .add-alum__field textarea { width: 100%; }
 .add-alum__phone { display: flex; gap: 8px; }
 .add-alum__phone select { width: auto; flex: none; }
 .add-alum__check {
@@ -2296,6 +2309,7 @@ a.xcollege__thumb:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--rin
   margin-top: 12px; font-size: 0.9rem; cursor: pointer;
 }
 .seed-consent input { width: 16px; height: 16px; margin: 3px 0 0; flex: none; accent-color: var(--gold); }
+.seed-consent--done { color: var(--ok-ink); font-weight: 600; }
 
 /* Staged values that reach for a column the profile editor never sets. */
 .diff-unknown {

@@ -2,7 +2,7 @@ import { fetchAlumnusBySlug } from '../../../lib/publicData';
 import { renderProfileCard, OG_SIZE } from '../../../lib/og/card';
 import { FALLBACK_TINT, collegeLabel, collegeTintKey, instituteTint } from '../../../lib/showcase';
 import { initialsOf } from '../../../lib/types';
-import { publicRouteLabel } from '../../../lib/options';
+import { routeLabel } from '../../../lib/admission';
 
 /**
  * The card a WhatsApp group sees when somebody shares a senior.
@@ -34,7 +34,7 @@ export default async function Image({ params }: { params: Promise<{ slug: string
     name: person.full_name,
     classOf: person.class_of,
     college: collegeLabel(person),
-    route: publicRouteLabel(person.admission_route),
+    route: routeLabel(person),
     photoUrl: person.show_photo ? person.photo_url : null,
     initials: initialsOf(person.full_name),
     tint: key ? instituteTint(key) : FALLBACK_TINT,

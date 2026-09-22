@@ -37,7 +37,8 @@ type Body = {
   phone_country_code?: string;
   phone_number?: string;
   college_name?: string;
-  school_note?: string;
+  /** Private to the school (alumni_office_notes), never published. */
+  office_note?: string;
   create_login?: boolean;
 };
 
@@ -130,9 +131,10 @@ export async function POST(request: Request) {
       phone_country_code: phone ? code : null,
       phone_number: phone || null,
       college_name_raw: clean(body.college_name, 120) || null,
-      school_note: clean(body.school_note, 300) || null,
       // Added by the school, so nobody has agreed to anything yet, and there is
-      // nothing worth publishing until they fill it in themselves.
+      // nothing worth publishing until they fill it in themselves. The
+      // database refuses to approve it until they agree (migration 18).
+      origin: 'school',
       consent_given: false,
       approval_status: 'pending',
       modification_status: 'none',
@@ -143,6 +145,15 @@ export async function POST(request: Request) {
 
   if (insErr || !inserted) {
     return NextResponse.json({ error: `Could not add them: ${safeErrorMessage(insErr)}` }, { status: 500 });
+  }
+
+  // The office's own note goes where only the school can read it. It used to
+  // go into school_note, which the profile page publishes.
+  const officeNote = String(body.office_note ?? '').trim().slice(0, 2000);
+  if (officeNote) {
+    const { error: noteErr } = await admin.from('alumni_office_notes')
+      .insert({ alumni_id: inserted.id, note: officeNote });
+    if (noteErr) console.error('[add-alumnus] office note not saved:', safeErrorMessage(noteErr));
   }
 
   if (!wantsLogin) return NextResponse.json({ id: inserted.id, name: inserted.full_name });

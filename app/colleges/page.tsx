@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { isSupabaseConfigured } from '../../lib/supabaseClient';
 import { fetchApprovedAlumni } from '../../lib/publicData';
 import { useDebounced } from '../../lib/useDebounced';
-import { publicRouteLabel } from '../../lib/options';
+import { routeLabel } from '../../lib/admission';
 import { buildSearchDoc, searchItems, type SearchDoc } from '../../lib/search';
 import { instituteInitials, instituteTint, shortInstituteName } from '../../lib/showcase';
 import { Alumnus, CollegeDetails, collegeDetailsOf, collegeKeyer, collegeNameOf } from '../../lib/types';
@@ -232,7 +232,7 @@ function buildColleges(alumni: Alumnus[]): CollegeCard[] {
     }
     if (typed) entry.spellings.add(typed);
     entry.seniors += 1;
-    const route = publicRouteLabel(a.admission_route);
+    const route = routeLabel(a);
     if (route) entry.routeCounts.set(route, (entry.routeCounts.get(route) ?? 0) + 1);
   }
 

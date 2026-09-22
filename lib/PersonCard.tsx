@@ -17,7 +17,7 @@
  */
 
 import Link from 'next/link';
-import { publicRouteLabel } from './options';
+import { routePhrase } from './admission';
 import { classTag, collegeLabel, collegeTintKey, instituteTint, profileHref, shortName } from './showcase';
 import { type Alumnus, collegeDetailsOf, initialsOf, professionalLabel } from './types';
 
@@ -47,7 +47,7 @@ function whereLine(a: Alumnus, size: Size): string {
 export default function PersonCard({ a, size = 'lg' }: { a: Alumnus; size?: Size }) {
   const tintKey = collegeTintKey(a);
   const where = whereLine(a, size);
-  const route = publicRouteLabel(a.admission_route);
+  const route = routePhrase(a);
   const logo = size === 'lg' ? collegeDetailsOf(a)?.logo_url : null;
   const year = classTag(a);
   const face = size === 'lg' ? 88 : 64;

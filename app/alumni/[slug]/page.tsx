@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound, permanentRedirect } from 'next/navigation';
-import { fetchAlumnusBySlug, fetchRelatedAlumni, fetchTimelines } from '../../../lib/publicData';
+import { fetchAlumnusBySlug, fetchPathExtras, fetchRelatedAlumni, fetchTimelines } from '../../../lib/publicData';
 import { admissionFacts } from '../../../lib/admission';
 import { nowOf, pathIsWorthDrawing, pathSteps, shortSchoolName } from '../../../lib/profilePath';
 import {
@@ -64,10 +64,12 @@ export default async function AlumnusPage({ params }: Props) {
   // Reached by an old username link: answer once, then settle on one address.
   if (canonical && canonical !== slug) permanentRedirect(`/alumni/${canonical}`);
 
-  const [timelines, rails] = await Promise.all([
+  const [timelines, rails, extrasById] = await Promise.all([
     fetchTimelines([person.id as string]),
     fetchRelatedAlumni(person),
+    fetchPathExtras([person.id as string]),
   ]);
+  const extras = extrasById[person.id as string];
   const studies = sortHigherStudies(timelines.studies[person.id as string] ?? []);
   const work = sortWorkExperience(timelines.work[person.id as string] ?? []);
 
@@ -76,7 +78,7 @@ export default async function AlumnusPage({ params }: Props) {
   const college = collegeLabel(a);
   const tintKey = collegeTintKey(a);
   const facts = admissionFacts(a);
-  const steps = pathSteps(a, studies, work);
+  const steps = pathSteps(a, studies, work, extras);
   const now = nowOf(a, studies, work);
 
   // The one line that says where they went. First match wins; with none of
@@ -136,7 +138,7 @@ export default async function AlumnusPage({ params }: Props) {
               {/* On the first screen, where a phone visitor will see it. The
                   score stays in the path below: the route is what says the
                   door exists. */}
-              {facts.route && <span className="apage__via">via {facts.route}</span>}
+              {facts.phrase && <span className="apage__via">via {facts.phrase}</span>}
             </p>
           )}
           {now && (
@@ -200,6 +202,19 @@ export default async function AlumnusPage({ params }: Props) {
                   </div>
                   {st.sub && <div className="timeline__sub">{st.sub}</div>}
                   {st.meta && <div className="timeline__meta">{st.meta}</div>}
+                  {st.aside && st.aside.items.length > 0 && (
+                    <div className="timeline__aside">
+                      {st.aside.label && <span className="timeline__aside-label">{st.aside.label}</span>}
+                      <ul>
+                        {st.aside.items.map((it) => (
+                          <li key={it.key}>
+                            {it.href ? <Link href={it.href}>{it.text}</Link> : it.text}
+                            {it.meta && <span className="timeline__aside-meta"> · {it.meta}</span>}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                 </div>
               </li>
             ))}

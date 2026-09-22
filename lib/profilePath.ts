@@ -13,14 +13,20 @@
  */
 
 import { instKey } from './instituteKey';
-import { admissionFacts } from './admission';
+import { admissionFacts, attemptBand, labelOfShape } from './admission';
 import { officialSchoolName, boardForSchool } from './options';
-import { collegeLabel } from './showcase';
-import { type Alumnus, type HigherStudy, type WorkExperience, collegeDetailsOf, professionalLabel, yearRange } from './types';
+import { collegeLabel, shortInstituteName } from './showcase';
+import {
+  type Alumnus, type HigherStudy, type PathExtras, type PublicAdmit, type PublicExamAttempt, type WorkExperience,
+  collegeDetailsOf, professionalLabel, yearRange,
+} from './types';
+
+/** One item in a step's short list: another exam written, an offer not taken. */
+export type PathAside = { key: string; text: string; href?: string | null; meta?: string | null };
 
 export type PathStep = {
   key: string;
-  kind: 'origin' | 'route' | 'college' | 'professional' | 'study' | 'work' | 'now';
+  kind: 'origin' | 'gap' | 'route' | 'college' | 'professional' | 'study' | 'work' | 'now';
   icon: string;
   title: string;
   /** A page the title links to - the college's own page, for the college step. */
@@ -30,7 +36,15 @@ export type PathStep = {
   meta?: string | null;
   /** The green "Now" pill: this is where they are today. */
   now?: boolean;
+  /**
+   * The paths beside this one: under the route, the other exams they wrote;
+   * under the college, the offers they did not take. Drawn smaller, so the
+   * path pursued stands apart from the ones that were open.
+   */
+  aside?: { label: string; items: PathAside[] } | null;
 };
+
+const NO_EXTRAS: PathExtras = { attempts: [], admits: [], gapYears: [] };
 
 const THIS_YEAR = new Date().getFullYear();
 
@@ -108,14 +122,53 @@ export function shortSchoolName(value: string | null | undefined): string {
   return officialSchoolName(value).replace(/Higher Secondary School/i, 'HSS');
 }
 
+/** "BTech IT at Amrita Coimbatore" - an offer, in as few words as it takes. */
+function admitText(ad: PublicAdmit): string {
+  const name = ad.college?.name
+    ? shortInstituteName(ad.college.name, ad.college.aliases ?? [])
+    : tidy(ad.college_name_raw);
+  const course = [tidy(ad.degree), tidy(ad.branch)].filter(Boolean).join(' ');
+  return course && name ? `${course} at ${name}` : (name || course);
+}
+
+/**
+ * The other exams someone wrote, beside the one their seat came through.
+ * The year is said only when the years differ - one year for everything is
+ * noise, but "NEET 2024" beside "NEET 2025" is the story of a second try.
+ */
+function otherAttempts(a: Alumnus, attempts: PublicExamAttempt[]): PathAside[] {
+  const seatExam = (a.admission_exam ?? '').toLowerCase();
+  const hasSeatRow = attempts.some((t) => t.got_seat);
+  const others = attempts.filter((t) => {
+    if (t.got_seat) return false;
+    // A lone row for the seat's own exam, not marked as the seat, is the seat.
+    const same = attempts.filter((x) => x.exam.toLowerCase() === t.exam.toLowerCase()).length;
+    return !(!hasSeatRow && seatExam && t.exam.toLowerCase() === seatExam && same === 1);
+  });
+  const years = new Set(attempts.map((t) => t.exam_year ?? 0));
+  const showYear = years.size > 1;
+  return [...others]
+    .sort((x, y) => (x.exam_year ?? 0) - (y.exam_year ?? 0) || x.exam.localeCompare(y.exam))
+    .map((t) => ({
+      key: `exam:${t.id}`,
+      text: showYear && t.exam_year ? `${t.exam} ${t.exam_year}` : t.exam,
+      meta: [attemptBand(t), t.gave_admit ? 'got an offer' : null].filter(Boolean).join(' · ') || null,
+    }));
+}
+
 /**
  * The steps, in the order they happened.
  *
  * Studies oldest first and jobs oldest first with the current one last, so the
  * list reads top to bottom as a life does - the page's old sort was newest
  * first, which suits a CV and not a story.
+ *
+ * `extras` is everything beyond the seat joined: a year out, the other exams,
+ * the offers not taken (fetchPathExtras in lib/publicData.ts).
  */
-export function pathSteps(a: Alumnus, studiesIn: HigherStudy[] = [], workIn: WorkExperience[] = []): PathStep[] {
+export function pathSteps(
+  a: Alumnus, studiesIn: HigherStudy[] = [], workIn: WorkExperience[] = [], extras: PathExtras = NO_EXTRAS,
+): PathStep[] {
   const steps: PathStep[] = [];
   const onCourse = stillOnCourse(a);
   const college = collegeLabel(a);
@@ -134,16 +187,44 @@ export function pathSteps(a: Alumnus, studiesIn: HigherStudy[] = [], workIn: Wor
     });
   }
 
-  // 2. How they got in. The route is the step; the band sits under it, small.
-  if (facts.route || facts.score) {
+  // 1b. A year out, before the seat. Only ever one they have moved past: while
+  //     it is current the whole profile is unlisted (migration 18).
+  for (const g of [...extras.gapYears].sort((x, y) => x.gap_year - y.gap_year)) {
+    const at = tidy(g.coaching_org_name) || tidy(g.coaching_name_raw);
     steps.push({
-      key: 'route', kind: 'route', icon: '📝',
-      title: facts.route ? `Got in through ${facts.route}` : 'How they got in',
-      meta: [facts.score, facts.cutoff ? `cutoff ${facts.cutoff}` : null].filter(Boolean).join(' · ') || null,
+      key: `gap:${g.id}`, kind: 'gap', icon: g.kind === 'preparing' ? '📚' : '🌱',
+      title: g.kind === 'preparing'
+        ? (g.exam ? `A year preparing for ${g.exam}` : 'A year preparing for an exam')
+        : 'A year out',
+      sub: g.kind === 'preparing' && at ? `with ${at}` : null,
+      meta: String(g.gap_year),
     });
   }
 
-  // 3. The college.
+  // 2. How they got in. The route is the step; the band sits under it, small,
+  //    and the other exams they wrote sit beside it, smaller still.
+  const seat = extras.attempts.find((t) => t.got_seat);
+  const score = facts.score ?? (seat && facts.kind === 'entrance_exam' ? attemptBand(seat) : null);
+  const alsoWrote = otherAttempts(a, extras.attempts);
+  if (facts.route || score || alsoWrote.length) {
+    steps.push({
+      key: 'route', kind: 'route', icon: '📝',
+      title: facts.sentence ?? (facts.route ? `Got in through ${facts.route}` : 'Exams written'),
+      meta: [score, facts.cutoff ? `cutoff ${facts.cutoff}` : null].filter(Boolean).join(' · ') || null,
+      aside: alsoWrote.length ? { label: facts.route ? 'Also wrote' : 'Wrote', items: alsoWrote } : null,
+    });
+  }
+
+  // 3. The college, with the offers they turned down listed under it.
+  const offers: PathAside[] = [...extras.admits]
+    .sort((x, y) => admitText(x).localeCompare(admitText(y)))
+    .map((ad) => ({
+      key: `admit:${ad.id}`,
+      text: admitText(ad),
+      href: ad.college_id ? `/colleges/${ad.college_id}` : null,
+      meta: labelOfShape({ kind: ad.route_kind, exam: ad.exam, detail: ad.route_detail }),
+    }))
+    .filter((o) => o.text);
   if (college || course) {
     steps.push({
       key: 'college', kind: 'college', icon: '🎓',
@@ -153,7 +234,10 @@ export function pathSteps(a: Alumnus, studiesIn: HigherStudy[] = [], workIn: Wor
       meta: onCourse && a.expected_finish_year && a.expected_finish_year >= THIS_YEAR
         ? `Expected to finish ${a.expected_finish_year}` : null,
       now: onCourse,
+      aside: offers.length ? { label: 'Also offered', items: offers } : null,
     });
+  } else if (offers.length) {
+    steps.push({ key: 'offers', kind: 'college', icon: '🎓', title: 'Offers', aside: { label: '', items: offers } });
   }
 
   // 4. A professional qualification, alongside a degree or instead of one.
@@ -216,5 +300,5 @@ export function pathSteps(a: Alumnus, studiesIn: HigherStudy[] = [], workIn: Wor
 export function pathIsWorthDrawing(steps: PathStep[]): boolean {
   const real = steps.filter((s) => s.kind !== 'origin');
   if (real.length >= 2) return true;
-  return real.length === 1 && !!(real[0].meta || real[0].sub);
+  return real.length === 1 && !!(real[0].meta || real[0].sub || real[0].aside);
 }

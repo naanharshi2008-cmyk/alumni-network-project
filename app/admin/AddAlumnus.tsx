@@ -60,7 +60,7 @@ export default function AddAlumnus({ onAdded, setError }: { onAdded: () => Promi
           phone_country_code: code,
           phone_number: phone,
           college_name: college,
-          school_note: note,
+          office_note: note,
           create_login: createLogin,
         }),
       });
@@ -176,13 +176,13 @@ export default function AddAlumnus({ onAdded, setError }: { onAdded: () => Promi
         </label>
 
         <label className="add-alum__field add-alum__field--wide">
-          {/* This field is school_note, which the profile page publishes as "A
-              note from Veveaham". It used to be labelled "for the office (they
-              never see this)" - the opposite of true. Private office notes get
-              their own table in migration 18. */}
-          <span>A note from Veveaham — shown on their public page once approved</span>
-          <input type="text" value={note} maxLength={300} disabled={busy}
-            onChange={(e) => setNote(e.target.value)} placeholder="A line in the school's voice, if you have one" />
+          {/* Saved to alumni_office_notes, which only the school can read. It
+              used to be saved to school_note - published on their page as "A
+              note from Veveaham" under a label promising the opposite. The
+              public note is written from All Alumni, once they are approved. */}
+          <span>A note for the office — only the school ever sees this</span>
+          <textarea value={note} maxLength={2000} rows={2} disabled={busy}
+            onChange={(e) => setNote(e.target.value)} placeholder="How you know them, what is still missing, who to call" />
         </label>
       </div>
 

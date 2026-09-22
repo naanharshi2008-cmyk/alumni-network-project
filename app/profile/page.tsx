@@ -147,8 +147,21 @@ export default function ProfilePage() {
   const [saving, setSaving] = useState(false);
   const [confirming, setConfirming] = useState(false);
   // Someone the school entered never saw the registration form, so they have
-  // never agreed to appear. They say so here, once, before their first save.
+  // never agreed to appear. They say so here, once - and it saves the moment
+  // they tick it, published profile or not (migration 18 made consent a live
+  // switch), so it can never again be the thing standing between them and a
+  // save.
   const [seedConsent, setSeedConsent] = useState(false);
+  const [consentState, setConsentState] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle');
+
+  async function giveConsent(checked: boolean) {
+    setSeedConsent(checked);
+    if (!checked || !profile) return;
+    setConsentState('saving');
+    const { error: consentErr } = await supabase.from('alumni').update({ consent_given: true }).eq('id', profile.id);
+    if (consentErr) { setSeedConsent(false); setConsentState('failed'); return; }
+    setConsentState('saved');
+  }
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [notice, setNotice] = useState<{ welcome: boolean; unsaved: string[]; passwordUpdated: boolean }>({
@@ -312,7 +325,7 @@ export default function ProfilePage() {
 
       if (!profile.full_name.trim()) throw new Error('Please keep your full name filled in.');
       if (!profile.personal_email.trim()) throw new Error('Please keep an email address on file.');
-      if (profile.seeded_by_school && !seedConsent) {
+      if (profile.seeded_by_school && !seedConsent && consentState !== 'saved') {
         throw new Error('Please tick the box to say you are happy to appear in the directory.');
       }
       const phoneIssue = phoneProblem(profile.phone_country_code, profile.phone_number);
@@ -582,13 +595,28 @@ export default function ProfilePage() {
               Add your college, how you got in, and what you would tell someone in Class 12 now, then
               save. The school publishes it once you have.
             </p>
-            <label className="seed-consent">
-              <input type="checkbox" checked={seedConsent} onChange={(e) => setSeedConsent(e.target.checked)} />
-              <span>
-                I&apos;m happy for this profile to appear in the alumni directory once the school
-                approves it. My phone number and email stay private.
-              </span>
-            </label>
+            {consentState === 'saved' ? (
+              <p className="seed-consent seed-consent--done" role="status">
+                ✓ Thank you — you&apos;re happy to appear in the directory. Your phone number and
+                email stay private.
+              </p>
+            ) : (
+              <label className="seed-consent">
+                <input
+                  type="checkbox" checked={seedConsent} disabled={consentState === 'saving'}
+                  onChange={(e) => void giveConsent(e.target.checked)}
+                />
+                <span>
+                  I&apos;m happy for this profile to appear in the alumni directory once the school
+                  approves it. My phone number and email stay private.
+                </span>
+              </label>
+            )}
+            {consentState === 'failed' && (
+              <p className="field__error field__error--static">
+                That did not save. Check your connection and tick it again.
+              </p>
+            )}
           </div>
         )}
 

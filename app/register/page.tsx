@@ -8,11 +8,12 @@ import SchoolPicker from '../../lib/SchoolPicker';
 import { cleanFreeText, cleanProperNoun } from '../../lib/text';
 import { canonicalOption, fetchApprovedOptions, fetchOptionAliases, proposeOption } from '../../lib/publicData';
 import {
-  STREAMS, DEGREES, ADMISSION_ROUTES, asksForRank, boardForSchool, publicRouteLabel,
+  STREAMS, DEGREES, ADMISSION_ROUTES, asksForRank, boardForSchool,
   COUNTRY_CODES, OTHER_OPTION, isInProgressStatus, mergeOptions, resolveValue,
   statusForCourse, PROFESSIONAL_COURSES, PROFESSIONAL_STAGES,
 } from '../../lib/options';
 import { phoneProblem } from '../../lib/contactKeys';
+import { routePhrase } from '../../lib/admission';
 import { CATEGORIES, categoryForDegree } from '../../lib/types';
 
 /* ─────────────────────────────────────────────────────────────────────────
@@ -1361,7 +1362,7 @@ function StepFinish({ form, update, markTouched, errorFor, isValid }: StepProps)
     return () => URL.revokeObjectURL(url);
   }, [form.photo_file]);
 
-  const route = publicRouteLabel(resolveValue(form.admission_route, form.admission_route_other));
+  const route = routePhrase({ admission_route: resolveValue(form.admission_route, form.admission_route_other) });
   const college = cleanProperNoun(form.college_name);
   const initials = form.full_name.trim().split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase() || '?';
 

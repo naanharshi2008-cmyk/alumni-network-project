@@ -224,7 +224,16 @@ export interface Alumnus {
   /** Foundation, Intermediate, Articleship, Final, Qualified. */
   professional_stage: string | null;
   professional_org: string | null;
+  /** The legacy label, now written from admission_kind by a trigger (migration 18). */
   admission_route: string | null;
+  /** How the seat was got. Read this, not admission_route - see lib/admission.ts. */
+  admission_kind?: AdmissionKind | null;
+  /** The exam, when the kind is entrance_exam: always the canonical name. */
+  admission_exam?: string | null;
+  /** 'TNEA' for counselling on board marks; the words someone typed for Other. */
+  admission_detail?: string | null;
+  /** The LinkedIn username; linkedin_url is built from it. */
+  linkedin_handle?: string | null;
   admission_rank: string | null;
   board_marks: string | null;
   board_cutoff: string | null;
@@ -238,6 +247,63 @@ export interface Alumnus {
   featured?: boolean | null;
   /** The matched company or organisation, with its other names. */
   organization?: { name: string; aliases: string[] | null } | null;
+}
+
+/** How a seat was got. Never "quota": see lib/admission.ts. */
+export type AdmissionKind = 'board_marks' | 'entrance_exam' | 'management' | 'other';
+
+/**
+ * An exam someone wrote, as the public sees it (public_exam_attempts): the
+ * upper edge of the rank's band, never the rank. formatRankBand(edge) prints
+ * the same label formatRankBand(rank) would.
+ */
+export interface PublicExamAttempt {
+  id: string;
+  alumni_id: string;
+  exam: string;
+  exam_year: number | null;
+  /** Did it lead to an offer? null when they did not say. */
+  gave_admit: boolean | null;
+  /** This is the exam their seat came through. */
+  got_seat: boolean;
+  rank_band_edge: number | null;
+  percentile_band_floor: number | null;
+}
+
+/** An offer someone had and did not take (public_admits). */
+export interface PublicAdmit {
+  id: string;
+  alumni_id: string;
+  college_id: string | null;
+  college_name_raw: string | null;
+  degree: string | null;
+  branch: string | null;
+  route_kind: AdmissionKind | null;
+  exam: string | null;
+  route_detail: string | null;
+  admit_year: number | null;
+  college: { name: string; state: string | null; district: string | null; logo_url: string | null; aliases: string[] | null } | null;
+}
+
+/**
+ * A year out after Class 12 (public_gap_years). Only ever a year someone has
+ * moved past: while it is current their whole profile is unlisted.
+ */
+export interface PublicGapYear {
+  id: string;
+  alumni_id: string;
+  gap_year: number;
+  kind: 'preparing' | 'break';
+  exam: string | null;
+  coaching_name_raw: string | null;
+  coaching_org_name: string | null;
+}
+
+/** Everything about a path beyond the seat joined, for one person. */
+export interface PathExtras {
+  attempts: PublicExamAttempt[];
+  admits: PublicAdmit[];
+  gapYears: PublicGapYear[];
 }
 
 /** One entry of an alumnus's post-graduation study timeline. */

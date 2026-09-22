@@ -6,7 +6,8 @@ import { isSupabaseConfigured } from '../../lib/supabaseClient';
 import { fetchApprovedAlumni, fetchTimelines } from '../../lib/publicData';
 import { useDebounced } from '../../lib/useDebounced';
 import { clearDirectoryView, readDirectoryView, rememberDirectoryView, type DirectorySnapshot } from './viewState';
-import { asksForRank, boardForSchool, officialSchoolName, publicRouteLabel, SCHOOLS } from '../../lib/options';
+import { boardForSchool, officialSchoolName, SCHOOLS } from '../../lib/options';
+import { isExamRoute, routeLabel, routeParamLabel, routePhrase } from '../../lib/admission';
 import { AdmissionBadges, Row } from '../../lib/profileParts';
 import { formatRankBand, formatMarksBand, formatRankSpan, formatMonthYear } from '../../lib/text';
 import { buildSearchDoc, searchItems, type SearchDoc } from '../../lib/search';
@@ -148,7 +149,7 @@ function facetValue({ a, cat }: EnrichedAlumnus, key: FilterKey): string {
   switch (key) {
     case 'cat': return cat.key;
     case 'batch': return a.class_of ? String(a.class_of) : '';
-    case 'route': return publicRouteLabel(a.admission_route) ?? '';
+    case 'route': return routeLabel(a) ?? '';
     case 'status': return a.current_status ?? '';
   }
 }
@@ -164,8 +165,8 @@ function matchesFilters(item: EnrichedAlumnus, filters: Filters, except?: Filter
   return true;
 }
 
-// Everything a student might type. Routes go through their PUBLIC label so
-// quota wording stays unfindable, and the college state is included so the
+// Everything a student might type. Routes go through their label, so the
+// word "quota" is never what finds anyone, and the college state is included so the
 // home page's "Where they studied" cards land on real results. Institutes
 // carry their aliases, so "IITM" finds everyone at IIT Madras.
 function searchDocOf(a: Alumnus): SearchDoc {
@@ -180,7 +181,7 @@ function searchDocOf(a: Alumnus): SearchDoc {
     other: [
       a.degree, a.branch, a.field, a.designation, a.stream, officialSchoolName(a.school_name),
       a.professional_course, a.professional_stage,
-      publicRouteLabel(a.admission_route), a.admission_rank,
+      routeLabel(a), a.admission_rank,
       college?.state, college?.district,
       a.class_of ? String(a.class_of) : null,
     ],
@@ -203,7 +204,7 @@ type Group = { key: string; title: string; count: number; items: EnrichedAlumnus
 function groupByLens(items: EnrichedAlumnus[], lens: Lens): Group[] {
   const map = new Map<string, EnrichedAlumnus[]>();
   for (const item of items) {
-    const key = lens === 'area' ? item.cat.key : (publicRouteLabel(item.a.admission_route) ?? '');
+    const key = lens === 'area' ? item.cat.key : (routeLabel(item.a) ?? '');
     const bucket = map.get(key);
     if (bucket) bucket.push(item);
     else map.set(key, [item]);
@@ -264,7 +265,7 @@ export default function DirectoryPage() {
     // A filtered view is worth sharing, so every dimension round-trips.
     for (const key of ['batch', 'route', 'status'] as const) {
       const v = params.get(key);
-      if (v) next[key] = v;
+      if (v) next[key] = key === 'route' ? routeParamLabel(v) : v;
     }
     setFilters(next);
     const l = params.get('lens');
@@ -836,17 +837,17 @@ function CollegeExplorerCard({
   // non-personal by construction: no rank is attributed to anyone. A wide span
   // is the encouraging case - it shows the door is not only open to toppers.
   //
-  // Only from routes that produce a rank. A rank typed by someone who then
-  // switched to Management Quota - shown publicly as "Board Marks" - is kept
-  // in their row but never displayed beside that label; the span honours the
-  // same rule the individual badges do.
+  // Only from seats that came through an exam. A rank typed by someone who
+  // then changed their route is kept in their row but never displayed beside
+  // a route it does not belong to; the span honours the same rule the
+  // individual badges do.
   const rankSpan = formatRankSpan(
-    college.seniors.filter((x) => asksForRank(x.admission_route)).map((x) => x.admission_rank),
+    college.seniors.filter((x) => isExamRoute(x)).map((x) => x.admission_rank),
   );
   const routes = Array.from(
     new Set(
       college.seniors
-        .map((x) => publicRouteLabel(x.admission_route))
+        .map((x) => routePhrase(x))
         .filter(Boolean) as string[],
     ),
   );
@@ -937,7 +938,7 @@ function CollegeExplorerCard({
             <span className="senior-chip__text">
               <span className="senior-chip__name">{a.full_name}</span>
               <span className="senior-chip__meta">
-                {[a.class_of ? `Class of ${a.class_of}` : null, a.degree, publicRouteLabel(a.admission_route)]
+                {[a.class_of ? `Class of ${a.class_of}` : null, a.degree, routeLabel(a)]
                   .filter(Boolean).join(' · ')}
               </span>
             </span>

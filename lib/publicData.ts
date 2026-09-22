@@ -7,10 +7,11 @@
 // view, which simply does not contain those columns (see schema_v2.sql).
 
 import { supabase, isSupabaseConfigured } from './supabaseClient';
-import type { Alumnus, HigherStudy, WorkExperience } from './types';
+import type { Alumnus, HigherStudy, PathExtras, PublicAdmit, PublicExamAttempt, PublicGapYear, WorkExperience } from './types';
 import { collegeDetailsOf } from './types';
-import { normaliseOptionValue, publicRouteLabel } from './options';
+import { normaliseOptionValue } from './options';
 import { collegeLabel } from './showcase';
+import { admissionOf, routeLabel, routePhrase } from './admission';
 
 /**
  * Columns pulled for the directory and home galleries. Listed explicitly rather than
@@ -22,6 +23,7 @@ export const PUBLIC_ALUMNI_SELECT = [
   'expected_finish_year', 'show_photo', 'photo_url', 'linkedin_url',
   'message_1', 'message_2', 'last_updated', 'last_confirmed_at', 'school_note', 'college_thoughts', 'professional_course', 'professional_stage', 'professional_org', 'admission_route', 'admission_rank', 'board_marks',
   'board_cutoff', 'college_id', 'college_name_raw', 'colleges', 'organization_id', 'organization', 'featured',
+  'admission_kind', 'admission_exam', 'admission_detail', 'linkedin_handle',
 ].join(', ');
 
 export type PublicDataResult<T> = { data: T; error: string; total?: number; truncated?: boolean };
@@ -65,7 +67,8 @@ export async function fetchApprovedAlumni(): Promise<PublicDataResult<Alumnus[]>
  */
 export const PUBLIC_ALUMNI_CARD_SELECT = [
   'id', 'full_name', 'public_slug', 'username', 'class_of', 'stream', 'degree',
-  'field', 'admission_route', 'show_photo', 'photo_url', 'college_id', 'college_name_raw', 'colleges',
+  'field', 'admission_route', 'admission_kind', 'admission_exam', 'admission_detail',
+  'show_photo', 'photo_url', 'college_id', 'college_name_raw', 'colleges',
 ].join(', ');
 
 /** One person, by the slug in their URL. Falls back to the old username. */
@@ -123,11 +126,19 @@ export async function fetchRelatedAlumni(a: Alumnus, limit = 6): Promise<Related
       logo: collegeDetailsOf(a)?.logo_url ?? null,
     });
   }
-  if (a.admission_route) {
+  const how = admissionOf(a);
+  const label = routeLabel(a);
+  if (how.kind && label) {
+    // The same way in, by kind: the same exam, board marks (through TNEA or
+    // not, as they did), a management seat, or the same words for Other.
+    let run = base().eq('admission_kind', how.kind);
+    if (how.kind === 'entrance_exam') run = run.eq('admission_exam', how.exam);
+    else if (how.detail) run = run.eq('admission_detail', how.detail);
+    else if (how.kind === 'board_marks') run = run.is('admission_detail', null);
     wanted.push({
-      title: `Others who got in through ${publicRouteLabel(a.admission_route)}`,
-      href: `/directory?route=${encodeURIComponent(publicRouteLabel(a.admission_route) ?? '')}`,
-      run: base().eq('admission_route', a.admission_route),
+      title: `Others via ${routePhrase(a)}`,
+      href: `/directory?route=${encodeURIComponent(label)}`,
+      run,
     });
   }
   if (a.class_of) {
@@ -142,6 +153,48 @@ export async function fetchRelatedAlumni(a: Alumnus, limit = 6): Promise<Related
   return wanted
     .map((w, i) => ({ title: w.title, href: w.href, logo: w.logo, people: (results[i]?.data ?? []) as Alumnus[] }))
     .filter((rail) => rail.people.length > 0);
+}
+
+/**
+ * The rest of a path, for a set of people: every exam they wrote, the offers
+ * they did not take, and any year out they have moved past.
+ *
+ * From the public views, which carry only listed people and only rank bands.
+ * Paged through PostgREST's 1,000-row cap, because the directory asks for
+ * everyone at once.
+ */
+export async function fetchPathExtras(alumniIds: string[]): Promise<Record<string, PathExtras>> {
+  const out: Record<string, PathExtras> = {};
+  if (!isSupabaseConfigured || alumniIds.length === 0) return out;
+  const slot = (id: string) => (out[id] ??= { attempts: [], admits: [], gapYears: [] });
+
+  // Chunks of ids keep each request's URL short; pages keep each under the cap.
+  const CHUNK = 150;
+  const PAGE = 1000;
+  async function readAll<T>(view: string, ids: string[]): Promise<T[]> {
+    const rows: T[] = [];
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await supabase.from(view).select('*').in('alumni_id', ids)
+        .order('id').range(from, from + PAGE - 1);
+      if (error || !data) break;
+      rows.push(...(data as T[]));
+      if (data.length < PAGE) break;
+    }
+    return rows;
+  }
+
+  for (let i = 0; i < alumniIds.length; i += CHUNK) {
+    const ids = alumniIds.slice(i, i + CHUNK);
+    const [attempts, admits, gaps] = await Promise.all([
+      readAll<PublicExamAttempt>('public_exam_attempts', ids),
+      readAll<PublicAdmit>('public_admits', ids),
+      readAll<PublicGapYear>('public_gap_years', ids),
+    ]);
+    for (const r of attempts) slot(r.alumni_id).attempts.push(r);
+    for (const r of admits) slot(r.alumni_id).admits.push(r);
+    for (const r of gaps) slot(r.alumni_id).gapYears.push(r);
+  }
+  return out;
 }
 
 /** Just enough of every approved profile to build the sitemap. */

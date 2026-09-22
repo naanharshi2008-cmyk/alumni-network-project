@@ -11,7 +11,7 @@
  */
 
 import { instKey } from './instituteKey';
-import { EXAM_ROUTES, publicRouteLabel } from './options';
+import { isExamRoute, routeLabel, routePhrase } from './admission';
 import { Alumnus, HigherStudy, SCHOOL_GROUP_NAME, collegeDetailsOf, collegeKeyer, collegeNameOf, professionalLabel } from './types';
 
 export const ROTATION_HOURS = 3;
@@ -174,7 +174,7 @@ export function profileHref(a: Alumnus): string {
  */
 export function profileSummary(a: Alumnus): string {
   const college = collegeLabel(a);
-  const route = publicRouteLabel(a.admission_route);
+  const route = routePhrase(a);
   const course = a.degree || professionalLabel(a);
 
   // What they did, if we know it.
@@ -295,7 +295,7 @@ export function instituteInitials(label: string): string {
 
 /** What a card says under the college: the route and the degree. */
 export function pathLine(a: Alumnus): string {
-  return [publicRouteLabel(a.admission_route), a.degree || a.professional_course].filter(Boolean).join(' · ');
+  return [routeLabel(a), a.degree || a.professional_course].filter(Boolean).join(' · ');
 }
 
 /** "'23" */
@@ -332,9 +332,8 @@ export function popularSearches(alumni: Alumnus[], max = 5): PopularSearch[] {
       entry.count += 1;
       colleges.set(key, entry);
     }
-    if (a.admission_route && (EXAM_ROUTES as readonly string[]).includes(a.admission_route)) {
-      exams.set(a.admission_route, (exams.get(a.admission_route) ?? 0) + 1);
-    }
+    const exam = isExamRoute(a) ? routeLabel(a) : null;
+    if (exam) exams.set(exam, (exams.get(exam) ?? 0) + 1);
   }
   const topColleges = [...colleges.values()].sort((x, y) => y.count - x.count).slice(0, 3);
   const topExams = [...exams.entries()]
@@ -354,7 +353,8 @@ export function homeStats(alumni: Alumnus[]): HomeStatsData {
     const key = keyOf(a);
     if (key) colleges.add(key);
     // Only real entrance exams: "Board Marks" is a route, not an exam.
-    if (a.admission_route && (EXAM_ROUTES as readonly string[]).includes(a.admission_route)) exams.add(a.admission_route);
+    const exam = isExamRoute(a) ? routeLabel(a) : null;
+    if (exam) exams.add(exam);
     if (a.class_of) batches.add(a.class_of);
   }
   return { alumni: alumni.length, colleges: colleges.size, exams: exams.size, batches: batches.size };

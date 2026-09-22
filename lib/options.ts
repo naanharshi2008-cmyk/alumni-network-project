@@ -109,20 +109,6 @@ export const EXAM_ROUTES = [
 ] as const;
 
 /**
- * How an admission route reads on PUBLIC surfaces.
- *
- * The site never labels anyone "Management Quota": seat categories carry a
- * stigma the school explicitly does not want attached to a student's name, so
- * quota admissions display under the inclusive "Board Marks" umbrella. The
- * decision is display-only - the stored data is unchanged, registration still
- * collects the real route, and admin surfaces show the raw value.
- */
-export function publicRouteLabel(route: string | null | undefined): string | null {
-  if (!route) return route ?? null;
-  return route === 'Management Quota' ? 'Board Marks' : route;
-}
-
-/**
  * Professional qualifications: CA, CS, CMA, ACCA.
  *
  * Deliberately NOT in DEGREES. These are not degrees and not colleges - you
@@ -158,10 +144,8 @@ export const ADMISSION_ROUTES = [
  * editor - and the two drifted. A Sports Quota alumnus was never asked at
  * registration and was always asked on their profile.
  *
- * That drift had a consequence beyond inconsistency. Management Quota is
- * displayed publicly as "Board Marks" (see publicRouteLabel), precisely so
- * that nobody is labelled with a seat category - and a rank shown beside that
- * label is exactly the tell the label exists to prevent.
+ * Public pages no longer use this: they read the kind (lib/admission.ts),
+ * and show a rank only beside an exam.
  *
  * Stated as "not one of the routes we know has no rank", so a new exam an
  * admin approves next year defaults to asking. That is what registration
