@@ -25,6 +25,7 @@ const AREAS = [
   { href: '/admin/today', label: 'Today', hint: 'What is waiting, what arrived, what needs a look' },
   { href: '/admin/review', label: 'Review', hint: 'Everything waiting for a decision' },
   { href: '/admin/people', label: 'People', hint: 'Everyone already decided on' },
+  { href: '/admin/import', label: 'Import', hint: 'Hidden profiles from the school’s sheet' },
   { href: '/admin/data', label: 'Data', hint: 'Names, values and tidying up' },
 ];
 

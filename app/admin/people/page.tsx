@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
 import { supabase } from '../../../lib/supabaseClient';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
@@ -20,6 +21,7 @@ const NEEDS: { key: PeopleNeed; label: string }[] = [
   { key: 'no-college', label: 'College unmatched' },
   { key: 'starred', label: 'Featured' },
   { key: 'hidden', label: 'Hidden' },
+  { key: 'imported', label: 'Imported — waiting for them' },
 ];
 
 /**
@@ -381,10 +383,12 @@ export default function PeoplePage() {
               </label>
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
                 <div style={{ flex: '1 1 260px', minWidth: 0 }}>
-                  <strong>{person.full_name}</strong>{' '}
+                  <Link href={`/admin/people/${person.id}`}><strong>{person.full_name}</strong></Link>{' '}
                   <span className={`badge badge--sm${person.approval_status === 'approved' ? ' badge--ok' : ''}`}>
-                    {person.approval_status === 'approved' ? 'In the directory' : 'Hidden'}
+                    {person.approval_status === 'approved' ? 'In the directory'
+                      : person.approval_status === 'pending' ? 'Waiting for them' : 'Hidden'}
                   </span>
+                  {person.in_gap_year && <span className="badge badge--sm" title="Unlisted until they say where they joined">In a year out</span>}
                   {person.featured && <span className="badge badge--sm badge--star">★ Featured</span>}
                   <div className="subtitle" style={{ margin: '4px 0 0', fontSize: '0.84rem' }}>
                     {person.personal_email || 'no email'}
@@ -407,15 +411,18 @@ export default function PeoplePage() {
                       <span className="btn__inner">{person.featured ? '★ Featured' : '☆ Feature'}</span>
                     </button>
                   )}
+                  <Link href={`/admin/people/${person.id}`} className="btn btn--ghost">
+                    <span className="btn__inner">Edit</span>
+                  </Link>
                   {person.approval_status === 'approved' ? (
                     <button type="button" className="btn btn--ghost" onClick={() => handleSetStatus(person, 'rejected')}>
                       <span className="btn__inner">Hide</span>
                     </button>
-                  ) : (
+                  ) : person.approval_status === 'rejected' ? (
                     <button type="button" className="btn btn--ghost" onClick={() => handleSetStatus(person, 'approved')}>
                       <span className="btn__inner">Restore</span>
                     </button>
-                  )}
+                  ) : null}
                   <AccountButton person={person} />
                   <span style={{ marginLeft: 'auto' }}>
                     <ConfirmAction

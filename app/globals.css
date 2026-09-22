@@ -1165,6 +1165,51 @@ textarea { min-height: 84px; resize: vertical; }
 .form-note--warn .link-btn { color: inherit; text-decoration: underline; }
 
 /* ---------- Round 10 form pieces (lib/forms) ------------------------------- */
+/* The import: load, check, create. */
+.import__link { display: flex; gap: 10px; }
+.import__link input { flex: 1; min-width: 0; }
+.import__summary { font-size: 0.9rem; margin: 6px 0 12px; }
+.import__section { margin: 12px 0; border: 1px solid var(--border-strong); border-radius: var(--r-sm); padding: 10px 14px; }
+.import__section summary { cursor: pointer; font-weight: 650; }
+.import__map { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.86rem; }
+.import__map td { padding: 5px 6px; border-top: 1px solid var(--border-strong); vertical-align: middle; }
+.import__map select, .import__colleges select { width: 100%; max-width: 420px; }
+.import__colleges { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.import__colleges li { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); gap: 10px; align-items: center; font-size: 0.86rem; }
+.import__typed { color: var(--text-muted); overflow-wrap: anywhere; }
+.import__rows { display: grid; gap: 8px; }
+.import-row { display: flex; gap: 10px; padding: 10px 12px; border: 1px solid var(--border-strong); border-radius: var(--r-sm); background: var(--surface-2); }
+.import-row--held { border-color: var(--danger-border); }
+.import-row--out { opacity: 0.55; }
+.import-row__body { min-width: 0; flex: 1; }
+.import-row__head { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+.import-row__line { font-size: 0.75rem; color: var(--text-faint); }
+.import-row__meta { font-size: 0.82rem; color: var(--text-faint); overflow-wrap: anywhere; }
+.import-row__problem { font-size: 0.82rem; color: var(--danger-ink); margin-top: 3px; }
+.import-row__warn { font-size: 0.82rem; color: var(--text-muted); margin-top: 3px; }
+.import__results { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 6px; font-size: 0.88rem; }
+.import-format__group { margin-top: 22px; }
+.import-format__table { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
+.import-format__table th { text-align: left; font-size: 0.76rem; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.04em; padding: 4px 6px; }
+.import-format__table td { padding: 7px 6px; border-top: 1px solid var(--border-strong); vertical-align: top; }
+.import-format__table code { font-size: 0.8rem; overflow-wrap: anywhere; }
+.import-format__allowed { display: block; margin-top: 3px; color: var(--text-faint); font-size: 0.8rem; }
+.import-format__exams { font-size: 0.86rem; color: var(--text-muted); line-height: 1.7; }
+@media (max-width: 560px) {
+  .import__colleges li { grid-template-columns: 1fr; }
+  .import-format__table thead { display: none; }
+  .import-format__table td { display: block; border-top: 0; padding: 2px 0; }
+  .import-format__table tr { display: block; border-top: 1px solid var(--border-strong); padding: 8px 0; }
+}
+/* The school's editor for one profile, and its invite panel. */
+.admin-person__head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin-bottom: 12px; }
+.invite-panel {
+  margin: 14px 0 6px; padding: 14px 16px; border-radius: var(--r-sm);
+  border: 1px dashed var(--border-strong); background: var(--surface-2);
+}
+.invite-panel__lead { margin: 0 0 10px; font-size: 0.88rem; color: var(--text-muted); line-height: 1.5; }
+.invite-panel__out { margin-top: 12px; font-size: 0.86rem; }
+.invite-panel__out code { font-size: 0.8rem; }
 /* "Priya invited you" - the share link's greeting, above the first question. */
 .invite-greeting {
   margin: 10px 0 0; padding: 10px 13px; border-radius: var(--r-sm);

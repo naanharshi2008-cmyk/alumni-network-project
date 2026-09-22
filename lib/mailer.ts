@@ -179,6 +179,38 @@ export function welcomeEmail(fullName: string | null) {
   };
 }
 
+/**
+ * The school started their page; this invites them to it.
+ *
+ * One claim link, the same in the email and the WhatsApp text, and never a
+ * password: opening it mints a fresh set-your-password link at that moment
+ * (app/api/claim), so Supabase's short link lifetime never strands anyone.
+ */
+export function claimInviteEmail(fullName: string | null, link: string, days: number) {
+  const name = firstName(fullName);
+  return {
+    subject: 'Your page on the Veveaham Alumni network is waiting for you',
+    html: layout({
+      preheader: 'The school office has started it. Check what we have and add the rest.',
+      heading: `${name}, your page is ready to finish`,
+      paragraphs: [
+        `Hi ${name},`,
+        'The Veveaham school office has started your page on the alumni network — where you went after Class 12, so students in classes 8 to 12 can see the paths ahead of them.',
+        'Check what we have, add the rest, and choose a password. Nothing is shown publicly until you have agreed and the school has approved it, and your phone number and email are never shown.',
+      ],
+      cta: { label: 'Open my page', url: link },
+      footnote: `The link works once and expires in ${days} days. Not you, or not interested? Just ignore this email.`,
+    }),
+    text: `Hi ${(fullName ?? '').trim().split(/\s+/)[0] || 'there'},\n\nThe Veveaham school office has started your page on the alumni network, so juniors can see where seniors went after Class 12. Check what we have, add the rest and choose a password here (the link works once, for ${days} days):\n\n${link}\n\nNothing is public until you agree and the school approves it.`,
+  };
+}
+
+/** The same invitation, as a WhatsApp message the office sends from its own phone. */
+export function claimInviteWhatsApp(fullName: string | null, link: string, days: number): string {
+  const name = (fullName ?? '').trim().split(/\s+/)[0] || 'there';
+  return `Hi ${name}! The Veveaham school office has started your page on the Veveaham Alumni network — where you went after Class 12, so juniors can see the paths ahead. Check it, add the rest and set a password here (works once, for ${days} days): ${link}\n\nNothing is public until you agree and the school approves it.`;
+}
+
 export function verifyEmailMessage(fullName: string | null, link: string) {
   const name = firstName(fullName);
   return {

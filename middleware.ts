@@ -20,7 +20,7 @@ import { NextResponse, type NextRequest } from 'next/server';
  */
 
 const PRIVATE = [
-  '/profile', '/login', '/reset-password', '/verify-email', '/forgot-password', '/admin',
+  '/profile', '/login', '/reset-password', '/verify-email', '/forgot-password', '/admin', '/claim',
 ];
 
 export function middleware(request: NextRequest) {
@@ -47,6 +47,6 @@ export const config = {
   matcher: [
     '/directory',
     '/profile/:path*', '/login/:path*', '/reset-password/:path*',
-    '/verify-email/:path*', '/forgot-password/:path*', '/admin/:path*',
+    '/verify-email/:path*', '/forgot-password/:path*', '/admin/:path*', '/claim/:path*',
   ],
 };

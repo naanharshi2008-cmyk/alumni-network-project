@@ -349,7 +349,7 @@ export async function loadToday(lastVisit: number | null): Promise<TodayData> {
 
 export type PeopleNeed =
   | 'all' | 'hidden' | 'no-login' | 'email-unconfirmed'
-  | 'starred' | 'stale' | 'never-confirmed' | 'no-college';
+  | 'starred' | 'stale' | 'never-confirmed' | 'no-college' | 'imported';
 
 export type PeopleFacets = Record<Exclude<PeopleNeed, 'all'>, number> & { all: number };
 
@@ -365,7 +365,7 @@ export async function loadPeopleFacets(): Promise<PeopleFacets> {
   const head = () => supabase.from('alumni').select('id', { head: true, count: 'exact' });
   const decided = () => head().neq('approval_status', 'pending');
 
-  const [all, hidden, noLogin, unconfirmed, starred, stale, never, noCollege] = await Promise.all([
+  const [all, hidden, noLogin, unconfirmed, starred, stale, never, noCollege, imported] = await Promise.all([
     decided(),
     head().eq('approval_status', 'rejected'),
     decided().is('user_id', null),
@@ -374,6 +374,7 @@ export async function loadPeopleFacets(): Promise<PeopleFacets> {
     head().eq('approval_status', 'approved').lt('last_confirmed_at', oneYearAgo()),
     head().eq('approval_status', 'approved').is('last_confirmed_at', null),
     decided().is('college_id', null).not('college_name_raw', 'is', null),
+    head().eq('origin', 'import').is('user_id', null).neq('approval_status', 'rejected'),
   ]);
 
   return {
@@ -385,6 +386,7 @@ export async function loadPeopleFacets(): Promise<PeopleFacets> {
     stale: stale.count ?? 0,
     'never-confirmed': never.count ?? 0,
     'no-college': noCollege.count ?? 0,
+    imported: imported.count ?? 0,
   };
 }
 
@@ -496,6 +498,9 @@ export async function loadPeople(query: string, page: number, need: PeopleNeed =
   // 'hidden' replaces the base filter rather than adding to it, because a
   // hidden profile IS one of the decided ones.
   if (need === 'hidden') q = q.eq('approval_status', 'rejected');
+  // Imported and not yet claimed: kept out of the review queue, so this is
+  // where they live until the person signs in.
+  else if (need === 'imported') q = q.eq('origin', 'import').is('user_id', null).neq('approval_status', 'rejected');
   else q = q.neq('approval_status', 'pending');
 
   if (need === 'no-login') q = q.is('user_id', null);

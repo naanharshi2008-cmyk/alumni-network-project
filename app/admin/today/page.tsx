@@ -26,7 +26,7 @@ const FALLBACK: TodayData = {
   },
   health: {
     all: 0, hidden: 0, 'no-login': 0, 'email-unconfirmed': 0,
-    starred: 0, stale: 0, 'never-confirmed': 0, 'no-college': 0,
+    starred: 0, stale: 0, 'never-confirmed': 0, 'no-college': 0, imported: 0,
   },
   arrivals: [],
   decisions: [],
