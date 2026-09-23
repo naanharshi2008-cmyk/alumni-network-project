@@ -80,7 +80,7 @@ export type TemplateColumn = {
 };
 
 export const AFTER_SCHOOL_VALUES = ['Joined a college', 'Gap year - preparing', 'Gap year - break', 'Something else'] as const;
-export const HOW_VALUES = ['Board marks', 'Board marks (TNEA)', 'Entrance exam', 'Management seat', 'Other'] as const;
+export const HOW_VALUES = ['Board marks', 'Board marks (TNEA)', 'Entrance exam', 'Direct admission', 'Other'] as const;
 export const SCHOOL_VALUES = ['Boys', 'Girls', 'Prime Academy'] as const;
 export const EXAM_SLOTS = 5;
 export const OFFER_SLOTS = 3;
@@ -516,7 +516,9 @@ export function readRow(
       kind = 'entrance_exam';
       seatExam = examCanonical(cell('how_exam'), aliases) ?? (cell('how_exam').trim() || null);
       if (!seatExam) { kind = null; warnings.push('“Entrance exam” with no exam named — left blank'); }
-    } else if (howRaw.startsWith('management')) kind = 'management';
+    // "Direct admission" is what the template says now; sheets filled before
+    // Round 11, and anyone typing what they know, still say "management".
+    } else if (howRaw.startsWith('management') || howRaw.startsWith('direct')) kind = 'management';
     else if (howRaw.startsWith('other')) { kind = 'other'; detail = cell('how_other').trim() || null; }
     else warnings.push(`“How they got in” value “${cell('how')}” not understood — left blank`);
   }

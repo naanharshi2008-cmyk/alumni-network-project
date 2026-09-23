@@ -17,7 +17,7 @@ import { TEMPLATE, templateCsv, type TemplateColumn } from '../../../../lib/impo
 
 const GROUP_NOTES: Partial<Record<TemplateColumn['group'], string>> = {
   'Family & home': 'Private. Only the school and the student ever see these — they are never shown on any page.',
-  'After Class 12': 'How they got in is one of: Board marks, Board marks (TNEA), Entrance exam, Management seat, Other. TNEA is counselling on board marks, not an exam. Leave it blank if you do not know — the student will say.',
+  'After Class 12': 'How they got in is one of: Board marks, Board marks (TNEA), Entrance exam, Direct admission (a management seat), Other. TNEA is counselling on board marks, not an exam. Leave it blank if you do not know — the student will say.',
   'Exams written': 'Up to five. Every exam they wrote, including ones that did not lead to a seat. Ranks are optional and only ever shown as a range.',
   'Offers not taken': 'Up to three colleges that offered a seat they did not take. These are recorded as the school’s, so the student cannot remove them.',
 };

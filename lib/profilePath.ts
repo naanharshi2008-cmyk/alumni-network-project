@@ -21,27 +21,66 @@ import {
   collegeDetailsOf, professionalLabel, yearRange,
 } from './types';
 
-/** One item in a step's short list: another exam written, an offer not taken. */
-export type PathAside = { key: string; text: string; href?: string | null; meta?: string | null };
-
 export type PathStep = {
   key: string;
-  kind: 'origin' | 'gap' | 'route' | 'college' | 'professional' | 'study' | 'work' | 'now';
+  kind: 'origin' | 'gap' | 'braid' | 'college' | 'professional' | 'study' | 'work' | 'now';
   icon: string;
   title: string;
   /** A page the title links to - the college's own page, for the college step. */
   href?: string | null;
   sub?: string | null;
+  /**
+   * A page the SUB links to - a higher-studies institute, which is where the
+   * college lives on that step rather than in the title. Every college named
+   * anywhere on this page leads somewhere.
+   */
+  subHref?: string | null;
   /** Small, faint: years, a score band, a finish year. */
   meta?: string | null;
   /** The green "Now" pill: this is where they are today. */
   now?: boolean;
-  /**
-   * The paths beside this one: under the route, the other exams they wrote;
-   * under the college, the offers they did not take. Drawn smaller, so the
-   * path pursued stands apart from the ones that were open.
-   */
-  aside?: { label: string; items: PathAside[] } | null;
+};
+
+/* ─────────────────────────────────────────────────────────────────────────
+   The braid: every way in that was open, side by side
+──────────────────────────────────────────────────────────────────────────
+
+   Until Round 11 the other exams and the offers not taken were an `aside` -
+   a smaller, fainter list tucked inside the step they hung off, which read as
+   a footnote to the path taken. But "I wrote five exams, three gave me an
+   offer, I took this one" IS the path, and the exams that led nowhere are
+   exactly what a junior is trying to learn from.
+
+   So the middle of the timeline - how they got in, and what it got them -
+   becomes a set of columns that all start level: the route taken first, then
+   every other route that was open, each carrying what it produced and each
+   visibly stopping where it stopped. Only the taken column carries on into the
+   rest of the timeline.
+*/
+
+export type BraidOutcome = {
+  key: string;
+  /** "BE CSE at PSG Tech". */
+  text: string;
+  href?: string | null;
+  meta?: string | null;
+  /** false: an offer they did not take. */
+  taken: boolean;
+  now?: boolean;
+};
+
+export type BraidColumn = {
+  key: string;
+  kind: 'taken' | 'other';
+  /** The way in: an exam's name, "Board marks (TNEA)", "Direct admission". */
+  label: string;
+  /** A score band, a cutoff - under the label, small. */
+  meta?: string | null;
+  outcomes: BraidOutcome[];
+  /** The taken column's rail runs on into the steps below. */
+  continues: boolean;
+  /** Where this thread stopped: "offer not taken", "wrote it". */
+  ended?: string | null;
 };
 
 const NO_EXTRAS: PathExtras = { attempts: [], admits: [], gapYears: [] };
@@ -136,7 +175,7 @@ function admitText(ad: PublicAdmit): string {
  * The year is said only when the years differ - one year for everything is
  * noise, but "NEET 2024" beside "NEET 2025" is the story of a second try.
  */
-function otherAttempts(a: Alumnus, attempts: PublicExamAttempt[]): PathAside[] {
+function otherAttempts(a: Alumnus, attempts: PublicExamAttempt[]): PublicExamAttempt[] {
   const seatExam = (a.admission_exam ?? '').toLowerCase();
   const hasSeatRow = attempts.some((t) => t.got_seat);
   const others = attempts.filter((t) => {
@@ -145,15 +184,119 @@ function otherAttempts(a: Alumnus, attempts: PublicExamAttempt[]): PathAside[] {
     const same = attempts.filter((x) => x.exam.toLowerCase() === t.exam.toLowerCase()).length;
     return !(!hasSeatRow && seatExam && t.exam.toLowerCase() === seatExam && same === 1);
   });
-  const years = new Set(attempts.map((t) => t.exam_year ?? 0));
-  const showYear = years.size > 1;
-  return [...others]
-    .sort((x, y) => (x.exam_year ?? 0) - (y.exam_year ?? 0) || x.exam.localeCompare(y.exam))
-    .map((t) => ({
-      key: `exam:${t.id}`,
-      text: showYear && t.exam_year ? `${t.exam} ${t.exam_year}` : t.exam,
-      meta: [attemptBand(t), t.gave_admit ? 'got an offer' : null].filter(Boolean).join(' · ') || null,
-    }));
+  return [...others].sort((x, y) => (x.exam_year ?? 0) - (y.exam_year ?? 0) || x.exam.localeCompare(y.exam));
+}
+
+const sameExam = (x: string | null | undefined, y: string | null | undefined) =>
+  !!x && !!y && x.toLowerCase() === y.toLowerCase();
+
+/**
+ * Where a college name goes when you tap it.
+ *
+ * A matched college has a page of its own. One that was only ever typed - an
+ * offer at a college nobody has pinned yet, an institute under higher studies -
+ * has no page, but it should still lead somewhere: the college list, searched
+ * for that name, which is alias-aware and usually finds it under its official
+ * spelling. A name that leads nowhere at all is the one thing worse than a
+ * name that leads somewhere approximate.
+ */
+export function collegeHref(id: string | null | undefined, name: string | null | undefined): string | null {
+  if (id) return `/colleges/${id}`;
+  const q = (name ?? '').trim();
+  return q ? `/colleges?q=${encodeURIComponent(q)}` : null;
+}
+
+function admitOutcome(ad: PublicAdmit): BraidOutcome {
+  return {
+    key: `admit:${ad.id}`,
+    text: admitText(ad),
+    href: collegeHref(ad.college_id, ad.college?.name ?? ad.college_name_raw),
+    taken: false,
+  };
+}
+
+/**
+ * The columns: the route taken first, then every other route that was open.
+ *
+ * An offer sits under the route it came through, because that is what
+ * `admits.route_kind` and `admits.exam` record - so "AMRITAEEE → BE CSE at
+ * Amrita, not taken" reads as one thread rather than as two unrelated facts at
+ * opposite ends of the page. An offer whose route nobody recorded falls into a
+ * single unlabelled column at the end rather than inventing a route for it.
+ *
+ * The seat they actually joined is NOT in here. It is a step of its own below,
+ * where a degree belongs: these columns are the doors that were open, and the
+ * degree is what they went on to do.
+ */
+export function pathBraid(a: Alumnus, extras: PathExtras = NO_EXTRAS): BraidColumn[] {
+  const facts = admissionFacts(a);
+  const seat = extras.attempts.find((t) => t.got_seat);
+  const placed = new Set<string>();
+  const columns: BraidColumn[] = [];
+
+  // 1. The one they took. Only the way in, not where it led: the degree they
+  //    actually joined is a step of its own on the timeline below, because it
+  //    is a milestone in their life and not a footnote to an exam. What can
+  //    sit here is an offer that came through the same route - a second chance
+  //    at the same door, not taken.
+  const takenOutcomes: BraidOutcome[] = [];
+  for (const ad of extras.admits) {
+    if (!facts.kind || ad.route_kind !== facts.kind) continue;
+    if (facts.kind === 'entrance_exam' && !sameExam(ad.exam, a.admission_exam)) continue;
+    placed.add(ad.id);
+    takenOutcomes.push(admitOutcome(ad));
+  }
+  if (facts.route || takenOutcomes.length) {
+    columns.push({
+      key: 'taken', kind: 'taken',
+      label: facts.route ?? 'How they got in',
+      meta: [facts.score ?? (seat && facts.kind === 'entrance_exam' ? attemptBand(seat) : null),
+             facts.cutoff ? `cutoff ${facts.cutoff}` : null].filter(Boolean).join(' · ') || null,
+      outcomes: takenOutcomes,
+      continues: true,
+    });
+  }
+
+  // 2. Every other exam written, with whatever it produced under it.
+  const attempts = otherAttempts(a, extras.attempts);
+  const showYear = new Set(extras.attempts.map((t) => t.exam_year ?? 0)).size > 1;
+  for (const t of attempts) {
+    const from = extras.admits.filter((ad) => !placed.has(ad.id)
+      && ad.route_kind === 'entrance_exam' && sameExam(ad.exam, t.exam));
+    for (const ad of from) placed.add(ad.id);
+    columns.push({
+      key: `exam:${t.id}`, kind: 'other',
+      label: showYear && t.exam_year ? `${t.exam} ${t.exam_year}` : t.exam,
+      meta: attemptBand(t),
+      outcomes: from.map(admitOutcome),
+      continues: false,
+      ended: from.length ? 'not taken' : (t.gave_admit ? 'had an offer' : 'wrote it'),
+    });
+  }
+
+  // 3. Offers through a route that is not an exam they listed - a seat on
+  //    board marks somewhere else, a direct admission turned down. Grouped by
+  //    route so two offers on board marks are one thread, not two.
+  const rest = extras.admits.filter((ad) => !placed.has(ad.id));
+  const groups = new Map<string, { label: string; admits: PublicAdmit[] }>();
+  for (const ad of rest) {
+    const label = labelOfShape({ kind: ad.route_kind, exam: ad.exam, detail: ad.route_detail });
+    const key = label ?? '';
+    let g = groups.get(key);
+    if (!g) { g = { label: label ?? 'Also offered', admits: [] }; groups.set(key, g); }
+    g.admits.push(ad);
+  }
+  for (const [key, g] of groups) {
+    columns.push({
+      key: `route:${key || 'unknown'}`, kind: 'other',
+      label: g.label,
+      outcomes: g.admits.map(admitOutcome),
+      continues: false,
+      ended: 'not taken',
+    });
+  }
+
+  return columns;
 }
 
 /**
@@ -201,43 +344,25 @@ export function pathSteps(
     });
   }
 
-  // 2. How they got in. The route is the step; the band sits under it, small,
-  //    and the other exams they wrote sit beside it, smaller still.
-  const seat = extras.attempts.find((t) => t.got_seat);
-  const score = facts.score ?? (seat && facts.kind === 'entrance_exam' ? attemptBand(seat) : null);
-  const alsoWrote = otherAttempts(a, extras.attempts);
-  if (facts.route || score || alsoWrote.length) {
-    steps.push({
-      key: 'route', kind: 'route', icon: '📝',
-      title: facts.sentence ?? (facts.route ? `Got in through ${facts.route}` : 'Exams written'),
-      meta: [score, facts.cutoff ? `cutoff ${facts.cutoff}` : null].filter(Boolean).join(' · ') || null,
-      aside: alsoWrote.length ? { label: facts.route ? 'Also wrote' : 'Wrote', items: alsoWrote } : null,
-    });
-  }
+  // 2. How they got in: every way that was open, side by side, with the offers
+  //    each one produced. The data is in pathBraid() above; here it only needs
+  //    a place in the order.
+  const braid = pathBraid(a, extras);
+  if (braid.length) steps.push({ key: 'braid', kind: 'braid', icon: '📝', title: '' });
 
-  // 3. The college, with the offers they turned down listed under it.
-  const offers: PathAside[] = [...extras.admits]
-    .sort((x, y) => admitText(x).localeCompare(admitText(y)))
-    .map((ad) => ({
-      key: `admit:${ad.id}`,
-      text: admitText(ad),
-      href: ad.college_id ? `/colleges/${ad.college_id}` : null,
-      meta: labelOfShape({ kind: ad.route_kind, exam: ad.exam, detail: ad.route_detail }),
-    }))
-    .filter((o) => o.text);
+  // 3. The degree they joined - a step of its own, not a line hanging off the
+  //    exam that got them in. It is the thing most of this page is about, and
+  //    it belongs on the timeline with everything else that happened.
   if (college || course) {
     steps.push({
       key: 'college', kind: 'college', icon: '🎓',
       title: course && college ? `${course} at ${college}` : (college || course),
-      href: a.college_id ? `/colleges/${a.college_id}` : null,
+      href: collegeHref(a.college_id, college ?? a.college_name_raw),
       sub: course && a.branch ? a.branch : null,
-      meta: onCourse && a.expected_finish_year && a.expected_finish_year >= THIS_YEAR
-        ? `Expected to finish ${a.expected_finish_year}` : null,
+      meta: a.expected_finish_year
+        ? `${onCourse ? 'Expected to finish' : 'Finished'} ${a.expected_finish_year}` : null,
       now: onCourse,
-      aside: offers.length ? { label: 'Also offered', items: offers } : null,
     });
-  } else if (offers.length) {
-    steps.push({ key: 'offers', kind: 'college', icon: '🎓', title: 'Offers', aside: { label: '', items: offers } });
   }
 
   // 4. A professional qualification, alongside a degree or instead of one.
@@ -262,6 +387,7 @@ export function pathSteps(
       key: `study:${s.id}`, kind: 'study', icon: '🎓',
       title: tidy(s.degree_name),
       sub: tidy(s.institution) || null,
+      subHref: collegeHref(s.college_id, s.institution),
       meta: yearRange(s.start_year, s.finish_year) || null,
       now: s === ongoing,
     });
@@ -300,5 +426,7 @@ export function pathSteps(
 export function pathIsWorthDrawing(steps: PathStep[]): boolean {
   const real = steps.filter((s) => s.kind !== 'origin');
   if (real.length >= 2) return true;
-  return real.length === 1 && !!(real[0].meta || real[0].sub || real[0].aside);
+  // A braid is always worth drawing on its own: even one column says how they
+  // got in and what it got them, which the headline never does.
+  return real.length === 1 && (real[0].kind === 'braid' || !!(real[0].meta || real[0].sub));
 }

@@ -10,21 +10,33 @@
  */
 
 import { useId, useState } from 'react';
-import { linkedinUrl, parseLinkedIn } from '../linkedin';
+import { LINKEDIN_REQUIRED, linkedinUrl, parseLinkedIn } from '../linkedin';
 
-export default function LinkedInField({ value, onChange }: {
+export default function LinkedInField({ value, onChange, required }: {
   /** What the person typed or pasted; parseLinkedIn() reads it. */
   value: string;
   onChange: (v: string) => void;
+  /**
+   * Registration asks for it; the profile editor and the office do not
+   * (Round 11). Public profiles carry no email and no phone, so a handle is the
+   * only way a junior can reach a senior - but requiring it of the office would
+   * make an imported profile impossible to finish, and would lock an alumnus
+   * who signed up before this out of their own page.
+   */
+  required?: boolean;
 }) {
   const id = useId();
   const [touched, setTouched] = useState(false);
-  const { handle, problem } = parseLinkedIn(value);
+  const { handle, problem: parsed } = parseLinkedIn(value);
+  const problem = required && !value.trim() ? LINKEDIN_REQUIRED : parsed;
   const url = linkedinUrl(handle);
 
   return (
     <div className="field linkedin-field" data-field="linkedin">
-      <label htmlFor={id}>LinkedIn <span className="opt">optional · shown on your page</span></label>
+      <label htmlFor={id}>
+        LinkedIn <span className="opt">{required ? 'shown on your page' : 'optional · shown on your page'}</span>
+        {required && <span className="req" aria-hidden> *</span>}
+      </label>
       <div className={`linkedin-field__box${touched && problem ? ' linkedin-field__box--invalid' : ''}`}>
         <span className="linkedin-field__prefix" aria-hidden>linkedin.com/in/</span>
         <input
@@ -37,6 +49,7 @@ export default function LinkedInField({ value, onChange }: {
             if (handle && handle !== value.trim()) onChange(handle);
           }}
           aria-invalid={touched && !!problem}
+          aria-required={required || undefined}
           aria-describedby={`${id}-note`}
         />
       </div>

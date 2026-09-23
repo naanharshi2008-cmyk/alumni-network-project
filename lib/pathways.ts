@@ -12,7 +12,7 @@
  *     exam, not a guess from whoever wrote it). Someone who wrote CUET appears
  *     under each of CUET's areas; someone who joined or was offered a seat
  *     through it appears under the area of that course.
- *   - Board marks, a management seat and other ways in sit under the area of
+ *   - Board marks, a direct admission and other ways in sit under the area of
  *     what was joined or offered.
  *   - A person is counted once per pathway, in the strongest band they reach:
  *     joined, else had an offer, else wrote it. "Attempted is not admitted" -
@@ -112,7 +112,7 @@ export function buildPathways(input: PathwaysInput): AreaPathways[] {
         ? bucket(area, 'board:tnea', 'board_marks', 'Board marks (TNEA)')
         : bucket(area, 'board', 'board_marks', 'Board marks');
     }
-    if (kind === 'management') return bucket(area, 'management', 'management', 'Management seat');
+    if (kind === 'management') return bucket(area, 'management', 'management', 'Direct admission');
     if (kind === 'other') return bucket(area, 'other', 'other', 'Other ways in');
     return null;
   };

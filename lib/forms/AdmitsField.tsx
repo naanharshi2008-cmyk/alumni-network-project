@@ -59,6 +59,13 @@ export default function AdmitsField({
           Recorded by the school: {schoolAdded.join('; ')}. Ask the office if any of these is wrong.
         </div>
       )}
+      {/* Round 11: an offer that came through an entrance exam is asked with
+          that exam, where the route needs no asking. This block is for the
+          rest - an offer on board marks, a direct admission - which is most of
+          them, and which nothing else on the form could hold. */}
+      <p className="form-note" style={{ marginTop: 0 }}>
+        An offer that came through an entrance exam is easiest to add with that exam, above.
+      </p>
       {rows.map((d) => (
         <div key={d.key} className="entry-card">
           <EntitySearchField

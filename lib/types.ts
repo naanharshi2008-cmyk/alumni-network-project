@@ -312,6 +312,12 @@ export interface HigherStudy {
   alumni_id: string;
   degree_name: string;
   institution: string | null;
+  /**
+   * The college this degree was read at, once it resolved to one (migration
+   * 21). Optional here because rows read before that migration - and rows the
+   * office has not linked yet - carry only the typed `institution`.
+   */
+  college_id?: string | null;
   start_year: number | null;
   finish_year: number | null;
 }

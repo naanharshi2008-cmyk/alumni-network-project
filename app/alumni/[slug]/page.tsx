@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { notFound, permanentRedirect } from 'next/navigation';
 import { fetchAlumnusBySlug, fetchPathExtras, fetchRelatedAlumni, fetchTimelines } from '../../../lib/publicData';
 import { admissionFacts } from '../../../lib/admission';
-import { nowOf, pathIsWorthDrawing, pathSteps, shortSchoolName } from '../../../lib/profilePath';
+import { collegeHref, nowOf, pathBraid, pathIsWorthDrawing, pathSteps, shortSchoolName } from '../../../lib/profilePath';
 import {
   FALLBACK_TINT, collegeLabel, collegeTintKey, instituteTint, looksLikeWords, profileHref, profileSummary, shortName,
 } from '../../../lib/showcase';
@@ -12,6 +12,7 @@ import {
   SCHOOL_GROUP_NAME, collegeDetailsOf, initialsOf, professionalLabel,
   sortHigherStudies, sortWorkExperience,
 } from '../../../lib/types';
+import PathBraid from '../../../lib/PathBraid';
 import ShareButton from './ShareButton';
 
 /**
@@ -79,6 +80,10 @@ export default async function AlumnusPage({ params }: Props) {
   const tintKey = collegeTintKey(a);
   const facts = admissionFacts(a);
   const steps = pathSteps(a, studies, work, extras);
+  const braid = pathBraid(a, extras);
+  // The headline names a college, so it leads where that college leads -
+  // its own page, or the college list searched for a name nobody has pinned.
+  const headHref = college ? collegeHref(a.college_id, college) : null;
   const now = nowOf(a, studies, work);
 
   // The one line that says where they went. First match wins; with none of
@@ -132,9 +137,7 @@ export default async function AlumnusPage({ params }: Props) {
               {det?.logo_url && college && (
                 <span className="apage__crest" aria-hidden><img src={det.logo_url} alt="" /></span>
               )}
-              {a.college_id && college
-                ? <Link href={`/colleges/${a.college_id}`}>{strong}</Link>
-                : strong}
+              {headHref ? <Link href={headHref}>{strong}</Link> : strong}
               {/* On the first screen, where a phone visitor will see it. The
                   score stays in the path below: the route is what says the
                   door exists. */}
@@ -200,21 +203,17 @@ export default async function AlumnusPage({ params }: Props) {
                     {st.href ? <Link href={st.href}>{st.title}</Link> : st.title}
                     {st.now && <span className="timeline__now">Now</span>}
                   </div>
-                  {st.sub && <div className="timeline__sub">{st.sub}</div>}
-                  {st.meta && <div className="timeline__meta">{st.meta}</div>}
-                  {st.aside && st.aside.items.length > 0 && (
-                    <div className="timeline__aside">
-                      {st.aside.label && <span className="timeline__aside-label">{st.aside.label}</span>}
-                      <ul>
-                        {st.aside.items.map((it) => (
-                          <li key={it.key}>
-                            {it.href ? <Link href={it.href}>{it.text}</Link> : it.text}
-                            {it.meta && <span className="timeline__aside-meta"> · {it.meta}</span>}
-                          </li>
-                        ))}
-                      </ul>
+                  {st.sub && (
+                    <div className="timeline__sub">
+                      {st.subHref ? <Link href={st.subHref}>{st.sub}</Link> : st.sub}
                     </div>
                   )}
+                  {st.meta && <div className="timeline__meta">{st.meta}</div>}
+                  {/* Every way in that was open, side by side. The one they
+                      took reads at full strength and carries on down the
+                      timeline; the others are drawn the same way in a quieter
+                      ink and stop where they stopped. */}
+                  {st.kind === 'braid' && <PathBraid columns={braid} />}
                 </div>
               </li>
             ))}

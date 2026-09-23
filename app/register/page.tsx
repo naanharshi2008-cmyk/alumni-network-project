@@ -23,13 +23,13 @@ import GapYearField from '../../lib/forms/GapYearField';
 import FamilyHomeFields from '../../lib/forms/FamilyHomeFields';
 import LinkedInField from '../../lib/forms/LinkedInField';
 import {
-  admissionColumns, admissionFromRow, admissionProblem, admitRows, attemptRows, contextualBranchAliases,
+  admissionColumns, admissionFromRow, admissionProblem, admitRows, allOffers, attemptRows, contextualBranchAliases,
   emptyAdmission, emptyFamily, emptyGap, familyProblems, gapProblem, gapRows, inGapYear, joinedCollege,
   privateRow, seatYear,
   type AdmissionDraft, type AdmitDraft, type AttemptDraft, type FamilyDraft, type FamilyKey, type GapDraft,
 } from '../../lib/forms/model';
 import { branchVocab, canonicalBranch, examVocab, type Vocab } from '../../lib/forms/vocab';
-import { parseLinkedIn } from '../../lib/linkedin';
+import { LINKEDIN_REQUIRED, parseLinkedIn } from '../../lib/linkedin';
 import { examAreas, examCanonical } from '../../lib/exams';
 
 /* ─────────────────────────────────────────────────────────────────────────
@@ -268,6 +268,17 @@ function validateField(key: FieldKey, form: FormState): string {
       // in their year out has nothing to be "still" doing.
       if (!describesCourse(form) || inGapYear(form.gap)) return '';
       return val(form.still_studying) ? '' : 'Yes or no is all we need.';
+    case 'expected_finish_year': {
+      // Required alongside the answer above (Round 11): it is what the page
+      // says they are doing now, and what tells them when to come back.
+      if (!describesCourse(form) || inGapYear(form.gap)) return '';
+      const y = parseInt(form.expected_finish_year, 10);
+      if (!form.expected_finish_year.trim()) return 'Which year — roughly is fine.';
+      if (!y || y < CURRENT_YEAR - 10 || y > CURRENT_YEAR + 10) {
+        return `Pick a year between ${CURRENT_YEAR - 10} and ${CURRENT_YEAR + 10}.`;
+      }
+      return '';
+    }
     case 'personal_email': {
       const v = val(form.personal_email);
       if (!v) return 'We need an email to reach you.';
@@ -276,6 +287,9 @@ function validateField(key: FieldKey, form: FormState): string {
     case 'phone_number':
       return phoneProblem(form.phone_country_code, form.phone_number);
     case 'linkedin':
+      // Required here, and only here (Round 11). A public profile carries no
+      // email and no phone, so this is the one way a junior can reach them.
+      if (!val(form.linkedin)) return LINKEDIN_REQUIRED;
       return parseLinkedIn(form.linkedin).problem;
     default:
       return '';
@@ -289,7 +303,7 @@ const STEP_FIELDS: FieldKey[][] = [
   ['full_name', 'personal_email', 'phone_number', 'password_val'],
   ['school_name', 'class_of', 'stream'],
   [],
-  ['gap', 'field', 'college_name', 'degree', 'professional_course', 'admission', 'still_studying'],
+  ['gap', 'field', 'college_name', 'degree', 'professional_course', 'admission', 'still_studying', 'expected_finish_year'],
   ['linkedin'],
 ];
 
@@ -370,6 +384,9 @@ export default function RegisterPage() {
   const [family, setFamily] = useState<FamilyDraft>(emptyFamily());
   const [familyTouched, setFamilyTouched] = useState<Partial<Record<FamilyKey, boolean>>>({});
   const [showAdmits, setShowAdmits] = useState(false);
+  // Lifted like showAdmits: StepStudies remounts as the step changes, and a
+  // disclosure that closed itself on the way back would hide a filled answer.
+  const [showProfessional, setShowProfessional] = useState(false);
 
   // Arrived through a senior's share link: /register?from=<their slug>.
   const [inviter, setInviter] = useState<{ slug: string; name: string; classOf: number | null } | null>(null);
@@ -753,8 +770,10 @@ export default function RegisterPage() {
         // they say where they joined.
         in_gap_year: inGapYear(form.gap),
         current_status: finalStatus || null,
-        expected_finish_year: isInProgressStatus(finalStatus) && form.expected_finish_year
-          ? parseInt(form.expected_finish_year, 10) : null,
+        // Kept whatever the status says. It used to be dropped unless the
+        // derived status was an in-progress one, so a finished degree lost the
+        // year it finished and the page had nothing to show.
+        expected_finish_year: form.expected_finish_year ? parseInt(form.expected_finish_year, 10) : null,
         currently_at: typedOrg,
         organization_id: organizationId,
         designation: cleanProperNoun(form.designation),
@@ -814,8 +833,13 @@ export default function RegisterPage() {
           const { error: eaErr } = await supabase.from('exam_attempts').insert(attempts.map((r) => ({ ...r, alumni_id: newId })));
           if (eaErr) { console.error('exam_attempts insert', eaErr); lostSections.push('entrance exams'); }
         }
-        if (namedCollege) {
-          const offers = form.admits.filter((d) => d.college.trim());
+        // Every offer not taken: the ones claimed against an exam, and the
+        // ones typed into "anywhere else?". This used to run only when a
+        // college had been named, so someone taking a year out - who may well
+        // have had an offer and turned it down - had nowhere to record one.
+        {
+          const offers = allOffers(namedCollege ? form.admits : [], form.attempts)
+            .filter((d) => d.college.trim() || d.pick);
           const ids: Record<string, string | null> = {};
           for (const d of offers) ids[d.key] = await linkFor('college', cleanProperNoun(d.college), d.pick);
           const rows = admitRows(offers, year, ids, exams.aliases).map((r) => ({
@@ -974,6 +998,7 @@ export default function RegisterPage() {
                   {...stepProps}
                   fieldOptions={fieldOptions} degreeOptions={degreeOptions} professionalOptions={professionalOptions}
                   exams={exams} branches={branches} showAdmits={showAdmits} setShowAdmits={setShowAdmits}
+                  showProfessional={showProfessional} setShowProfessional={setShowProfessional}
                 />
                 {/* Nothing to say about "now" until the first question is
                     answered, and nothing while the year out is still on. */}
@@ -1158,10 +1183,11 @@ function StepSchool({ form, update, markTouched, errorFor, isValid, streamOption
 
 function StepStudies({
   form, update, updateWith, markTouched, errorFor, fieldOptions, degreeOptions, professionalOptions,
-  exams, branches, showAdmits, setShowAdmits,
+  exams, branches, showAdmits, setShowAdmits, showProfessional, setShowProfessional,
 }: StepProps & {
   fieldOptions: string[]; degreeOptions: string[]; professionalOptions: string[];
   exams: Vocab; branches: Vocab; showAdmits: boolean; setShowAdmits: (v: boolean) => void;
+  showProfessional: boolean; setShowProfessional: (v: boolean) => void;
 }) {
   const joined = joinedCollege(form.gap);
   const namedCollege = joined && !!form.college_name.trim();
@@ -1185,6 +1211,39 @@ function StepStudies({
     || !!resolveValue(form.professional_course, form.professional_course_other).trim();
   const [correctingField, setCorrectingField] = useState(false);
   const showFieldPicker = hasCourse && (correctingField || !!form.field || !guessed);
+
+  // Has this person already told us about a course? If so the professional
+  // qualification is an extra, and folds away; if not, it is the question.
+  const namesACourse = namedCollege || !!degree.trim();
+  const professionalNamed = resolveValue(form.professional_course, form.professional_course_other).trim();
+  const professionalFields = (
+    <>
+      <SelectWithOther
+        name="professional_course" label="Qualification" optional options={professionalOptions}
+        value={form.professional_course}
+        onChange={(v) => { update('professional_course', v); markTouched('professional_course'); }}
+        otherValue={form.professional_course_other}
+        onOtherChange={(v) => update('professional_course_other', v)}
+        error={errorFor('professional_course')}
+      />
+      {form.professional_course && (
+        <SelectField
+          label="How far along?" value={form.professional_stage}
+          onChange={(v) => update('professional_stage', v)}
+          options={PROFESSIONAL_STAGES}
+          placeholder="Select stage"
+        />
+      )}
+      {form.professional_course && (
+        <Field
+          label="Articling / studying at" optional
+          hint="the firm or institute, if you'd like to name it"
+          value={form.professional_org} onChange={(v) => update('professional_org', v)}
+          onBlur={() => markTouched('professional_org')} error="" valid={false}
+        />
+      )}
+    </>
+  );
 
   return (
     <>
@@ -1270,6 +1329,7 @@ function StepStudies({
           examOptions={exams.options} examAliases={exams.aliases}
           classOf={parseInt(form.class_of, 10) || null}
           tookGap={form.gap.afterSchool === 'gap'}
+          degreeOptions={degreeOptions} branchOptions={branches.options} branchAliases={branches.aliases}
         />
       )}
 
@@ -1283,43 +1343,35 @@ function StepStudies({
         />
       )}
 
-      {/* Always offered once the first question is answered: plenty of people
-          read for CA alongside a degree, and plenty do it instead of one.
-          Presenting it as an either/or would misrepresent both. */}
-      {answered && (
-      <div className="opt-section opt-section--static">
-        <div className="opt-section__body">
-          <p className="opt-section__title">Doing CA, CS, CMA or ACCA? <span className="opt">optional</span></p>
-          <p className="opt-section__caption" style={{ marginBottom: 12 }}>
-            Many people do this alongside a degree, and many do it on its own — either way it belongs here.
-          </p>
-        <SelectWithOther
-          name="professional_course" label="Qualification" optional options={professionalOptions}
-          value={form.professional_course}
-          onChange={(v) => { update('professional_course', v); markTouched('professional_course'); }}
-          otherValue={form.professional_course_other}
-          onOtherChange={(v) => update('professional_course_other', v)}
-          error={errorFor('professional_course')}
-        />
-        {form.professional_course && (
-          <SelectField
-            label="How far along?" value={form.professional_stage}
-            onChange={(v) => update('professional_stage', v)}
-            options={PROFESSIONAL_STAGES}
-            placeholder="Select stage"
-          />
-        )}
-        {form.professional_course && (
-          <Field
-            label="Articling / studying at" optional
-            hint="the firm or institute, if you'd like to name it"
-            value={form.professional_org} onChange={(v) => update('professional_org', v)}
-            onBlur={() => markTouched('professional_org')} error="" valid={false}
-          />
-        )}
+      {/* Round 11: it is still true that plenty read for CA alongside a degree
+          and plenty do it instead of one, so it is never an either/or. What
+          changed is who gets asked outright. In front of someone who has just
+          named a college and a degree this was noise, so for them it is a line
+          to tap. For someone with no course at all it is the only course
+          question on the page and stays open.
+
+          There is deliberately no "Not applicable" choice: a question that does
+          not apply is better not asked than answered with a shrug, and an N/A
+          would land in field_options as a value the school has to look at. */}
+      {answered && (namesACourse ? (
+        <OptionalSection
+          title="Also doing CA, CS, CMA or ACCA?"
+          caption={professionalNamed || 'optional — many people read for one alongside a degree'}
+          open={showProfessional || !!form.professional_course} onToggle={setShowProfessional}
+        >
+          {professionalFields}
+        </OptionalSection>
+      ) : (
+        <div className="opt-section opt-section--static">
+          <div className="opt-section__body">
+            <p className="opt-section__title">Doing CA, CS, CMA or ACCA? <span className="opt">optional</span></p>
+            <p className="opt-section__caption" style={{ marginBottom: 12 }}>
+              Many people do this alongside a degree, and many do it on its own — either way it belongs here.
+            </p>
+            {professionalFields}
+          </div>
         </div>
-      </div>
-      )}
+      ))}
     </>
   );
 }
@@ -1381,14 +1433,33 @@ function StepNow({
         </div>
       )}
 
-      {stillStudying && (
+      {/* Round 11: asked whichever answer they gave, and no longer optional.
+          While they are studying it is the year their page will say they
+          finish; once they have, it is the year the course ended. It used to
+          be asked only of current students, and then thrown away on save
+          unless the derived status happened to be an in-progress one - so a
+          finished degree carried no year at all. */}
+      {describes && (
         <Field
-          label="Expected to finish in" optional type="number" hint="year"
+          label={stillStudying ? 'Which year do you finish?' : 'Which year did you finish?'}
+          type="number" hint="a rough year is fine — you can change it later"
           min={CURRENT_YEAR - 10} max={CURRENT_YEAR + 10}
           value={form.expected_finish_year}
           onChange={(v) => update('expected_finish_year', v.replace(/[^\d]/g, ''))}
-          onBlur={() => markTouched('expected_finish_year')} error="" valid={false}
+          onBlur={() => markTouched('expected_finish_year')}
+          error={errorFor('expected_finish_year')} valid={false}
         />
+      )}
+
+      {/* What that answer does, said before they wonder. The commonest reason
+          a profile goes stale is that nobody told the student it was theirs to
+          keep. */}
+      {stillStudying && form.expected_finish_year && (
+        <p className="form-note form-note--warm">
+          Your page will say you are studying{course ? ` ${course}` : ''}
+          {form.college_name.trim() ? ` at ${form.college_name.trim()}` : ''}, finishing {form.expected_finish_year}.
+          Come back and update it when you do — it takes a minute, and juniors see where you ended up.
+        </p>
       )}
 
       <div ref={nowRef}>
@@ -1615,7 +1686,7 @@ function StepFinish({ form, update, markTouched, errorFor, isValid }: StepProps)
         </p>
       </div>
 
-      <LinkedInField value={form.linkedin} onChange={(v) => { update('linkedin', v); markTouched('linkedin'); }} />
+      <LinkedInField required value={form.linkedin} onChange={(v) => { update('linkedin', v); markTouched('linkedin'); }} />
 
       <div className="consent" style={{ marginTop: 20 }}>
         <label className="cbox">

@@ -22,11 +22,12 @@ import OptionSearchField from '../../lib/OptionSearchField';
 import AdmissionFields from '../../lib/forms/AdmissionFields';
 import ExamAttemptsField from '../../lib/forms/ExamAttemptsField';
 import AdmitsField from '../../lib/forms/AdmitsField';
+import { OptionalBlock } from '../../lib/forms/controls';
 import GapYearField from '../../lib/forms/GapYearField';
 import FamilyHomeFields from '../../lib/forms/FamilyHomeFields';
 import LinkedInField from '../../lib/forms/LinkedInField';
 import {
-  admissionColumns, admissionFromRow, admissionProblem, admitRows, admitsFromRows, attemptRows, attemptsFromRows,
+  admissionColumns, admissionFromRow, admissionProblem, admitRows, admitsFromRows, allOffers, attemptRows, attemptsFromRows, pathDraftsFromRows,
   contextualBranchAliases, emptyAdmission, emptyFamily, emptyGap, familyFromRow, familyProblems, gapFromRows,
   gapProblem, gapRows, inGapYear, joinedCollege, privateRow, seatYear,
   type AdmissionDraft, type AdmitDraft, type AttemptDraft, type FamilyDraft, type FamilyKey, type GapDraft,
@@ -229,6 +230,7 @@ export default function ProfilePage() {
   const [familyTouched, setFamilyTouched] = useState<Partial<Record<FamilyKey, boolean>>>({});
   const [linkedin, setLinkedin] = useState('');
   const [showAdmits, setShowAdmits] = useState(false);
+  const [showProfessional, setShowProfessional] = useState(false);
   // "Something else" has been tapped, so the full status list is on screen.
   const [statusOpen, setStatusOpen] = useState(false);
 
@@ -286,11 +288,15 @@ export default function ProfilePage() {
         supabase.from('gap_years').select('*').eq('alumni_id', data.id),
         supabase.from('alumni_private').select('*').eq('alumni_id', data.id).maybeSingle(),
       ]);
-      setAttempts(attemptsFromRows(Array.isArray(stagedAttempts) ? stagedAttempts : (attRes.data ?? []), classOfNum));
       const savedAdmits = (admRes.data ?? []) as any[];
       const own = Array.isArray(stagedAdmits) ? stagedAdmits : savedAdmits.filter((r) => !r.added_by_school);
-      setAdmits(admitsFromRows(own));
-      if (own.length) setShowAdmits(true);
+      // An offer stored against an exam goes back to that exam, not into the
+      // "anywhere else?" block - otherwise it would show in both places.
+      const drafts = pathDraftsFromRows(
+        Array.isArray(stagedAttempts) ? stagedAttempts : (attRes.data ?? []), own, classOfNum);
+      setAttempts(drafts.attempts);
+      setAdmits(drafts.admits);
+      if (drafts.admits.length) setShowAdmits(true);
       setSchoolAdmits(savedAdmits.filter((r) => r.added_by_school).map((r) =>
         [[r.degree, r.branch].filter(Boolean).join(' '), r.college?.name ?? r.college_name_raw].filter(Boolean).join(' at ')));
       setGap(gapFromRows(
@@ -459,8 +465,8 @@ export default function ProfilePage() {
         ...admissionColumns(namedCollege ? admission : emptyAdmission(), exams.aliases),
         in_gap_year: inGapYear(gap),
         current_status: finalStatus,
-        expected_finish_year: isInProgressStatus(finalStatus) && profile.expected_finish_year
-          ? parseInt(profile.expected_finish_year, 10) : null,
+        // Kept whatever the status says, so a finished course keeps its year.
+        expected_finish_year: profile.expected_finish_year ? parseInt(profile.expected_finish_year, 10) : null,
         currently_at: typedOrg,
         organization_id: organizationId,
         designation: cleanProperNoun(profile.designation),
@@ -491,7 +497,7 @@ export default function ProfilePage() {
       const attemptPayload = attemptRows(attempts, {
         admission: namedCollege ? admission : emptyAdmission(), year: seatYear(gap, classOfNum), attemptYear: classOfNum,
       }, exams.aliases);
-      const offers = namedCollege ? admits.filter((d) => d.college.trim()) : [];
+      const offers = allOffers(namedCollege ? admits : [], attempts).filter((d) => d.college.trim() || d.pick);
       const offerIds: Record<string, string | null> = {};
       for (const d of offers) offerIds[d.key] = await linkFor('college', cleanProperNoun(d.college), d.pick);
       const admitPayload = admitRows(offers, seatYear(gap, classOfNum), offerIds, exams.aliases).map((r) => ({
@@ -675,11 +681,39 @@ export default function ProfilePage() {
   const professionalSel = splitStoredValue(profile.professional_course, professionalOptions).selected;
   const joinedNow = joinedCollege(gap);
   const collegeNamed = joinedNow && !!profile.college_name.trim();
+  const namesACourse = !!profile.college_name.trim() || !!profile.degree.trim();
+  const professionalFields = (
+    <>
+      <SelectWithOther
+        label="Professional qualification" options={professionalOptions} value={professionalSel}
+        onChange={(v) => updateField('professional_course', v)}
+        otherValue={others.professional_course} onOtherChange={(v) => updateOther('professional_course', v)}
+      />
+      {professionalSel && (
+        <SelectField
+          label="How far along?" value={profile.professional_stage}
+          onChange={(v) => updateField('professional_stage', v)}
+          options={PROFESSIONAL_STAGES}
+          placeholder="Select stage"
+        />
+      )}
+      {professionalSel && (
+        <FloatingField
+          label="Articling / studying at" hint="optional"
+          value={profile.professional_org}
+          onChange={(v) => updateField('professional_org', v)}
+        />
+      )}
+    </>
+  );
   const classOfNum = profile.class_of ? parseInt(profile.class_of, 10) || null : null;
   const areaKey = joinedNow
     ? (categoryForDegree(resolveValue(degreeSel, others.degree), profile.branch, resolveValue(professionalSel, others.professional_course))?.key ?? null)
     : (examAreas(gap.exam)[0] ?? null);
   const statusSel = splitStoredValue(profile.current_status, statusOptions).selected;
+  const stillOnCourseNow = isInProgressStatus(resolveValue(statusSel, others.current_status));
+  const finishYearPassed = namesACourse && stillOnCourseNow
+    && !!profile.expected_finish_year && parseInt(profile.expected_finish_year, 10) < CURRENT_YEAR;
   // Which chip, if any, says what is already stored. Anything else - a status
   // from the longer list, or free text - opens the select instead of quietly
   // showing no chip selected while a value is saved.
@@ -901,26 +935,18 @@ export default function ProfilePage() {
             required
           />
 
-          <SelectWithOther
-            label="Professional qualification" options={professionalOptions} value={professionalSel}
-            onChange={(v) => updateField('professional_course', v)}
-            otherValue={others.professional_course} onOtherChange={(v) => updateOther('professional_course', v)}
-          />
-          {professionalSel && (
-            <SelectField
-              label="How far along?" value={profile.professional_stage}
-              onChange={(v) => updateField('professional_stage', v)}
-              options={PROFESSIONAL_STAGES}
-              placeholder="Select stage"
-            />
-          )}
-          {professionalSel && (
-            <FloatingField
-              label="Articling / studying at" hint="optional"
-              value={profile.professional_org}
-              onChange={(v) => updateField('professional_org', v)}
-            />
-          )}
+          {/* Folded away for anyone who has already named a course, and open for
+              anyone who has not - the same rule registration uses, so the two
+              forms ask this the same way (Round 11). */}
+          {namesACourse ? (
+            <OptionalBlock
+              title="Also doing CA, CS, CMA or ACCA?"
+              caption={professionalSel || 'optional — many people read for one alongside a degree'}
+              open={showProfessional || !!professionalSel} onToggle={setShowProfessional}
+            >
+              {professionalFields}
+            </OptionalBlock>
+          ) : professionalFields}
 
           {collegeNamed && (
             <AdmissionFields
@@ -935,6 +961,7 @@ export default function ProfilePage() {
             area={areaKey}
             examOptions={exams.options} examAliases={exams.aliases}
             classOf={classOfNum} tookGap={gap.afterSchool === 'gap'}
+            degreeOptions={degreeOptions} branchOptions={branches.options} branchAliases={branches.aliases}
           />
 
           {collegeNamed && (
@@ -1000,13 +1027,25 @@ export default function ProfilePage() {
             />
           )}
 
-          {isInProgressStatus(resolveValue(statusSel, others.current_status)) && (
+          {/* Asked whenever there is a course, not only while it is in
+              progress (Round 11) - a finished degree has a year too, and the
+              page has nowhere else to get it from. */}
+          {namesACourse && (
             <FloatingField
-              label="Expected to finish in (year)" type="number"
+              label={stillOnCourseNow ? 'Which year do you finish?' : 'Which year did you finish?'}
+              type="number" hint="a rough year is fine"
               min={CURRENT_YEAR - 10} max={CURRENT_YEAR + 10}
               value={profile.expected_finish_year}
               onChange={(v) => updateField('expected_finish_year', v)}
             />
+          )}
+          {/* The one nudge that keeps a profile from going stale: the year they
+              gave us has come and gone, and nobody has asked them since. */}
+          {finishYearPassed && (
+            <p className="form-note form-note--warm">
+              You expected to finish in {profile.expected_finish_year}. Have you? Tell us what you are doing
+              now and your page catches up — it takes a minute.
+            </p>
           )}
 
           <EntitySearchField

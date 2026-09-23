@@ -16,7 +16,7 @@ import { routeLabel } from '../lib/admission';
  * All three render only entries that actually have alumni: fifteen mostly-zero
  * cards would make a young directory look abandoned, and the counts are the
  * proof a sceptical parent is looking for. Routes go through routeLabel
- * (lib/admission.ts): board marks, an exam, a management seat, or Other - and
+ * (lib/admission.ts): board marks, an exam, a direct admission, or Other - and
  * never the word "quota".
  *
  * Links: areas use the dedicated ?cat= filter; routes and states land on the

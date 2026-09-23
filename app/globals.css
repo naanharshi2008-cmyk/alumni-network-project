@@ -947,23 +947,74 @@ textarea { min-height: 84px; resize: vertical; }
 .timeline__title a { color: inherit; text-decoration: underline; text-decoration-color: var(--border-strong); text-underline-offset: 3px; }
 .timeline__title a:hover { color: var(--gold); }
 .timeline__sub { font-size: 0.9rem; color: var(--text-muted); margin-top: 2px; }
+/* An institute named under higher studies is a college like any other, and
+   leads to its page - or, when nobody has pinned it yet, to the college list
+   searched for that name. */
+.timeline__sub a {
+  color: inherit; text-decoration: underline;
+  text-decoration-color: var(--border-strong); text-underline-offset: 3px;
+}
+.timeline__sub a:hover { color: var(--gold); }
 .timeline__meta { font-size: 0.8rem; color: var(--text-faint); margin-top: 3px; }
 /* Where the story starts: present, but plainly not an achievement. */
 .timeline__item--origin .timeline__dot { background: transparent; border-style: dashed; }
 .timeline__item--now .timeline__dot { border-color: var(--ok-border); background: var(--ok-bg); }
 /* A year out: part of the path, drawn as quietly as where it started. */
 .timeline__item--gap .timeline__dot { background: transparent; }
-/* The paths beside the one taken - other exams, offers not taken. Smaller
-   than the step, so the path pursued stays the thing you read. */
-.timeline__aside { margin-top: 6px; font-size: 0.85rem; color: var(--text-muted); }
-.timeline__aside-label {
-  display: block; font-size: 0.72rem; font-weight: 650; text-transform: uppercase;
-  letter-spacing: 0.04em; color: var(--text-faint); margin-bottom: 2px;
+/* ── The braid ───────────────────────────────────────────────────────────
+   Every way in that was open, side by side: the one taken, then the ones that
+   stopped. They are drawn the same - same size, same weight - because they are
+   the same kind of fact; only the ink is quieter, and only the taken thread
+   carries on down the timeline.
+
+   One grid, so the route line, the thread and the outcomes sit at the same
+   height across all of them. Columns use `subgrid` for that; where it is not
+   supported each column simply lays itself out and the rows no longer align,
+   which is untidy but perfectly readable. */
+.braid {
+  display: grid; grid-auto-flow: column;
+  grid-auto-columns: minmax(148px, 1fr);
+  grid-template-rows: auto auto auto 1fr auto;
+  gap: 0 18px; margin-top: 8px; align-items: start;
 }
-.timeline__aside ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
-.timeline__aside a { color: inherit; text-decoration: underline; text-decoration-color: var(--border-strong); text-underline-offset: 3px; }
-.timeline__aside a:hover { color: var(--gold); }
-.timeline__aside-meta { color: var(--text-faint); font-size: 0.8rem; }
+.braid__col { display: grid; grid-template-rows: subgrid; grid-row: 1 / -1; min-width: 0; }
+.braid__route { font-weight: 650; font-size: 1rem; line-height: 1.35; overflow-wrap: anywhere; }
+.braid__meta { font-size: 0.8rem; color: var(--text-faint); margin-top: 3px; }
+.braid__thread { width: 2px; height: 16px; margin: 8px 0 8px 1px; background: var(--border-strong); }
+.braid__outcomes { display: grid; gap: 10px; align-content: start; }
+.braid__where { font-weight: 650; font-size: 0.95rem; line-height: 1.35; overflow-wrap: anywhere; }
+.braid__where a {
+  color: inherit; text-decoration: underline;
+  text-decoration-color: var(--border-strong); text-underline-offset: 3px;
+}
+.braid__where a:hover { color: var(--gold); }
+.braid__outcome-meta { display: block; font-size: 0.8rem; color: var(--text-faint); margin-top: 2px; }
+/* The ways in that did not continue: the same shapes in a quieter ink. */
+.braid__col--other .braid__route, .braid__col--other .braid__where { color: var(--text-muted); }
+/* Where a thread stopped, with a short cap across it so the eye can see that
+   it ends rather than simply running out of content. */
+.braid__end { font-size: 0.78rem; color: var(--text-faint); margin-top: 10px; }
+.braid__end::before {
+  content: ''; display: block; width: 12px; height: 2px;
+  background: var(--border-strong); margin-bottom: 6px;
+}
+/* The one they took keeps the page's own ink, and its thread is the gold one
+   that the timeline below carries on. */
+.braid__col--continues .braid__thread { background: var(--gold); }
+
+@media (max-width: 640px) {
+  /* Three columns will not fit a phone, and stacking them would throw away the
+     one thing the shape is for. So they scroll sideways, the taken one first -
+     the same pattern the featured row uses. */
+  .braid {
+    grid-auto-columns: minmax(148px, 64%);
+    overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: none;
+    margin-right: -16px; padding-right: 16px;
+  }
+  .braid::-webkit-scrollbar { display: none; }
+  .braid__col { scroll-snap-align: start; }
+}
+
 .timeline__now {
   margin-left: 8px; font-size: 0.68rem; font-weight: 700; text-transform: uppercase;
   letter-spacing: 0.04em; color: var(--ok-ink);
@@ -1225,6 +1276,9 @@ textarea { min-height: 84px; resize: vertical; }
 .exam-attempts__another { display: flex; gap: 10px; align-items: flex-start; margin-top: 12px; }
 .exam-attempts__another > .field { flex: 1; min-width: 0; margin: 0; }
 .exam-attempts__another > .btn { margin-top: 4px; }
+/* The way to the typing box, when the chips do not have the exam. Quiet: most
+   people never need it, and it should not compete with the chips above. */
+.exam-attempts__more { margin-top: 12px; font-size: 0.88rem; }
 .exam-attempts__list { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 10px; }
 .attempt-row {
   display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px;
@@ -1240,6 +1294,14 @@ textarea { min-height: 84px; resize: vertical; }
   color: var(--text); background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--r-sm);
 }
 .attempt-row__note { flex-basis: 100%; font-size: 0.78rem; color: var(--text-faint); }
+/* Where that offer was, opened by saying there was one. A full-width row of
+   its own inside the attempt, indented so it reads as belonging to the exam
+   above it rather than as a new question. */
+.attempt-row__offer {
+  flex-basis: 100%; display: grid; gap: 10px;
+  margin-top: 4px; padding-left: 12px; border-left: 2px solid var(--border-strong);
+}
+.attempt-row__offer .field { margin: 0; }
 .linkedin-field__box {
   display: flex; align-items: stretch; border: 1.5px solid var(--border-strong);
   border-radius: var(--r-sm); background: var(--surface-2); overflow: hidden;
@@ -2716,6 +2778,9 @@ a.xcollege__thumb:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--rin
 .share-card__message {
   margin: 12px 0; padding: 10px 14px; border-left: 3px solid var(--gold);
   background: var(--surface-2); border-radius: 0 var(--r-sm) var(--r-sm) 0; color: var(--text-muted); font-size: 0.9rem;
+  /* The message carries its own paragraph break, and the preview should show
+     the message exactly as the friend will receive it. */
+  white-space: pre-line;
 }
 .share-card__actions { display: flex; flex-wrap: wrap; gap: 10px; }
 .share-card__link { margin: 10px 0 0; font-size: 0.78rem; color: var(--text-faint); overflow-wrap: anywhere; }

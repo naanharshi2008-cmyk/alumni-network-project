@@ -128,7 +128,17 @@ export const PROFESSIONAL_STAGES = [
   'Qualified',
 ];
 
-/** Every way someone can have got in, exams first. */
+/**
+ * Every way someone can have got in, exams first.
+ *
+ * Legacy: no form asks this any more - `admission_kind` replaced it in Round 10
+ * (lib/admission.ts). What is left is the admin's "is this value already known?"
+ * check for the `admission_route` category, so these are the strings as they are
+ * STORED, not as they are shown. "Management Quota" keeps that spelling for
+ * exactly that reason: rows in the database say it, and a screen that hid the
+ * word would send an admin hunting for a value in front of them. What a student
+ * or a visitor sees is "Direct admission", from labelOfShape().
+ */
 export const ADMISSION_ROUTES = [
   ...EXAM_ROUTES,
   'Management Quota', 'Lateral Entry', 'Sports Quota', 'Merit / Direct',

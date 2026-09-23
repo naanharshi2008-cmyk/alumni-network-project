@@ -14,6 +14,15 @@ const IN_LINK_RE = /linkedin\.com\/(?:mwlite\/)?in\/([^/?#\s]+)/i;
 
 export type LinkedInParse = { handle: string | null; problem: string };
 
+/**
+ * What registration says when the box is empty (Round 11). Here rather than in
+ * either caller because the field draws it and the step validator decides on
+ * it, and the two saying different things would be a bug nobody notices.
+ * `parseLinkedIn` still treats blank as fine - the profile editor, the office
+ * and the import all leave it blank legitimately.
+ */
+export const LINKEDIN_REQUIRED = 'Add your LinkedIn username — it is how a junior reaches you.';
+
 /** Read whatever was typed or pasted as a LinkedIn username. */
 export function parseLinkedIn(input: string | null | undefined): LinkedInParse {
   const raw = (input ?? '').trim();

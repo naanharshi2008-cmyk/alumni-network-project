@@ -5,14 +5,20 @@
  *
  * A seat is got one of four ways (the owner's decision, Round 10):
  *
- *   Board marks      on Class 12 marks - including TNEA, which is counselling
- *                    on those marks, not an exam
- *   Entrance exam    through a named exam
- *   Management seat  shown like any other route; the site used to relabel it
- *                    "Board Marks", and no longer does
- *   Other            sports, lateral entry, anything else, in their words
+ *   Board marks       on Class 12 marks - including TNEA, which is counselling
+ *                     on those marks, not an exam
+ *   Entrance exam     through a named exam
+ *   Direct admission  shown like any other route; the site used to relabel it
+ *                     "Board Marks", and no longer does
+ *   Other             sports, lateral entry, anything else, in their words
  *
  * The site never says "quota". It is stripped from typed Other answers too.
+ *
+ * Round 11 renamed the third one. The stored value is still `management` -
+ * nothing was re-answered - but "direct admission" is what people actually say,
+ * and the softer word is the same reason "quota" was banned. Because the new
+ * name is not yet universal, every place that asks the question also says
+ * "management seat" as the description, so nobody picks the wrong one.
  */
 
 import { examCanonical, isTnea, normText } from './exams';
@@ -32,12 +38,16 @@ type HasRoute = Pick<Alumnus, 'admission_route'>
 export const ADMISSION_KINDS: { key: AdmissionKind; label: string; hint: string }[] = [
   { key: 'board_marks', label: 'Board marks', hint: 'On your Class 12 marks - including TNEA counselling' },
   { key: 'entrance_exam', label: 'Entrance exam', hint: 'Through an exam like JEE, NEET or AMRITAEEE' },
-  { key: 'management', label: 'Management seat', hint: 'A seat the college offered directly' },
+  { key: 'management', label: 'Direct admission', hint: 'Also called a management seat — a seat the college offered directly' },
   { key: 'other', label: 'Other', hint: 'Sports, lateral entry, or something else' },
 ];
 
 const BOARD_MARKS_ROUTES = new Set(['board marks', 'merit / direct', 'merit/direct', 'merit', 'direct']);
-const MANAGEMENT_ROUTES = new Set(['management quota', 'management seat', 'management']);
+// "direct admission" joined the set when it became the name shown (Round 11);
+// the older spellings still arrive from stored rows, drafts and the import.
+// "direct" alone stays with board marks - it is the "Merit / Direct" of the
+// school's own form, which is a marks route.
+const MANAGEMENT_ROUTES = new Set(['management quota', 'management seat', 'management', 'direct admission']);
 
 /**
  * The shape of a legacy `admission_route` value. Mirrors the SQL function
@@ -74,7 +84,7 @@ function tidyDetail(detail: string | null | undefined): string {
 
 /**
  * The route as a label - for chips, filters, rails and link previews:
- * "Board marks", "Board marks (TNEA)", "JEE Main", "Management seat", or the
+ * "Board marks", "Board marks (TNEA)", "JEE Main", "Direct admission", or the
  * words someone typed for Other.
  */
 export function routeLabel(a: HasRoute): string | null {
@@ -85,7 +95,7 @@ export function labelOfShape(s: AdmissionShape): string | null {
   switch (s.kind) {
     case 'board_marks': return s.detail === 'TNEA' ? 'Board marks (TNEA)' : 'Board marks';
     case 'entrance_exam': return s.exam || null;
-    case 'management': return 'Management seat';
+    case 'management': return 'Direct admission';
     case 'other': return tidyDetail(s.detail) || 'Other';
     default: return null;
   }
@@ -110,7 +120,7 @@ export function routeSentence(a: HasRoute): string | null {
     case 'board_marks':
       return s.detail === 'TNEA' ? 'Got in on board marks, through TNEA counselling' : 'Got in on board marks';
     case 'entrance_exam': return s.exam ? `Got in through ${s.exam}` : null;
-    case 'management': return 'Got in on a management seat';
+    case 'management': return 'Got in through direct admission';
     case 'other': {
       const d = tidyDetail(s.detail);
       return d && d.toLowerCase() !== 'other' ? `Got in through ${routePhrase(a)}` : 'Got in another way';

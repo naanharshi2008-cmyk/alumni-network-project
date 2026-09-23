@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 /**
  * "Invite your batchmates" - the end of registration, and a smaller copy on
@@ -15,9 +15,16 @@ import { useState } from 'react';
  * invited you" (app/register, invite_card in migration 19).
  */
 
+/**
+ * Round 11: the message used to be about juniors only. The network is for
+ * everyone who left the school - a batchmate is as good a reason to join as a
+ * junior - so it names the network and what is in it, and leaves the reason to
+ * the reader. The blank line survives into WhatsApp and, via `pre-line`, into
+ * the card's own preview.
+ */
 export const SHARE_MESSAGE =
-  'I’ve added where I went after 12th to the Veveaham Alumni network, so juniors can see the paths ahead. '
-  + 'Add yours — it takes about five minutes.';
+  'I’ve just added myself to the Veveaham Alumni Network — where everyone from our batches is, '
+  + 'what they studied, where they ended up.\n\nAdd yours so we’re all in one place. About five minutes.';
 
 export default function ShareCard({ slug, firstName, prominent }: {
   /** Their public slug: the link names them even before they are published. */
@@ -27,10 +34,17 @@ export default function ShareCard({ slug, firstName, prominent }: {
   prominent?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
-  const origin = typeof window === 'undefined' ? '' : window.location.origin;
+  // Read after mounting, not during the render. `window.location.origin` is ''
+  // on the server and the real host in the browser, so reading it inline made
+  // the two renders disagree and React threw away the whole tree as a
+  // hydration mismatch - every time this card was drawn.
+  const [origin, setOrigin] = useState('');
+  useEffect(() => setOrigin(window.location.origin), []);
   const link = `${origin}/register${slug ? `?from=${encodeURIComponent(slug)}` : ''}`;
   const text = `${SHARE_MESSAGE}\n${link}`;
-  const canShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function';
+  // navigator.share exists only in the browser, and only on some of them.
+  const [canShare, setCanShare] = useState(false);
+  useEffect(() => setCanShare(typeof navigator.share === 'function'), []);
 
   async function copy() {
     try {

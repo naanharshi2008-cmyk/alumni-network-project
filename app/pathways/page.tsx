@@ -8,7 +8,7 @@ import { buildPathways, pathwayCounts } from '../../lib/pathways';
  *
  * A junior asking "how do people get into engineering from our school?"
  * used to have to read profiles one at a time. This is the answer on one
- * page: board marks through TNEA, JEE Main, AMRITAEEE, a management seat -
+ * page: board marks through TNEA, JEE Main, AMRITAEEE, a direct admission -
  * with how many joined through each, how many more had an offer, and how many
  * more wrote the exam. Attempted is not admitted, and the page says so.
  *

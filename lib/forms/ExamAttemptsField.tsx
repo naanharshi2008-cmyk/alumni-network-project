@@ -11,12 +11,14 @@
  * compact to fill in, and compact to read back.
  */
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import EntitySearchField from '../EntitySearchField';
 import { EXAMS, examAreas, examCanonical, isTnea, normText } from '../exams';
+import { toPick } from '../institutes';
 import OptionSearchField from '../OptionSearchField';
 import type { CategoryKey } from '../types';
-import { ChipRow } from './controls';
-import { newAttempt, type AttemptDraft } from './model';
+import { ChipRow, SelectBox } from './controls';
+import { contextualBranchAliases, newAttempt, newOffer, type AttemptDraft, type OfferDraft } from './model';
 
 /** The exams the school's own students wrote most, for anyone whose area we cannot tell. */
 const POPULAR = ['JEE Main', 'NEET', 'AMRITAEEE', 'VITEEE', 'SRMJEEE', 'CUET', 'JEE Advanced', 'BITSAT'];
@@ -35,6 +37,7 @@ function commonExams(area: CategoryKey | null, seat: string, tookGap: boolean): 
 
 export default function ExamAttemptsField({
   attempts, onChange, seatExam, area, examOptions, examAliases, classOf, tookGap,
+  degreeOptions, branchOptions, branchAliases,
 }: {
   attempts: AttemptDraft[];
   /** An update applied to the parent's latest list, never this render's copy. */
@@ -48,8 +51,23 @@ export default function ExamAttemptsField({
   classOf: number | null;
   /** A year out means an exam may have been written twice - the year is asked then. */
   tookGap: boolean;
+  /**
+   * For the offer asked inline when an exam gave one. Left out on a surface
+   * that has no course vocabulary to hand, and then the offer is simply not
+   * asked there - the "anywhere else?" block still takes it.
+   */
+  degreeOptions?: string[];
+  branchOptions?: string[];
+  branchAliases?: Record<string, string>;
 }) {
   const [another, setAnother] = useState('');
+  const [showAnother, setShowAnother] = useState(false);
+  const anotherBox = useRef<HTMLDivElement>(null);
+  // Revealed by a tap, so the cursor belongs in it - otherwise the box appears
+  // somewhere below the thumb that opened it and has to be found again.
+  useEffect(() => {
+    if (showAnother) anotherBox.current?.querySelector('input')?.focus();
+  }, [showAnother]);
   const seat = examCanonical(seatExam, examAliases) ?? seatExam.trim();
   const chips = commonExams(area, seat, tookGap);
   const has = (exam: string) => attempts.some((t) => normText(t.exam) === normText(exam));
@@ -67,6 +85,8 @@ export default function ExamAttemptsField({
   }
   const patch = (key: string, p: Partial<AttemptDraft>) =>
     onChange((prev) => prev.map((t) => (t.key === key ? { ...t, ...p } : t)));
+  const patchOffer = (t: AttemptDraft, p: Partial<OfferDraft>) =>
+    patch(t.key, { offer: { ...(t.offer ?? newOffer()), ...p } });
 
   // Exams ticked that are not among the chips still need a chip to untick.
   const extraTicked = attempts.filter((t) => !chips.some((c) => normText(c) === normText(t.exam)));
@@ -100,16 +120,26 @@ export default function ExamAttemptsField({
         ))}
       </div>
 
-      <div className="exam-attempts__another">
-        <OptionSearchField
-          label="Another exam" options={examOptions} aliases={examAliases}
-          value={another} onChange={setAnother}
-          hint={isTnea(another) ? 'TNEA is counselling on marks, not an exam — no need to add it here.' : 'type it, then tap Add'}
-        />
-        <button type="button" className="btn btn--ghost" onClick={addAnother} disabled={!another.trim() || isTnea(another)}>
-          <span className="btn__inner">Add</span>
+      {/* The chips are the interface. The typing box is the way out for an exam
+          they do not cover, and used to sit open under them - asking a question
+          nobody had asked for, which is exactly what the school's own form did
+          with its required "any other exam" box and got 90 answers of "No". */}
+      {showAnother ? (
+        <div className="exam-attempts__another" ref={anotherBox}>
+          <OptionSearchField
+            label="Another exam" options={examOptions} aliases={examAliases}
+            value={another} onChange={setAnother}
+            hint={isTnea(another) ? 'TNEA is counselling on marks, not an exam — no need to add it here.' : 'type it, then tap Add'}
+          />
+          <button type="button" className="btn btn--ghost" onClick={addAnother} disabled={!another.trim() || isTnea(another)}>
+            <span className="btn__inner">Add</span>
+          </button>
+        </div>
+      ) : (
+        <button type="button" className="link-btn exam-attempts__more" onClick={() => setShowAnother(true)}>
+          + Another exam
         </button>
-      </div>
+      )}
 
       {attempts.length > 0 && (
         <ul className="exam-attempts__list">
@@ -129,6 +159,35 @@ export default function ExamAttemptsField({
                 aria-label={`${t.exam} rank, optional`}
                 value={t.rank} onChange={(e) => patch(t.key, { rank: e.target.value.replace(/[^\d]/g, '') })}
               />
+              {/* An offer is worth almost nothing without the college it was
+                  from, and the college used to have to be typed again in a
+                  separate block that then asked how it was offered - a
+                  question already answered by which exam this is. So it is
+                  asked here, beside the rank, and the route is never asked
+                  twice (Round 11). */}
+              {t.admit === 'yes' && degreeOptions && (
+                <div className="attempt-row__offer">
+                  <EntitySearchField
+                    kind="college" label="Offered by" hint="short names work — “PSG Tech”, “VIT Chennai”"
+                    value={t.offer?.college ?? ''}
+                    onChange={(college) => patchOffer(t, { college, pick: null })}
+                    onSelect={(hit) => patchOffer(t, hit ? { college: hit.name, pick: toPick(hit) } : { pick: null })}
+                  />
+                  <div className="two-col">
+                    <SelectBox
+                      label="Degree" value={t.offer?.degree ?? ''} placeholder="Select…"
+                      options={degreeOptions.filter((o) => o !== 'Other')}
+                      onChange={(degree) => patchOffer(t, { degree })}
+                    />
+                    <OptionSearchField
+                      label="Branch" options={branchOptions ?? []} aliases={branchAliases ?? {}}
+                      extra={contextualBranchAliases(t.offer?.degree ?? '')}
+                      value={t.offer?.branch ?? ''}
+                      onChange={(branch) => patchOffer(t, { branch })}
+                    />
+                  </div>
+                </div>
+              )}
               {tookGap && years.length > 0 && (
                 <span className="attempt-row__q">
                   <span className="attempt-row__label">Year</span>

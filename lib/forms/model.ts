@@ -116,9 +116,54 @@ export type AttemptDraft = {
   year: string;
   rank: string;
   admit: '' | 'yes' | 'no';
+  /**
+   * Where that offer was, asked at the moment they say there was one (Round
+   * 11). The route is not asked again: it is this exam, by definition. Only
+   * meaningful while `admit === 'yes'`; a change of mind leaves it here
+   * untouched, so ticking No and Yes again does not lose what was typed, and
+   * offerDrafts() below ignores it.
+   */
+  offer?: OfferDraft;
 };
 
+export type OfferDraft = {
+  college: string; pick: InstitutePick; degree: string; branch: string;
+  /**
+   * The admits row this came from, when it was loaded from one. Carried so an
+   * offer keeps its identity across a round trip - the admin editor decides
+   * "is this the student's or the school's?" by that key, and a new key would
+   * quietly take a student's own offer away from them.
+   */
+  key?: string;
+};
+
+export const newOffer = (): OfferDraft => ({ college: '', pick: null, degree: '', branch: '' });
+
 export const newAttempt = (exam: string): AttemptDraft => ({ key: newKey(), exam, year: '', rank: '', admit: '' });
+
+/**
+ * The offers claimed against an exam, as admit drafts - so one list, one
+ * resolution loop and one set of rows reach the database, whichever question
+ * the person answered.
+ */
+export function offerDrafts(attempts: AttemptDraft[]): AdmitDraft[] {
+  return attempts
+    .filter((t) => t.admit === 'yes' && t.offer && (t.offer.college.trim() || t.offer.pick))
+    .map((t) => ({
+      key: t.offer!.key ?? `attempt:${t.key}`,
+      college: t.offer!.college,
+      pick: t.offer!.pick,
+      degree: t.offer!.degree,
+      branch: t.offer!.branch,
+      kind: 'entrance_exam' as AdmissionKind,
+      exam: t.exam,
+    }));
+}
+
+/** Every offer not taken: the ones claimed against an exam, then the rest. */
+export function allOffers(admits: AdmitDraft[], attempts: AttemptDraft[]): AdmitDraft[] {
+  return [...offerDrafts(attempts), ...admits];
+}
 
 /**
  * The rows for exam_attempts: every exam ticked, plus the one the seat came
@@ -193,30 +238,97 @@ export type AdmitDraft = {
 
 export const newAdmit = (): AdmitDraft => ({ key: newKey(), college: '', pick: null, degree: '', branch: '', kind: '', exam: '' });
 
-/** Rows for admits. `collegeIds` maps a draft's key to the college it was linked to on save. */
-export function admitRows(admits: AdmitDraft[], year: number | null, collegeIds: Record<string, string | null> = {}, examAliases?: Record<string, string>) {
+/**
+ * Rows for admits. `collegeIds` maps a draft's key to the college it was
+ * linked to on save.
+ *
+ * The same offer can now be described twice - once against the exam that
+ * produced it, once in the "anywhere else?" block - so rows are deduplicated
+ * on exactly the key the database's `admits_once` index uses. Without this the
+ * second one fails the insert and the whole batch is reported as lost.
+ */
+export function admitRowsWithKeys(
+  admits: AdmitDraft[], year: number | null,
+  collegeIds: Record<string, string | null> = {}, examAliases?: Record<string, string>,
+) {
+  const seen = new Set<string>();
   return admits
     .filter((d) => d.college.trim() || d.pick)
     .map((d) => {
       const kind = d.kind || null;
       const exam = kind === 'entrance_exam' ? (examCanonical(d.exam, examAliases) ?? cleanFreeText(d.exam)) : null;
       return {
-        college_id: collegeIds[d.key] ?? d.pick?.id ?? null,
-        college_name_raw: cleanProperNoun(d.college),
-        degree: cleanFreeText(d.degree),
-        branch: cleanProperNoun(d.branch),
-        route_kind: kind === 'entrance_exam' && !exam ? null : kind,
-        exam,
-        route_detail: null as string | null,
-        admit_year: year,
+        key: d.key,
+        row: {
+          college_id: collegeIds[d.key] ?? d.pick?.id ?? null,
+          college_name_raw: cleanProperNoun(d.college),
+          degree: cleanFreeText(d.degree),
+          branch: cleanProperNoun(d.branch),
+          route_kind: kind === 'entrance_exam' && !exam ? null : kind,
+          exam,
+          route_detail: null as string | null,
+          admit_year: year,
+        },
       };
+    })
+    // The database's own key: a linked college by id, otherwise by name.
+    .filter(({ row }) => {
+      const k = [
+        row.college_id ?? (row.college_name_raw ?? '').toLowerCase(),
+        (row.degree ?? '').toLowerCase(),
+        row.admit_year ?? 0,
+      ].join('|');
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
     });
 }
 
-export function admitsFromRows(rows: {
+export function admitRows(admits: AdmitDraft[], year: number | null, collegeIds: Record<string, string | null> = {}, examAliases?: Record<string, string>) {
+  return admitRowsWithKeys(admits, year, collegeIds, examAliases).map(({ row }) => row);
+}
+
+export type AdmitRow = {
   id?: string; college_id?: string | null; college_name_raw?: string | null; college?: { name?: string } | null;
   degree?: string | null; branch?: string | null; route_kind?: AdmissionKind | null; exam?: string | null;
-}[]): AdmitDraft[] {
+};
+
+/**
+ * Saved rows as the form's two lists, with each exam's offer back where it was
+ * entered.
+ *
+ * An offer stored with `route_kind = 'entrance_exam'` belongs to the exam it
+ * came through, so it hydrates into that attempt rather than into the
+ * "anywhere else?" block - otherwise someone who filled it in once would find
+ * it in both places on their next visit, and saving would write it twice.
+ */
+export function pathDraftsFromRows(
+  attemptRowsIn: Parameters<typeof attemptsFromRows>[0],
+  admitRowsIn: AdmitRow[],
+  classOf: number | null,
+): { attempts: AttemptDraft[]; admits: AdmitDraft[] } {
+  const attempts = attemptsFromRows(attemptRowsIn, classOf);
+  const claimed = new Set<number>();
+  for (const a of attempts) {
+    if (a.admit !== 'yes') continue;
+    const i = admitRowsIn.findIndex((r, idx) => !claimed.has(idx)
+      && r.route_kind === 'entrance_exam' && normText(r.exam ?? '') === normText(a.exam));
+    if (i < 0) continue;
+    claimed.add(i);
+    const r = admitRowsIn[i];
+    const name = r.college?.name ?? r.college_name_raw ?? '';
+    a.offer = {
+      college: name,
+      pick: r.college_id ? { id: r.college_id, name } : null,
+      degree: r.degree ?? '',
+      branch: r.branch ?? '',
+      key: r.id,
+    };
+  }
+  return { attempts, admits: admitsFromRows(admitRowsIn.filter((_, i) => !claimed.has(i))) };
+}
+
+export function admitsFromRows(rows: AdmitRow[]): AdmitDraft[] {
   return rows.map((r) => {
     const name = r.college?.name ?? r.college_name_raw ?? '';
     return {
