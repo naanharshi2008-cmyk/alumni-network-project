@@ -163,37 +163,44 @@ export async function fetchRelatedAlumni(a: Alumnus, limit = 6): Promise<Related
  * Paged through PostgREST's 1,000-row cap, because the directory asks for
  * everyone at once.
  */
-export async function fetchPathExtras(alumniIds: string[]): Promise<Record<string, PathExtras>> {
-  const out: Record<string, PathExtras> = {};
-  if (!isSupabaseConfigured || alumniIds.length === 0) return out;
-  const slot = (id: string) => (out[id] ??= { attempts: [], admits: [], gapYears: [] });
-
-  // Chunks of ids keep each request's URL short; pages keep each under the cap.
-  const CHUNK = 150;
-  const PAGE = 1000;
-  async function readAll<T>(view: string, ids: string[]): Promise<T[]> {
-    const rows: T[] = [];
+/**
+ * Rows for a set of people, whatever the size of the set.
+ *
+ * Chunks of ids keep each request's URL short - 2,000 uuids is a 74 KB query
+ * string, which proxies drop - and pages keep each request under PostgREST's
+ * silent 1,000-row cap. Both limits fail quietly, by returning less than was
+ * asked for, which is the worst way for a limit to fail.
+ */
+const ID_CHUNK = 150;
+const PAGE = 1000;
+async function readAllFor<T>(view: string, ids: string[]): Promise<T[]> {
+  const rows: T[] = [];
+  for (let i = 0; i < ids.length; i += ID_CHUNK) {
+    const slice = ids.slice(i, i + ID_CHUNK);
     for (let from = 0; ; from += PAGE) {
-      const { data, error } = await supabase.from(view).select('*').in('alumni_id', ids)
+      const { data, error } = await supabase.from(view).select('*').in('alumni_id', slice)
         .order('id').range(from, from + PAGE - 1);
       if (error || !data) break;
       rows.push(...(data as T[]));
       if (data.length < PAGE) break;
     }
-    return rows;
   }
+  return rows;
+}
 
-  for (let i = 0; i < alumniIds.length; i += CHUNK) {
-    const ids = alumniIds.slice(i, i + CHUNK);
-    const [attempts, admits, gaps] = await Promise.all([
-      readAll<PublicExamAttempt>('public_exam_attempts', ids),
-      readAll<PublicAdmit>('public_admits', ids),
-      readAll<PublicGapYear>('public_gap_years', ids),
-    ]);
-    for (const r of attempts) slot(r.alumni_id).attempts.push(r);
-    for (const r of admits) slot(r.alumni_id).admits.push(r);
-    for (const r of gaps) slot(r.alumni_id).gapYears.push(r);
-  }
+export async function fetchPathExtras(alumniIds: string[]): Promise<Record<string, PathExtras>> {
+  const out: Record<string, PathExtras> = {};
+  if (!isSupabaseConfigured || alumniIds.length === 0) return out;
+  const slot = (id: string) => (out[id] ??= { attempts: [], admits: [], gapYears: [] });
+
+  const [attempts, admits, gaps] = await Promise.all([
+    readAllFor<PublicExamAttempt>('public_exam_attempts', alumniIds),
+    readAllFor<PublicAdmit>('public_admits', alumniIds),
+    readAllFor<PublicGapYear>('public_gap_years', alumniIds),
+  ]);
+  for (const r of attempts) slot(r.alumni_id).attempts.push(r);
+  for (const r of admits) slot(r.alumni_id).admits.push(r);
+  for (const r of gaps) slot(r.alumni_id).gapYears.push(r);
   return out;
 }
 
@@ -264,19 +271,21 @@ export async function fetchTimelines(alumniIds: string[]): Promise<{
   const empty = { studies: {}, work: {} };
   if (!isSupabaseConfigured || alumniIds.length === 0) return empty;
 
-  const [studiesRes, workRes] = await Promise.all([
-    supabase.from('higher_studies').select('*').in('alumni_id', alumniIds),
-    supabase.from('work_experience').select('*').in('alumni_id', alumniIds),
+  // Studies come from the public view (migration 21): the same rows anon could
+  // already read, plus the college each one resolved to, embedded - so a page
+  // can draw the link without a second request. Work has no view yet.
+  //
+  // Both are paged. This used to be one unpaged `.in()` over up to 2,000 ids,
+  // which the directory hits, and it would have started losing rows silently.
+  const [studiesRows, workRows] = await Promise.all([
+    readAllFor<HigherStudy>('public_higher_studies', alumniIds),
+    readAllFor<WorkExperience>('work_experience', alumniIds),
   ]);
 
   const studies: Record<string, HigherStudy[]> = {};
-  for (const row of (studiesRes.data as HigherStudy[]) ?? []) {
-    (studies[row.alumni_id] ??= []).push(row);
-  }
+  for (const row of studiesRows) (studies[row.alumni_id] ??= []).push(row);
   const work: Record<string, WorkExperience[]> = {};
-  for (const row of (workRes.data as WorkExperience[]) ?? []) {
-    (work[row.alumni_id] ??= []).push(row);
-  }
+  for (const row of workRows) (work[row.alumni_id] ??= []).push(row);
   return { studies, work };
 }
 

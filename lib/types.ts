@@ -271,6 +271,11 @@ export interface PublicExamAttempt {
 }
 
 /** An offer someone had and did not take (public_admits). */
+/** A college as the public views embed it: enough to name it and link it. */
+export type PublicCollegeBrief = {
+  name: string; state: string | null; district: string | null; logo_url: string | null; aliases: string[] | null;
+};
+
 export interface PublicAdmit {
   id: string;
   alumni_id: string;
@@ -282,7 +287,7 @@ export interface PublicAdmit {
   exam: string | null;
   route_detail: string | null;
   admit_year: number | null;
-  college: { name: string; state: string | null; district: string | null; logo_url: string | null; aliases: string[] | null } | null;
+  college: PublicCollegeBrief | null;
 }
 
 /**
@@ -318,6 +323,8 @@ export interface HigherStudy {
    * office has not linked yet - carry only the typed `institution`.
    */
   college_id?: string | null;
+  /** Embedded by public_higher_studies when the row resolved to a college. */
+  college?: PublicCollegeBrief | null;
   start_year: number | null;
   finish_year: number | null;
 }

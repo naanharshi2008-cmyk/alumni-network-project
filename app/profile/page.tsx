@@ -90,6 +90,8 @@ interface AlumnusData {
 interface HigherStudyEntry {
   id?: string;
   degree_name: string; institution: string; start_year: string; finish_year: string;
+  /** The college it resolved to, when there is one (migration 21). */
+  pick?: InstitutePick;
 }
 interface WorkExperienceEntry {
   id?: string;
@@ -311,6 +313,7 @@ export default function ProfilePage() {
       if (Array.isArray(stagedStudies)) {
         setHigherStudies(stagedStudies.map((s: any) => ({
           degree_name: s.degree_name ?? '', institution: s.institution ?? '',
+          pick: s.college_id ? { id: s.college_id, name: s.institution ?? '' } : null,
           start_year: s.start_year ? String(s.start_year) : '',
           finish_year: s.finish_year ? String(s.finish_year) : '',
         })));
@@ -319,6 +322,9 @@ export default function ProfilePage() {
           .eq('alumni_id', data.id).order('finish_year', { ascending: true });
         setHigherStudies((rows ?? []).map((r: any) => ({
           id: r.id, degree_name: r.degree_name || '', institution: r.institution || '',
+          // The stored text is the college's own name, so linkFor's key check
+          // matches and a save with no edit keeps the link.
+          pick: r.college_id ? { id: r.college_id, name: r.institution || '' } : null,
           start_year: r.start_year ? String(r.start_year) : '',
           finish_year: r.finish_year ? String(r.finish_year) : '',
         })));
@@ -478,8 +484,16 @@ export default function ProfilePage() {
         ...(profile.seeded_by_school ? { consent_given: true } : {}),
       };
 
-      const studiesPayload = higherStudies.filter((s) => s.degree_name.trim()).map((s) => ({
+      const keptStudies = higherStudies.filter((s) => s.degree_name.trim());
+      const studyIds: (string | null)[] = [];
+      for (const st of keptStudies) {
+        studyIds.push(st.institution.trim() || st.pick
+          ? await linkFor('college', cleanProperNoun(st.institution), st.pick ?? null)
+          : null);
+      }
+      const studiesPayload = keptStudies.map((s, i) => ({
         degree_name: s.degree_name.trim(),
+        college_id: studyIds[i],
         institution: cleanProperNoun(s.institution),
         start_year: s.start_year ? parseInt(s.start_year, 10) : null,
         finish_year: s.finish_year ? parseInt(s.finish_year, 10) : null,
@@ -980,7 +994,14 @@ export default function ProfilePage() {
           {higherStudies.map((entry, i) => (
             <div key={entry.id ?? `new-${i}`} className="entry-card">
               <FloatingField label="Degree" hint="e.g. MS, MBA, PhD" value={entry.degree_name} onChange={(v) => setHigherStudies((p) => p.map((x, j) => j === i ? { ...x, degree_name: v } : x))} />
-              <FloatingField label="Institution" hint="optional" value={entry.institution} onChange={(v) => setHigherStudies((p) => p.map((x, j) => j === i ? { ...x, institution: v } : x))} />
+              <EntitySearchField
+                kind="college" label="Institution" hint="optional — short names work, “IIT Madras”"
+                value={entry.institution}
+                onChange={(v) => setHigherStudies((p) => p.map((x, j) => j === i ? { ...x, institution: v, pick: null } : x))}
+                onSelect={(hit) => setHigherStudies((p) => p.map((x, j) => j === i
+                  ? (hit ? { ...x, institution: hit.name, pick: toPick(hit) } : { ...x, pick: null })
+                  : x))}
+              />
               <div className="two-col">
                 <FloatingField label="Start year" hint="optional" type="number" value={entry.start_year} onChange={(v) => setHigherStudies((p) => p.map((x, j) => j === i ? { ...x, start_year: v } : x))} />
                 <FloatingField label="Finish year" hint="optional" type="number" value={entry.finish_year} onChange={(v) => setHigherStudies((p) => p.map((x, j) => j === i ? { ...x, finish_year: v } : x))} />

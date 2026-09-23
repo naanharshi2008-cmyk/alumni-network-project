@@ -134,7 +134,10 @@ export async function loadPathDetails(ids: string[]): Promise<Record<string, Adm
 
 export type HigherStudyRow = {
   id: string; alumni_id: string; degree_name: string;
-  institution: string | null; start_year: number | null; finish_year: number | null;
+  institution: string | null;
+  /** The college it resolved to, when there is one (migration 21). */
+  college_id?: string | null;
+  start_year: number | null; finish_year: number | null;
 };
 
 export type WorkExperienceRow = {

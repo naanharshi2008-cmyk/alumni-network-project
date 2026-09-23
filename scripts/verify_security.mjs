@@ -163,12 +163,27 @@ for (const [view, forbidden] of [
   ['public_admits', ['added_by_school']],
   ['public_gap_years', []],
   ['public_seats', []],
+  ['public_higher_studies', ['created_at']],
 ]) {
   const { status, body } = await get(`/${view}?select=*&limit=5`);
   if (status !== 200 || !Array.isArray(body)) { fail(`${view} is not readable (HTTP ${status})`); continue; }
   const found = body.length ? forbidden.filter((c) => c in body[0]) : [];
   if (found.length) fail(`${view} exposes ${found.join(', ')}`);
-  else pass(`${view} is readable and carries no exact score (${body.length} row(s) sampled)`);
+  else pass(`${view} is readable and carries nothing it should not (${body.length} row(s) sampled)`);
+}
+
+// 8d. Migration 21: the studies view must show exactly what anon can already
+//     see in the base table. It is the check that catches a future edit to the
+//     view's WHERE - or to alumnus_is_listed - quietly publishing an unlisted
+//     person's degrees. The base table stays anon-readable on purpose (6/7).
+{
+  const view = await get('/public_higher_studies?select=id');
+  const base = await get('/higher_studies?select=id');
+  const v = Array.isArray(view.body) ? view.body.length : -1;
+  const b = Array.isArray(base.body) ? base.body.length : -1;
+  if (v < 0 || b < 0) fail(`higher studies unreadable (view ${view.status}, table ${base.status})`);
+  else if (v !== b) fail(`public_higher_studies shows ${v} row(s), anon sees ${b} in the table — the listing rule has drifted`);
+  else pass(`public_higher_studies matches what anon sees in the table (${v} row(s))`);
 }
 {
   const { body } = await get('/public_alumni?select=*&limit=1');

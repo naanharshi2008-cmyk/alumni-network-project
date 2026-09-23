@@ -84,7 +84,11 @@ interface FormState {
   consent_given: boolean;
 }
 
-interface HigherStudyEntry { degree_name: string; institution: string; start_year: string; finish_year: string; }
+interface HigherStudyEntry {
+  degree_name: string; institution: string; start_year: string; finish_year: string;
+  /** The college it resolved to, when they picked one (migration 21). */
+  pick?: InstitutePick;
+}
 interface WorkExperienceEntry { company: string; role: string; start_year: string; end_year: string; is_current: boolean; }
 
 const emptyHigherStudy = (): HigherStudyEntry => ({ degree_name: '', institution: '', start_year: '', finish_year: '' });
@@ -498,7 +502,8 @@ export default function RegisterPage() {
       // from the draft entirely - someone who typed three jobs and came back
       // the next day found them gone.
       if (parsed.higherStudies?.length) {
-        setHigherStudies(parsed.higherStudies);
+        // A draft saved before Round 11 has no `pick` key at all.
+        setHigherStudies(parsed.higherStudies.map((r) => ({ ...r, pick: r.pick ?? null })));
         if (parsed.higherStudies.some((r) => r.degree_name.trim())) setShowHigherStudies(true);
       }
       if (parsed.workExperience?.length) {
@@ -795,9 +800,17 @@ export default function RegisterPage() {
       //    must not fail the registration - but it must not vanish either.
       const lostSections: string[] = [];
       if (newId) {
-        const rows = higherStudies.filter((s) => s.degree_name.trim()).map((s) => ({
+        const kept = higherStudies.filter((s) => s.degree_name.trim());
+        const studyIds: (string | null)[] = [];
+        for (const s of kept) {
+          studyIds.push(s.institution.trim() || s.pick
+            ? await linkFor('college', cleanProperNoun(s.institution), s.pick ?? null)
+            : null);
+        }
+        const rows = kept.map((s, i) => ({
           alumni_id: newId,
           degree_name: s.degree_name.trim(),
+          college_id: studyIds[i],
           institution: cleanProperNoun(s.institution),
           start_year: s.start_year ? parseInt(s.start_year, 10) : null,
           finish_year: s.finish_year ? parseInt(s.finish_year, 10) : null,
@@ -1521,9 +1534,17 @@ function StepNow({
             <Field label="Degree" hint="e.g. MS, MBA, PhD" value={entry.degree_name}
               onChange={(v) => setHigherStudies((p) => p.map((x, j) => j === i ? { ...x, degree_name: v } : x))}
               onBlur={() => {}} error="" valid={false} />
-            <Field label="Institution" optional value={entry.institution}
-              onChange={(v) => setHigherStudies((p) => p.map((x, j) => j === i ? { ...x, institution: v } : x))}
-              onBlur={() => {}} error="" valid={false} />
+            {/* The same picker the UG college uses, so a master's institute
+                becomes a real college - linkable from their page, and listed on
+                that college's own (migration 21). Typed text still saves. */}
+            <EntitySearchField
+              kind="college" label="Institution" hint="optional — short names work, “IIT Madras”, “PSG Tech”"
+              value={entry.institution}
+              onChange={(v) => setHigherStudies((p) => p.map((x, j) => j === i ? { ...x, institution: v, pick: null } : x))}
+              onSelect={(hit) => setHigherStudies((p) => p.map((x, j) => j === i
+                ? (hit ? { ...x, institution: hit.name, pick: toPick(hit) } : { ...x, pick: null })
+                : x))}
+            />
             <div className="two-col">
               <Field label="Start year" optional type="number" value={entry.start_year}
                 onChange={(v) => setHigherStudies((p) => p.map((x, j) => j === i ? { ...x, start_year: v } : x))}

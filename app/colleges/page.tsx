@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { isSupabaseConfigured } from '../../lib/supabaseClient';
+import { isSupabaseConfigured, supabase } from '../../lib/supabaseClient';
 import { fetchApprovedAlumni } from '../../lib/publicData';
 import { useDebounced } from '../../lib/useDebounced';
 import { routeLabel } from '../../lib/admission';
@@ -20,6 +20,8 @@ type CollegeCard = {
   label: string;
   details: CollegeDetails | null;
   seniors: number;
+  /** People who came here after their first degree (migration 21). */
+  later: number;
   routes: string[];
   spellings: Set<string>;
   doc?: SearchDoc;
@@ -35,6 +37,7 @@ type CollegeCard = {
  */
 export default function CollegesPage() {
   const [rows, setRows] = useState<Alumnus[] | null>(null);
+  const [studies, setStudies] = useState<StudyHere[]>([]);
   const [error, setError] = useState('');
   const [query, setQuery] = useState('');
   const settled = useDebounced(query);
@@ -42,15 +45,23 @@ export default function CollegesPage() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const { data, error: err } = await fetchApprovedAlumni();
+      const [{ data, error: err }, studyRes] = await Promise.all([
+        fetchApprovedAlumni(),
+        // The view is already scoped to listed people, so no id filter is
+        // needed - one paged read is cheaper than chunking two thousand ids.
+        supabase.from('public_higher_studies')
+          .select('alumni_id, college_id, college').not('college_id', 'is', null)
+          .order('id').range(0, 999),
+      ]);
       if (cancelled) return;
       setError(err);
       setRows(data);
+      setStudies((studyRes.data ?? []) as StudyHere[]);
     })();
     return () => { cancelled = true; };
   }, []);
 
-  const colleges = useMemo(() => (rows ? buildColleges(rows) : []), [rows]);
+  const colleges = useMemo(() => (rows ? buildColleges(rows, studies) : []), [rows, studies]);
   const { results, closeMatches } = useMemo(
     () => searchItems(colleges, (c) => c.doc!, settled),
     [colleges, settled],
@@ -91,9 +102,10 @@ export default function CollegesPage() {
   return (
     <div className="container container--wide">
       <div className="fade-up">
-        <h1>Colleges our seniors joined</h1>
+        <h1>Colleges our seniors went to</h1>
         <p className="subtitle">
-          Every college here has at least one Veveaham senior in it. Open one to meet them and see how they got in.
+          Every college here has at least one Veveaham senior in it — for their degree, or for a master&apos;s
+          afterwards. Open one to meet them and see how they got in.
         </p>
       </div>
 
@@ -202,7 +214,11 @@ function CollegeTile({ college: c }: { college: CollegeCard }) {
           </span>
         )}
         <span className="college-tile__foot">
-          <span>{c.seniors} {c.seniors === 1 ? 'senior' : 'seniors'}</span>
+          <span>
+            {c.seniors > 0 && `${c.seniors} ${c.seniors === 1 ? 'senior' : 'seniors'}`}
+            {c.seniors > 0 && c.later > 0 && ' · '}
+            {c.later > 0 && `${c.later} later`}
+          </span>
           <span aria-hidden>→</span>
         </span>
       </span>
@@ -210,7 +226,9 @@ function CollegeTile({ college: c }: { college: CollegeCard }) {
   );
 }
 
-function buildColleges(alumni: Alumnus[]): CollegeCard[] {
+type StudyHere = { alumni_id: string; college_id: string | null; college: { name: string } | null };
+
+function buildColleges(alumni: Alumnus[], studies: StudyHere[] = []): CollegeCard[] {
   const keyOf = collegeKeyer(alumni);
   const map = new Map<string, CollegeCard & { routeCounts: Map<string, number> }>();
   for (const a of alumni) {
@@ -220,7 +238,7 @@ function buildColleges(alumni: Alumnus[]): CollegeCard[] {
     if (!key || !name) continue;
     let entry = map.get(key);
     if (!entry) {
-      entry = { key, name, label: name, details: null, seniors: 0, routes: [], spellings: new Set(), routeCounts: new Map() };
+      entry = { key, name, label: name, details: null, seniors: 0, later: 0, routes: [], spellings: new Set(), routeCounts: new Map() };
       map.set(key, entry);
     }
     const details = collegeDetailsOf(a);
@@ -234,6 +252,26 @@ function buildColleges(alumni: Alumnus[]): CollegeCard[] {
     entry.seniors += 1;
     const route = routeLabel(a);
     if (route) entry.routeCounts.set(route, (entry.routeCounts.get(route) ?? 0) + 1);
+  }
+
+  // A college someone came to for a master's belongs here too - otherwise the
+  // link their page now carries points at a college this list refuses to show.
+  // It is counted separately, because `seniors` means "joined here for their
+  // first degree" and the detail page's heading is built from it.
+  const counted = new Set<string>();
+  for (const h of studies) {
+    if (!h.college_id || !h.college?.name) continue;
+    const key = `id:${h.college_id}`;
+    const once = `${key}|${h.alumni_id}`;
+    if (counted.has(once)) continue;
+    counted.add(once);
+    let entry = map.get(key);
+    if (!entry) {
+      entry = { key, name: h.college.name, label: h.college.name, details: null,
+                seniors: 0, later: 0, routes: [], spellings: new Set(), routeCounts: new Map() };
+      map.set(key, entry);
+    }
+    entry.later += 1;
   }
 
   return [...map.values()]
@@ -250,5 +288,5 @@ function buildColleges(alumni: Alumnus[]): CollegeCard[] {
         }),
       };
     })
-    .sort((x, y) => y.seniors - x.seniors || x.name.localeCompare(y.name));
+    .sort((x, y) => (y.seniors + y.later) - (x.seniors + x.later) || x.name.localeCompare(y.name));
 }

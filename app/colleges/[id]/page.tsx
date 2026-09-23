@@ -7,7 +7,7 @@ import { supabase } from '../../../lib/supabaseClient';
 import { fetchApprovedAlumni } from '../../../lib/publicData';
 import { labelOfShape, routePhrase } from '../../../lib/admission';
 import { instituteInitials, instituteTint, shortInstituteName } from '../../../lib/showcase';
-import { Alumnus, collegeDetailsOf, collegeKeyer, type AdmissionKind } from '../../../lib/types';
+import { Alumnus, collegeDetailsOf, collegeKeyer, yearRange, type AdmissionKind } from '../../../lib/types';
 import PersonCard from '../../../lib/PersonCard';
 
 type College = {
@@ -42,6 +42,8 @@ export default function CollegePage() {
   const [seniors, setSeniors] = useState<Alumnus[]>([]);
   // Seniors who were offered a seat here and went somewhere else (Round 10).
   const [offered, setOffered] = useState<{ a: Alumnus; how: string | null }[]>([]);
+  // Seniors who came here later, for a master's or a doctorate (migration 21).
+  const [later, setLater] = useState<{ a: Alumnus; what: string }[]>([]);
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [mine, setMine] = useState<MyPhoto[]>([]);
   const [canContribute, setCanContribute] = useState(false);
@@ -57,7 +59,7 @@ export default function CollegePage() {
   const load = useCallback(async () => {
     if (!collegeId) { setState('missing'); return; }
 
-    const [{ data: row, error: rowErr }, alumniRes, { data: pics, error: picsErr }, { data: admitRows }] = await Promise.all([
+    const [{ data: row, error: rowErr }, alumniRes, { data: pics, error: picsErr }, { data: admitRows }, { data: studyRows }] = await Promise.all([
       supabase.from('colleges')
         .select('id, name, state, district, website, university_name, management_type, established_year, banner_url, logo_url, description')
         .eq('id', collegeId).maybeSingle(),
@@ -67,6 +69,7 @@ export default function CollegePage() {
         .eq('college_id', collegeId)
         .order('created_at', { ascending: false }),
       supabase.from('public_admits').select('alumni_id, route_kind, exam, route_detail').eq('college_id', collegeId),
+      supabase.from('public_higher_studies').select('alumni_id, degree_name, start_year, finish_year').eq('college_id', collegeId),
     ]);
 
     if (rowErr) { setState('error'); return; }
@@ -83,9 +86,24 @@ export default function CollegePage() {
     setSeniors(here);
     const hereIds = new Set(here.map((a) => a.id));
     const byId = new Map(all.map((a) => [a.id, a]));
+    // Came here later, for a master's or a doctorate. Anyone whose UG seat is
+    // already counted above belongs in "Seniors here", not in both.
+    const laterSeen = new Set<string>();
+    const laterPeople = ((studyRows ?? []) as { alumni_id: string; degree_name: string; start_year: number | null; finish_year: number | null }[])
+      .filter((h) => byId.has(h.alumni_id) && !hereIds.has(h.alumni_id)
+        && !laterSeen.has(h.alumni_id) && (laterSeen.add(h.alumni_id), true))
+      .map((h) => ({
+        a: byId.get(h.alumni_id)!,
+        what: [h.degree_name, yearRange(h.start_year, h.finish_year)].filter(Boolean).join(' · '),
+      }));
+    setLater(laterPeople);
+
     const seen = new Set<string>();
     setOffered(((admitRows ?? []) as { alumni_id: string; route_kind: AdmissionKind | null; exam: string | null; route_detail: string | null }[])
-      .filter((d) => byId.has(d.alumni_id) && !hereIds.has(d.alumni_id) && !seen.has(d.alumni_id) && (seen.add(d.alumni_id), true))
+      // Someone who was offered a seat and later came here anyway is shown
+      // once, under the stronger of the two.
+      .filter((d) => byId.has(d.alumni_id) && !hereIds.has(d.alumni_id) && !laterSeen.has(d.alumni_id)
+        && !seen.has(d.alumni_id) && (seen.add(d.alumni_id), true))
       .map((d) => ({ a: byId.get(d.alumni_id)!, how: labelOfShape({ kind: d.route_kind, exam: d.exam, detail: d.route_detail }) })));
     // A gallery that failed to load and a gallery with nothing in it looked
     // identical - both said "No photos yet", which invites nobody to fix it.
@@ -247,6 +265,25 @@ export default function CollegePage() {
               <div key={a.id} className="cpage__offered">
                 <PersonCard a={a} size="md" />
                 {how && <span className="cpage__offered-how">offered via {how}</span>}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Came here for a master's or a doctorate. Shown only when someone did -
+          and only because migration 21 gave a study row a real college. */}
+      {later.length > 0 && (
+        <section className="cpage__section">
+          <h2>Studied here later</h2>
+          <p className="lens-note">
+            {later.length} {later.length === 1 ? 'senior' : 'seniors'} came to {label} after their first degree.
+          </p>
+          <div className="cpage__seniors">
+            {later.map(({ a, what }) => (
+              <div key={a.id} className="cpage__offered">
+                <PersonCard a={a} size="md" />
+                {what && <span className="cpage__offered-how">{what}</span>}
               </div>
             ))}
           </div>

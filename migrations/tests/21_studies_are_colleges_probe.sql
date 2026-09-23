@@ -171,7 +171,7 @@ BEGIN
                  ELSE 'FAIL  publishing dropped the college link' END || E'\n';
 
   SELECT id INTO ev FROM public.review_events
-   WHERE alumni_id = victim ORDER BY created_at DESC, id DESC LIMIT 1;
+   WHERE alumni_id = victim ORDER BY occurred_at DESC, id DESC LIMIT 1;
   SELECT count(*) INTO n FROM jsonb_array_elements(
     (SELECT before_state -> 'higher_studies' FROM public.review_events WHERE id = ev)) e
    WHERE e ? 'college_id';

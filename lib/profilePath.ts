@@ -386,8 +386,10 @@ export function pathSteps(
     steps.push({
       key: `study:${s.id}`, kind: 'study', icon: '🎓',
       title: tidy(s.degree_name),
-      sub: tidy(s.institution) || null,
-      subHref: collegeHref(s.college_id, s.institution),
+      // The college's own short name when the row resolved to one - "IIT
+      // Madras" rather than whatever was typed - and the typed text otherwise.
+      sub: (s.college?.name ? shortInstituteName(s.college.name, s.college.aliases ?? []) : tidy(s.institution)) || null,
+      subHref: collegeHref(s.college_id, s.college?.name ?? s.institution),
       meta: yearRange(s.start_year, s.finish_year) || null,
       now: s === ongoing,
     });
