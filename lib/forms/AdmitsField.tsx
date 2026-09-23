@@ -64,7 +64,8 @@ export default function AdmitsField({
           rest - an offer on board marks, a direct admission - which is most of
           them, and which nothing else on the form could hold. */}
       <p className="form-note" style={{ marginTop: 0 }}>
-        An offer that came through an entrance exam is easiest to add with that exam, above.
+        An offer that came through an entrance exam is added with that exam, above — including the one
+        that got you your seat.
       </p>
       {rows.map((d) => (
         <div key={d.key} className="entry-card">
@@ -88,9 +89,14 @@ export default function AdmitsField({
           </div>
           <div className="field">
             <label>How was it offered? <span className="opt">optional</span></label>
+            {/* Entrance exam is not here on purpose (Round 11): an offer that
+                came through an exam is asked with that exam, above, where the
+                route needs no asking. What is left is what an exam cannot
+                carry - and that is most offers in the school's own sheets. */}
             <ChipRow<AdmissionKind>
               label="How was it offered?"
-              options={ADMISSION_KINDS.map((k) => ({ value: k.key, label: k.label }))}
+              options={ADMISSION_KINDS.filter((k) => k.key !== 'entrance_exam')
+                .map((k) => ({ value: k.key, label: k.label }))}
               value={d.kind}
               onChange={(kind) => set(d, { kind })}
             />

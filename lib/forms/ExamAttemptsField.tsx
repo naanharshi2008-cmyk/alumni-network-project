@@ -37,7 +37,7 @@ function commonExams(area: CategoryKey | null, seat: string, tookGap: boolean): 
 
 export default function ExamAttemptsField({
   attempts, onChange, seatExam, area, examOptions, examAliases, classOf, tookGap,
-  degreeOptions, branchOptions, branchAliases,
+  degreeOptions, branchOptions, branchAliases, seatOffer, onSeatOffer,
 }: {
   attempts: AttemptDraft[];
   /** An update applied to the parent's latest list, never this render's copy. */
@@ -59,9 +59,17 @@ export default function ExamAttemptsField({
   degreeOptions?: string[];
   branchOptions?: string[];
   branchAliases?: Record<string, string>;
+  /**
+   * An offer that came through the exam that won their seat. It cannot be a
+   * second attempt row - that exam IS the seat - so it is carried beside the
+   * attempts and shown stacked under the seat, where it belongs.
+   */
+  seatOffer?: OfferDraft | null;
+  onSeatOffer?: (patch: Partial<OfferDraft>) => void;
 }) {
   const [another, setAnother] = useState('');
   const [showAnother, setShowAnother] = useState(false);
+  const [seatOfferOpen, setSeatOfferOpen] = useState(false);
   const anotherBox = useRef<HTMLDivElement>(null);
   // Revealed by a tap, so the cursor belongs in it - otherwise the box appears
   // somewhere below the thumb that opened it and has to be found again.
@@ -88,6 +96,35 @@ export default function ExamAttemptsField({
   const patchOffer = (t: AttemptDraft, p: Partial<OfferDraft>) =>
     patch(t.key, { offer: { ...(t.offer ?? newOffer()), ...p } });
 
+  /**
+   * Where an offer was. Drawn identically wherever it hangs - under an exam
+   * they wrote, or under the exam that won their seat - so one exam's whole
+   * story reads as one stack.
+   */
+  const offerBlock = (offer: OfferDraft | null, set: (p: Partial<OfferDraft>) => void) => (degreeOptions ? (
+    <div className="attempt-row__offer">
+      <EntitySearchField
+        kind="college" label="Offered by" hint="short names work — “PSG Tech”, “VIT Chennai”"
+        value={offer?.college ?? ''}
+        onChange={(college) => set({ college, pick: null })}
+        onSelect={(hit) => set(hit ? { college: hit.name, pick: toPick(hit) } : { pick: null })}
+      />
+      <div className="two-col">
+        <SelectBox
+          label="Degree" value={offer?.degree ?? ''} placeholder="Select…"
+          options={degreeOptions.filter((o) => o !== 'Other')}
+          onChange={(degree) => set({ degree })}
+        />
+        <OptionSearchField
+          label="Branch" options={branchOptions ?? []} aliases={branchAliases ?? {}}
+          extra={contextualBranchAliases(offer?.degree ?? '')}
+          value={offer?.branch ?? ''}
+          onChange={(branch) => set({ branch })}
+        />
+      </div>
+    </div>
+  ) : null);
+
   // Exams ticked that are not among the chips still need a chip to untick.
   const extraTicked = attempts.filter((t) => !chips.some((c) => normText(c) === normText(t.exam)));
   const years = classOf ? [String(classOf), String(classOf + 1)] : [];
@@ -100,7 +137,7 @@ export default function ExamAttemptsField({
       </p>
 
       <div className="chips chips--wrap">
-        {seat && (
+        {seat && !onSeatOffer && (
           <span className="chip chip--active chip--fixed" title="The exam your seat came through">
             ✓ {seat} <span className="chip__sub">your seat</span>
           </span>
@@ -141,8 +178,29 @@ export default function ExamAttemptsField({
         </button>
       )}
 
-      {attempts.length > 0 && (
+      {(attempts.length > 0 || (seat && onSeatOffer)) && (
         <ul className="exam-attempts__list">
+          {/* The seat's own exam leads the list. It needs no "got an offer?" -
+              it gave them their seat - but it may well have opened a second
+              door, and that offer belongs here, under the exam it came
+              through, rather than in the "anywhere else?" block where the
+              route would have to be asked all over again (Round 11). */}
+          {seat && onSeatOffer && (
+            <li key="seat" className="attempt-row attempt-row--seat">
+              <span className="attempt-row__exam">{seat}</span>
+              <span className="attempt-row__seat-tag">your seat</span>
+              {seatOffer || seatOfferOpen ? (
+                <>
+                  <span className="attempt-row__label attempt-row__also">Also offered elsewhere through {seat}</span>
+                  {offerBlock(seatOffer ?? null, onSeatOffer)}
+                </>
+              ) : (
+                <button type="button" className="link-btn attempt-row__more" onClick={() => setSeatOfferOpen(true)}>
+                  + {seat} also offered you a seat elsewhere
+                </button>
+              )}
+            </li>
+          )}
           {attempts.map((t) => (
             <li key={t.key} className="attempt-row">
               <span className="attempt-row__exam">{t.exam}</span>
@@ -165,29 +223,7 @@ export default function ExamAttemptsField({
                   question already answered by which exam this is. So it is
                   asked here, beside the rank, and the route is never asked
                   twice (Round 11). */}
-              {t.admit === 'yes' && degreeOptions && (
-                <div className="attempt-row__offer">
-                  <EntitySearchField
-                    kind="college" label="Offered by" hint="short names work — “PSG Tech”, “VIT Chennai”"
-                    value={t.offer?.college ?? ''}
-                    onChange={(college) => patchOffer(t, { college, pick: null })}
-                    onSelect={(hit) => patchOffer(t, hit ? { college: hit.name, pick: toPick(hit) } : { pick: null })}
-                  />
-                  <div className="two-col">
-                    <SelectBox
-                      label="Degree" value={t.offer?.degree ?? ''} placeholder="Select…"
-                      options={degreeOptions.filter((o) => o !== 'Other')}
-                      onChange={(degree) => patchOffer(t, { degree })}
-                    />
-                    <OptionSearchField
-                      label="Branch" options={branchOptions ?? []} aliases={branchAliases ?? {}}
-                      extra={contextualBranchAliases(t.offer?.degree ?? '')}
-                      value={t.offer?.branch ?? ''}
-                      onChange={(branch) => patchOffer(t, { branch })}
-                    />
-                  </div>
-                </div>
-              )}
+              {t.admit === 'yes' && offerBlock(t.offer ?? null, (p) => patchOffer(t, p))}
               {tookGap && years.length > 0 && (
                 <span className="attempt-row__q">
                   <span className="attempt-row__label">Year</span>

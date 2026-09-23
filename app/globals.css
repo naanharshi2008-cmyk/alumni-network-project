@@ -982,6 +982,11 @@ textarea { min-height: 84px; resize: vertical; }
 .braid__meta { font-size: 0.8rem; color: var(--text-faint); margin-top: 3px; }
 .braid__thread { width: 2px; height: 16px; margin: 8px 0 8px 1px; background: var(--border-strong); }
 .braid__outcomes { display: grid; gap: 10px; align-content: start; }
+/* Two offers through one exam are two facts, not one paragraph: a hairline
+   between them so a stack reads as a list. */
+.braid__outcome + .braid__outcome {
+  padding-top: 10px; border-top: 1px dashed var(--border-strong);
+}
 .braid__where { font-weight: 650; font-size: 0.95rem; line-height: 1.35; overflow-wrap: anywhere; }
 .braid__where a {
   color: inherit; text-decoration: underline;
@@ -1297,6 +1302,15 @@ textarea { min-height: 84px; resize: vertical; }
 /* Where that offer was, opened by saying there was one. A full-width row of
    its own inside the attempt, indented so it reads as belonging to the exam
    above it rather than as a new question. */
+/* The exam that won the seat, leading the list: the same row, marked. */
+.attempt-row--seat { border-color: var(--gold); }
+.attempt-row__seat-tag {
+  font-size: 0.72rem; font-weight: 650; text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--ok-ink); background: var(--ok-bg); border: 1px solid var(--ok-border);
+  border-radius: var(--r-full); padding: 2px 8px;
+}
+.attempt-row__more { font-size: 0.84rem; }
+.attempt-row__also { flex-basis: 100%; }
 .attempt-row__offer {
   flex-basis: 100%; display: grid; gap: 10px;
   margin-top: 4px; padding-left: 12px; border-left: 2px solid var(--border-strong);

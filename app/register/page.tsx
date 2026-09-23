@@ -23,7 +23,7 @@ import GapYearField from '../../lib/forms/GapYearField';
 import FamilyHomeFields from '../../lib/forms/FamilyHomeFields';
 import LinkedInField from '../../lib/forms/LinkedInField';
 import {
-  admissionColumns, admissionFromRow, admissionProblem, admitRows, allOffers, attemptRows, contextualBranchAliases,
+  admissionColumns, admissionFromRow, admissionProblem, admitRows, allOffers, attemptRows, contextualBranchAliases, newOffer, type OfferDraft,
   emptyAdmission, emptyFamily, emptyGap, familyProblems, gapProblem, gapRows, inGapYear, joinedCollege,
   privateRow, seatYear,
   type AdmissionDraft, type AdmitDraft, type AttemptDraft, type FamilyDraft, type FamilyKey, type GapDraft,
@@ -388,6 +388,8 @@ export default function RegisterPage() {
   const [family, setFamily] = useState<FamilyDraft>(emptyFamily());
   const [familyTouched, setFamilyTouched] = useState<Partial<Record<FamilyKey, boolean>>>({});
   const [showAdmits, setShowAdmits] = useState(false);
+  // An offer through the exam that won the seat, asked with that exam.
+  const [seatOffer, setSeatOffer] = useState<OfferDraft | null>(null);
   // Lifted like showAdmits: StepStudies remounts as the step changes, and a
   // disclosure that closed itself on the way back would hide a filled answer.
   const [showProfessional, setShowProfessional] = useState(false);
@@ -851,7 +853,11 @@ export default function RegisterPage() {
         // college had been named, so someone taking a year out - who may well
         // have had an offer and turned it down - had nowhere to record one.
         {
-          const offers = allOffers(namedCollege ? form.admits : [], form.attempts)
+          const offers = allOffers(
+            namedCollege ? form.admits : [], form.attempts,
+            namedCollege && form.admission.kind === 'entrance_exam'
+              ? { exam: form.admission.exam, offer: seatOffer } : null,
+          )
             .filter((d) => d.college.trim() || d.pick);
           const ids: Record<string, string | null> = {};
           for (const d of offers) ids[d.key] = await linkFor('college', cleanProperNoun(d.college), d.pick);
@@ -1012,6 +1018,7 @@ export default function RegisterPage() {
                   fieldOptions={fieldOptions} degreeOptions={degreeOptions} professionalOptions={professionalOptions}
                   exams={exams} branches={branches} showAdmits={showAdmits} setShowAdmits={setShowAdmits}
                   showProfessional={showProfessional} setShowProfessional={setShowProfessional}
+                  seatOffer={seatOffer} setSeatOffer={setSeatOffer}
                 />
                 {/* Nothing to say about "now" until the first question is
                     answered, and nothing while the year out is still on. */}
@@ -1196,11 +1203,12 @@ function StepSchool({ form, update, markTouched, errorFor, isValid, streamOption
 
 function StepStudies({
   form, update, updateWith, markTouched, errorFor, fieldOptions, degreeOptions, professionalOptions,
-  exams, branches, showAdmits, setShowAdmits, showProfessional, setShowProfessional,
+  exams, branches, showAdmits, setShowAdmits, showProfessional, setShowProfessional, seatOffer, setSeatOffer,
 }: StepProps & {
   fieldOptions: string[]; degreeOptions: string[]; professionalOptions: string[];
   exams: Vocab; branches: Vocab; showAdmits: boolean; setShowAdmits: (v: boolean) => void;
   showProfessional: boolean; setShowProfessional: (v: boolean) => void;
+  seatOffer: OfferDraft | null; setSeatOffer: React.Dispatch<React.SetStateAction<OfferDraft | null>>;
 }) {
   const joined = joinedCollege(form.gap);
   const namedCollege = joined && !!form.college_name.trim();
@@ -1343,6 +1351,8 @@ function StepStudies({
           classOf={parseInt(form.class_of, 10) || null}
           tookGap={form.gap.afterSchool === 'gap'}
           degreeOptions={degreeOptions} branchOptions={branches.options} branchAliases={branches.aliases}
+          seatOffer={seatOffer}
+          onSeatOffer={(patch) => setSeatOffer((o) => ({ ...(o ?? newOffer()), ...patch }))}
         />
       )}
 

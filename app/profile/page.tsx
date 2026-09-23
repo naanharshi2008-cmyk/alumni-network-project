@@ -27,7 +27,7 @@ import GapYearField from '../../lib/forms/GapYearField';
 import FamilyHomeFields from '../../lib/forms/FamilyHomeFields';
 import LinkedInField from '../../lib/forms/LinkedInField';
 import {
-  admissionColumns, admissionFromRow, admissionProblem, admitRows, admitsFromRows, allOffers, attemptRows, attemptsFromRows, pathDraftsFromRows,
+  admissionColumns, admissionFromRow, admissionProblem, admitRows, admitsFromRows, allOffers, attemptRows, attemptsFromRows, pathDraftsFromRows, newOffer, type OfferDraft,
   contextualBranchAliases, emptyAdmission, emptyFamily, emptyGap, familyFromRow, familyProblems, gapFromRows,
   gapProblem, gapRows, inGapYear, joinedCollege, privateRow, seatYear,
   type AdmissionDraft, type AdmitDraft, type AttemptDraft, type FamilyDraft, type FamilyKey, type GapDraft,
@@ -233,6 +233,7 @@ export default function ProfilePage() {
   const [linkedin, setLinkedin] = useState('');
   const [showAdmits, setShowAdmits] = useState(false);
   const [showProfessional, setShowProfessional] = useState(false);
+  const [seatOffer, setSeatOffer] = useState<OfferDraft | null>(null);
   // "Something else" has been tapped, so the full status list is on screen.
   const [statusOpen, setStatusOpen] = useState(false);
 
@@ -294,10 +295,12 @@ export default function ProfilePage() {
       const own = Array.isArray(stagedAdmits) ? stagedAdmits : savedAdmits.filter((r) => !r.added_by_school);
       // An offer stored against an exam goes back to that exam, not into the
       // "anywhere else?" block - otherwise it would show in both places.
+      const seatExamNow = (data.admission_kind === 'entrance_exam' ? data.admission_exam : null) as string | null;
       const drafts = pathDraftsFromRows(
-        Array.isArray(stagedAttempts) ? stagedAttempts : (attRes.data ?? []), own, classOfNum);
+        Array.isArray(stagedAttempts) ? stagedAttempts : (attRes.data ?? []), own, classOfNum, seatExamNow);
       setAttempts(drafts.attempts);
       setAdmits(drafts.admits);
+      setSeatOffer(drafts.seatOffer);
       if (drafts.admits.length) setShowAdmits(true);
       setSchoolAdmits(savedAdmits.filter((r) => r.added_by_school).map((r) =>
         [[r.degree, r.branch].filter(Boolean).join(' '), r.college?.name ?? r.college_name_raw].filter(Boolean).join(' at ')));
@@ -511,7 +514,10 @@ export default function ProfilePage() {
       const attemptPayload = attemptRows(attempts, {
         admission: namedCollege ? admission : emptyAdmission(), year: seatYear(gap, classOfNum), attemptYear: classOfNum,
       }, exams.aliases);
-      const offers = allOffers(namedCollege ? admits : [], attempts).filter((d) => d.college.trim() || d.pick);
+      const offers = allOffers(
+        namedCollege ? admits : [], attempts,
+        namedCollege && admission.kind === 'entrance_exam' ? { exam: admission.exam, offer: seatOffer } : null,
+      ).filter((d) => d.college.trim() || d.pick);
       const offerIds: Record<string, string | null> = {};
       for (const d of offers) offerIds[d.key] = await linkFor('college', cleanProperNoun(d.college), d.pick);
       const admitPayload = admitRows(offers, seatYear(gap, classOfNum), offerIds, exams.aliases).map((r) => ({
@@ -976,6 +982,8 @@ export default function ProfilePage() {
             examOptions={exams.options} examAliases={exams.aliases}
             classOf={classOfNum} tookGap={gap.afterSchool === 'gap'}
             degreeOptions={degreeOptions} branchOptions={branches.options} branchAliases={branches.aliases}
+            seatOffer={seatOffer}
+            onSeatOffer={(patch) => setSeatOffer((o) => ({ ...(o ?? newOffer()), ...patch }))}
           />
 
           {collegeNamed && (

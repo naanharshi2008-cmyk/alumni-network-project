@@ -23,7 +23,7 @@ import FamilyHomeFields from '../../../../lib/forms/FamilyHomeFields';
 import LinkedInField from '../../../../lib/forms/LinkedInField';
 import { SelectBox, TextField } from '../../../../lib/forms/controls';
 import {
-  admissionColumns, admissionFromRow, admissionProblem, admitRowsWithKeys, allOffers, attemptRows, pathDraftsFromRows,
+  admissionColumns, admissionFromRow, admissionProblem, admitRowsWithKeys, allOffers, attemptRows, pathDraftsFromRows, newOffer, type OfferDraft,
   contextualBranchAliases, emptyAdmission, emptyFamily, emptyGap, familyFromRow, familyProblems, gapFromRows,
   gapProblem, gapRows, inGapYear, joinedCollege, privateRow, seatYear,
   type AdmissionDraft, type AdmitDraft, type AttemptDraft, type FamilyDraft, type FamilyKey, type GapDraft,
@@ -73,6 +73,7 @@ export default function AdminPersonPage() {
   const [officeNote, setOfficeNote] = useState('');
   const [linkedin, setLinkedin] = useState('');
   const [showAdmits, setShowAdmits] = useState(true);
+  const [seatOffer, setSeatOffer] = useState<OfferDraft | null>(null);
 
   const [tagOptions, setTagOptions] = useState<Record<string, string[]>>({});
   const [aliases, setAliases] = useState<Record<string, Record<string, string>>>({});
@@ -105,9 +106,11 @@ export default function AdminPersonPage() {
     setPick(r.college_id && r.colleges?.name ? { id: r.college_id, name: r.colleges.name } : null);
     setAdmission(admissionFromRow(r));
     setLinkedin(handleFromStored(r.linkedin_handle, r.linkedin_url));
-    const drafts = pathDraftsFromRows(path?.attempts ?? [], path?.admits ?? [], r.class_of ?? null);
+    const drafts = pathDraftsFromRows(path?.attempts ?? [], path?.admits ?? [], r.class_of ?? null,
+      r.admission_kind === 'entrance_exam' ? r.admission_exam : null);
     setAttempts(drafts.attempts);
     setAdmits(drafts.admits);
+    setSeatOffer(drafts.seatOffer);
     setStudentKeys(new Set((path?.admits ?? []).filter((d) => !d.added_by_school).map((d) => d.id)));
     setGap(gapFromRows(path?.gapYears ?? [], !!r.in_gap_year, !!(r.college_id || (r.college_name_raw ?? '').trim())));
     setFamily(familyFromRow(path?.private));
@@ -169,7 +172,10 @@ export default function AdminPersonPage() {
       // keeps whose it was, and a new one is the school's.
       const year = seatYear(gap, classOf);
       const attemptPayload = attemptRows(attempts, { admission: named ? admission : emptyAdmission(), year, attemptYear: classOf }, exams.aliases);
-      const offers = allOffers(named ? admits : [], attempts).filter((d) => d.college.trim() || d.pick);
+      const offers = allOffers(
+        named ? admits : [], attempts,
+        named && admission.kind === 'entrance_exam' ? { exam: admission.exam, offer: seatOffer } : null,
+      ).filter((d) => d.college.trim() || d.pick);
       const ids: Record<string, string | null> = {};
       for (const d of offers) ids[d.key] = await linkFor('college', cleanProperNoun(d.college), d.pick);
       // Keyed rows, not positional: admitRows drops a duplicate, so the nth
@@ -298,6 +304,8 @@ export default function AdminPersonPage() {
           area={areaKey} examOptions={exams.options} examAliases={exams.aliases}
           classOf={classOfNum} tookGap={gap.afterSchool === 'gap'}
           degreeOptions={degreeOptions} branchOptions={branches.options} branchAliases={branches.aliases}
+          seatOffer={seatOffer}
+          onSeatOffer={(patch) => setSeatOffer((o) => ({ ...(o ?? newOffer()), ...patch }))}
         />
         {named && (
           <AdmitsField

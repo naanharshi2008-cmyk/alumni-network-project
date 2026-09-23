@@ -160,9 +160,28 @@ export function offerDrafts(attempts: AttemptDraft[]): AdmitDraft[] {
     }));
 }
 
+/**
+ * The seat's own exam often opened more than one door. That second offer is
+ * asked with the exam, stacked under it, rather than in the "anywhere else?"
+ * block - so everything one exam produced reads as one thread. The exam that
+ * won the seat cannot be a second attempt row (it is the seat), so its offer
+ * needs a name of its own.
+ */
+export type SeatOffer = { exam: string; offer: OfferDraft | null };
+
+export function seatOfferDraft(seat: SeatOffer | null | undefined): AdmitDraft[] {
+  const o = seat?.offer;
+  if (!seat?.exam.trim() || !o || !(o.college.trim() || o.pick)) return [];
+  return [{
+    key: o.key ?? 'seat-offer',
+    college: o.college, pick: o.pick, degree: o.degree, branch: o.branch,
+    kind: 'entrance_exam' as AdmissionKind, exam: seat.exam,
+  }];
+}
+
 /** Every offer not taken: the ones claimed against an exam, then the rest. */
-export function allOffers(admits: AdmitDraft[], attempts: AttemptDraft[]): AdmitDraft[] {
-  return [...offerDrafts(attempts), ...admits];
+export function allOffers(admits: AdmitDraft[], attempts: AttemptDraft[], seat?: SeatOffer | null): AdmitDraft[] {
+  return [...seatOfferDraft(seat), ...offerDrafts(attempts), ...admits];
 }
 
 /**
@@ -306,26 +325,37 @@ export function pathDraftsFromRows(
   attemptRowsIn: Parameters<typeof attemptsFromRows>[0],
   admitRowsIn: AdmitRow[],
   classOf: number | null,
-): { attempts: AttemptDraft[]; admits: AdmitDraft[] } {
+  /** The exam their seat came through, so its own offer goes back to it. */
+  seatExam?: string | null,
+): { attempts: AttemptDraft[]; admits: AdmitDraft[]; seatOffer: OfferDraft | null } {
   const attempts = attemptsFromRows(attemptRowsIn, classOf);
   const claimed = new Set<number>();
-  for (const a of attempts) {
-    if (a.admit !== 'yes') continue;
-    const i = admitRowsIn.findIndex((r, idx) => !claimed.has(idx)
-      && r.route_kind === 'entrance_exam' && normText(r.exam ?? '') === normText(a.exam));
-    if (i < 0) continue;
-    claimed.add(i);
-    const r = admitRowsIn[i];
+  const asOffer = (r: AdmitRow): OfferDraft => {
     const name = r.college?.name ?? r.college_name_raw ?? '';
-    a.offer = {
+    return {
       college: name,
       pick: r.college_id ? { id: r.college_id, name } : null,
       degree: r.degree ?? '',
       branch: r.branch ?? '',
       key: r.id,
     };
+  };
+
+  // The seat's exam first: its offer belongs with it, not in the loose list.
+  let seatOffer: OfferDraft | null = null;
+  if (seatExam?.trim()) {
+    const i = admitRowsIn.findIndex((r) => r.route_kind === 'entrance_exam' && normText(r.exam ?? '') === normText(seatExam));
+    if (i >= 0) { claimed.add(i); seatOffer = asOffer(admitRowsIn[i]); }
   }
-  return { attempts, admits: admitsFromRows(admitRowsIn.filter((_, i) => !claimed.has(i))) };
+  for (const a of attempts) {
+    if (a.admit !== 'yes') continue;
+    const i = admitRowsIn.findIndex((r, idx) => !claimed.has(idx)
+      && r.route_kind === 'entrance_exam' && normText(r.exam ?? '') === normText(a.exam));
+    if (i < 0) continue;
+    claimed.add(i);
+    a.offer = asOffer(admitRowsIn[i]);
+  }
+  return { attempts, admits: admitsFromRows(admitRowsIn.filter((_, i) => !claimed.has(i))), seatOffer };
 }
 
 export function admitsFromRows(rows: AdmitRow[]): AdmitDraft[] {
